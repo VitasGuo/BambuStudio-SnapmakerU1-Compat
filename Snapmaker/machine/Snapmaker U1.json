@@ -8,5 +8,5 @@
     "bed_model": "",
     "bed_texture": "",
     "hotend_model": "",
-    "default_materials": "Snapmaker PLA @U1;Snapmaker PETG @U1;Snapmaker ABS @U1;Snapmaker TPU @U1;"
+    "default_materials": "Snapmaker PLA @U1;Snapmaker PETG @U1;Snapmaker ABS @U1;Snapmaker TPU @U1;Generic PLA;Generic PETG;Generic ABS;Generic TPU;"
 }

@@ -1,6 +1,6 @@
 {
     "name": "Snapmaker",
-    "version": "02.00.00.02",
+    "version": "02.00.01.00",
     "force_update": "0",
     "description": "Snapmaker U1 configurations for BambuStudio",
     "machine_model_list": [
@@ -39,6 +39,54 @@
         {
             "name": "fdm_filament_tpu",
             "sub_path": "filament/fdm_filament_tpu.json"
+        },
+        {
+            "name": "fdm_filament_common_generic",
+            "sub_path": "filament/fdm_filament_common_generic.json"
+        },
+        {
+            "name": "fdm_filament_pla_generic",
+            "sub_path": "filament/fdm_filament_pla_generic.json"
+        },
+        {
+            "name": "fdm_filament_pet_generic",
+            "sub_path": "filament/fdm_filament_pet_generic.json"
+        },
+        {
+            "name": "fdm_filament_abs_generic",
+            "sub_path": "filament/fdm_filament_abs_generic.json"
+        },
+        {
+            "name": "fdm_filament_tpu_generic",
+            "sub_path": "filament/fdm_filament_tpu_generic.json"
+        },
+        {
+            "name": "Generic PLA @base",
+            "sub_path": "filament/Generic PLA @base.json"
+        },
+        {
+            "name": "Generic PLA",
+            "sub_path": "filament/Generic PLA.json"
+        },
+        {
+            "name": "Generic PETG @base",
+            "sub_path": "filament/Generic PETG @base.json"
+        },
+        {
+            "name": "Generic PETG",
+            "sub_path": "filament/Generic PETG.json"
+        },
+        {
+            "name": "Generic ABS @base",
+            "sub_path": "filament/Generic ABS @base.json"
+        },
+        {
+            "name": "Generic ABS",
+            "sub_path": "filament/Generic ABS.json"
+        },
+        {
+            "name": "Generic TPU",
+            "sub_path": "filament/Generic TPU.json"
         },
         {
             "name": "Snapmaker PLA @U1",

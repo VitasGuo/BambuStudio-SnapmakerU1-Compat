@@ -5,7 +5,7 @@ $Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack Inst
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v2.0" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v2.1" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -113,15 +113,17 @@ $vendorOk = Test-Path "$bambuDir\resources\profiles\Snapmaker.json"
 $u1Ok = Test-Path "$bambuDir\resources\profiles\Snapmaker\machine\Snapmaker U1.json"
 $processOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\process\0.20 Standard @Snapmaker U1.json"
 $filamentOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Snapmaker PLA @U1.json"
+$genericFilamentOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Generic PLA.json"
 
-if ($vendorOk -and $u1Ok -and $processOk -and $filamentOk) {
+if ($vendorOk -and $u1Ok -and $processOk -and $filamentOk -and $genericFilamentOk) {
     Write-Host "  Verification passed!" -ForegroundColor Green
 } else {
     Write-Host "  [X] Verification failed!" -ForegroundColor Red
     if (-not $vendorOk) { Write-Host "  Missing: Snapmaker.json" -ForegroundColor Red }
     if (-not $u1Ok) { Write-Host "  Missing: Snapmaker U1.json" -ForegroundColor Red }
     if (-not $processOk) { Write-Host "  Missing: process file" -ForegroundColor Red }
-    if (-not $filamentOk) { Write-Host "  Missing: filament file" -ForegroundColor Red }
+    if (-not $filamentOk) { Write-Host "  Missing: Snapmaker filament file" -ForegroundColor Red }
+    if (-not $genericFilamentOk) { Write-Host "  Missing: Generic filament file" -ForegroundColor Red }
     Read-Host "Press Enter to exit"
     exit 1
 }
