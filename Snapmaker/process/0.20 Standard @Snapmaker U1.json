@@ -1,0 +1,14 @@
+{
+    "type": "process",
+    "setting_id": "GP_Snapmaker_004",
+    "name": "0.20 Standard @Snapmaker U1",
+    "from": "system",
+    "instantiation": "true",
+    "inherits": "fdm_process_common",
+    "bottom_shell_layers": "3",
+    "layer_height": "0.20",
+    "top_shell_layers": "3",
+    "compatible_printers": [
+        "Snapmaker U1 (0.4 nozzle)"
+    ]
+}

@@ -1,0 +1,43 @@
+{
+    "type": "machine",
+    "setting_id": "GM_Snapmaker_000",
+    "name": "Snapmaker U1 (0.4 nozzle)",
+    "from": "system",
+    "instantiation": "true",
+    "inherits": "fdm_machine_common",
+    "printer_model": "Snapmaker U1",
+    "default_print_profile": "0.20 Standard @Snapmaker U1",
+    "default_filament_profile": [
+        "Snapmaker PLA @U1"
+    ],
+    "nozzle_diameter": [
+        "0.4"
+    ],
+    "bed_exclude_area": [
+        "0x0"
+    ],
+    "printable_area": [
+        "0x0",
+        "270x0",
+        "270x270",
+        "0x270"
+    ],
+    "printable_height": "270",
+    "gcode_flavor": "klipper",
+    "single_extruder_multi_material": "0",
+    "scan_first_layer": "0",
+    "nozzle_type": "hardened_steel",
+    "auxiliary_fan": "0",
+    "extruder_colour": [
+        "#F5D547",
+        "#4A8FD9",
+        "#E46C4A",
+        "#5EC45E"
+    ],
+    "extruder_offset": [
+        "0x0",
+        "0x0",
+        "0x0",
+        "0x0"
+    ]
+}

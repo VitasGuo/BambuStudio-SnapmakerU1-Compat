@@ -1,0 +1,18 @@
+{
+    "type": "filament",
+    "filament_id": "GFG99",
+    "setting_id": "GFSG99_Snapmaker_00",
+    "name": "Snapmaker PETG @U1",
+    "from": "system",
+    "instantiation": "true",
+    "inherits": "fdm_filament_pet",
+    "filament_flow_ratio": [
+        "0.95"
+    ],
+    "filament_max_volumetric_speed": [
+        "10"
+    ],
+    "compatible_printers": [
+        "Snapmaker U1 (0.4 nozzle)"
+    ]
+}

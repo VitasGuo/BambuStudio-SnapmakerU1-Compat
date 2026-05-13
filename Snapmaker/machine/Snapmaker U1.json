@@ -1,0 +1,12 @@
+{
+    "type": "machine_model",
+    "name": "Snapmaker U1",
+    "model_id": "Snapmaker-U1",
+    "nozzle_diameter": "0.4",
+    "machine_tech": "FFF",
+    "family": "Snapmaker",
+    "bed_model": "",
+    "bed_texture": "",
+    "hotend_model": "",
+    "default_materials": "Snapmaker PLA @U1;Snapmaker PETG @U1;Snapmaker ABS @U1;Snapmaker TPU @U1;"
+}
