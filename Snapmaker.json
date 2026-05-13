@@ -65,28 +65,28 @@
             "sub_path": "filament/Generic PLA @base.json"
         },
         {
-            "name": "Generic PLA",
-            "sub_path": "filament/Generic PLA.json"
+            "name": "Generic PLA @U1",
+            "sub_path": "filament/Generic PLA @U1.json"
         },
         {
             "name": "Generic PETG @base",
             "sub_path": "filament/Generic PETG @base.json"
         },
         {
-            "name": "Generic PETG",
-            "sub_path": "filament/Generic PETG.json"
+            "name": "Generic PETG @U1",
+            "sub_path": "filament/Generic PETG @U1.json"
         },
         {
             "name": "Generic ABS @base",
             "sub_path": "filament/Generic ABS @base.json"
         },
         {
-            "name": "Generic ABS",
-            "sub_path": "filament/Generic ABS.json"
+            "name": "Generic ABS @U1",
+            "sub_path": "filament/Generic ABS @U1.json"
         },
         {
-            "name": "Generic TPU",
-            "sub_path": "filament/Generic TPU.json"
+            "name": "Generic TPU @U1",
+            "sub_path": "filament/Generic TPU @U1.json"
         },
         {
             "name": "Snapmaker PLA @U1",

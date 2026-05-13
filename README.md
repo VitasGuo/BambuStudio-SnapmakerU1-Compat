@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v2.0
+# Snapmaker U1 BambuStudio 兼容包 v2.1
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**局域网直连打印**。
 
@@ -145,7 +145,7 @@ OctoPrint 协议是通用 3D 打印机通信标准，功能范围与 BambuLab �
 | 实时打印进度 | ❌ | OctoPrint 兼容层不支持状态推送，BambuStudio 中无法显示进度 |
 | 远程暂停/取消 | ❌ | BambuStudio OctoPrint 模式不支持远程控制 |
 
-> **耗材选择建议**：在 BambuStudio 中手动选择与 U1 工具头实际装载一致的耗材预设。使用 Snapmaker 官方耗材选择 `Snapmaker PLA @U1` 等预设；使用其他品牌耗材选择 `Generic PLA` 等通用预设。切片后的温度、流量等参数会正确写入 G-code，不影响打印质量。
+> **耗材选择建议**：在 BambuStudio 中手动选择与 U1 工具头实际装载一致的耗材预设。使用 Snapmaker 官方耗材选择 `Snapmaker PLA @U1` 等预设；使用其他品牌耗材选择 `Generic PLA @U1` 等通用预设。切片后的温度、流量等参数会正确写入 G-code，不影响打印质量。
 >
 > **打印监控**：如需实时查看打印状态和进度，请在浏览器中访问 `http://<U1的IP>` 打开 U1 自带的 Fluidd 界面。
 
@@ -234,7 +234,7 @@ A: 检查 API Key 是否正确。如果 U1 启用了 HTTPS，需要在 BambuStud
 
 ## 版本历史
 
-- **v2.1** (2026-05-14) - 新增 Generic 通用耗材预设（Generic PLA/PETG/ABS/TPU），U1 现在可以使用任意品牌的耗材，不再局限于 Snapmaker 官方耗材
+- **v2.1** (2026-05-14) - 新增 Generic 通用耗材预设（Generic PLA/PETG/ABS/TPU @U1），U1 现在可以使用任意品牌的耗材，不再局限于 Snapmaker 官方耗材。修复与 BBL 品牌 Generic 耗材名称冲突问题
 - **v2.0** (2026-05-14) - 🎉 支持局域网直连打印！U1 内置 Moonraker 兼容 OctoPrint API，BambuStudio 可通过 OctoPrint 主机类型直接上传 G-code 并启动打印，无需额外软件
 - **v1.3** (2026-05-14) - 全面对比 BambuStudio 源码，从不兼容字段 16 个扩展到 93 个；修复 process 文件加载报错；install/uninstall 增加 BambuStudio.conf 清理
 - **v1.2** (2026-05-14) - 修复闪退问题：不再使用 ConvertTo-Json（避免 Unicode 转义和格式破坏）；修正不兼容字段列表（保留 BambuStudio 支持的 host_type/thumbnails/long_retractions_when_cut 等字段）；install/uninstall 脚本增加 BambuStudio.conf 清理逻辑

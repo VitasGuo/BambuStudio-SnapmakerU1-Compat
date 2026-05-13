@@ -1,9 +1,9 @@
 {
     "type": "filament",
-    "name": "Generic ABS",
+    "name": "Generic ABS @U1",
     "inherits": "Generic ABS @base",
     "from": "system",
-    "setting_id": "GFSB99",
+    "setting_id": "GFSB99_U1",
     "instantiation": "true",
     "filament_max_volumetric_speed": [
         "15"

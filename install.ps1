@@ -113,7 +113,7 @@ $vendorOk = Test-Path "$bambuDir\resources\profiles\Snapmaker.json"
 $u1Ok = Test-Path "$bambuDir\resources\profiles\Snapmaker\machine\Snapmaker U1.json"
 $processOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\process\0.20 Standard @Snapmaker U1.json"
 $filamentOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Snapmaker PLA @U1.json"
-$genericFilamentOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Generic PLA.json"
+$genericFilamentOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Generic PLA @U1.json"
 
 if ($vendorOk -and $u1Ok -and $processOk -and $filamentOk -and $genericFilamentOk) {
     Write-Host "  Verification passed!" -ForegroundColor Green
