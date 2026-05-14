@@ -16,5 +16,6 @@
     "filament_flow_ratio": ["0.98"],
     "filament_density": ["1.26"],
     "filament_cost": ["29.99"],
-    "filament_vendor": ["Bambu Lab"]
+    "filament_vendor": ["Bambu Lab"],
+    "filament_preheat_temperature_delta": ["50"]
 }

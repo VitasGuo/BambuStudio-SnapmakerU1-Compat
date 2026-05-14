@@ -17,5 +17,6 @@
     "filament_max_volumetric_speed": ["18"],
     "filament_density": ["1.21"],
     "filament_cost": ["24.99"],
-    "filament_vendor": ["Bambu Lab"]
+    "filament_vendor": ["Bambu Lab"],
+    "filament_preheat_temperature_delta": ["50"]
 }

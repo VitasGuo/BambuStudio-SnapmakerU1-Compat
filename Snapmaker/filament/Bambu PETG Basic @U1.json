@@ -31,5 +31,6 @@
     "cool_plate_temp_initial_layer": ["0"],
     "eng_plate_temp": ["70"],
     "eng_plate_temp_initial_layer": ["70"],
-    "filament_vendor": ["Bambu Lab"]
+    "filament_vendor": ["Bambu Lab"],
+    "filament_preheat_temperature_delta": ["50"]
 }

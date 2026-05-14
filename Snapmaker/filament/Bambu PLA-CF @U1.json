@@ -23,5 +23,6 @@
     "cool_plate_temp": ["45"],
     "cool_plate_temp_initial_layer": ["45"],
     "filament_vendor": ["Bambu Lab"],
+    "filament_preheat_temperature_delta": ["50"],
     "filament_type": ["PLA-CF"]
 }

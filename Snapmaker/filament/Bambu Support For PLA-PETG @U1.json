@@ -23,6 +23,7 @@
     "fan_min_speed": ["20"],
     "slow_down_layer_time": ["8"],
     "filament_vendor": ["Bambu Lab"],
+    "filament_preheat_temperature_delta": ["50"],
     "filament_adhesiveness_category": [705],
     "filament_is_support": [1]
 }

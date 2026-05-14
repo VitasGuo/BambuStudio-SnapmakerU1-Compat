@@ -21,6 +21,7 @@
     "filament_vendor": [
         "Snapmaker"
     ],
+    "filament_preheat_temperature_delta": ["50"],
     "hot_plate_temp": [
         "65"
     ],

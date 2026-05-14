@@ -13,6 +13,7 @@
     "textured_plate_temp": ["55"],
     "textured_plate_temp_initial_layer": ["55"],
     "filament_vendor": ["Generic"],
+    "filament_preheat_temperature_delta": ["50"],
     "filament_max_volumetric_speed": ["12"],
     "filament_density": ["0.94"],
     "filament_cost": ["21.99"],

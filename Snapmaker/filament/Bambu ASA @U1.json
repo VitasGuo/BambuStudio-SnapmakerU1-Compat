@@ -23,5 +23,6 @@
     "slow_down_layer_time": ["12"],
     "eng_plate_temp": ["100"],
     "eng_plate_temp_initial_layer": ["100"],
-    "filament_vendor": ["Bambu Lab"]
+    "filament_vendor": ["Bambu Lab"],
+    "filament_preheat_temperature_delta": ["50"]
 }

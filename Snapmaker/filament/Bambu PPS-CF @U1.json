@@ -21,5 +21,6 @@
     "fan_max_speed": ["30"],
     "overhang_fan_threshold": ["25%"],
     "filament_vendor": ["Bambu Lab"],
+    "filament_preheat_temperature_delta": ["50"],
     "filament_type": ["PPS-CF"]
 }

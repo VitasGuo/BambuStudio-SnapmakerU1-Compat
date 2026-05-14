@@ -14,6 +14,7 @@
     "textured_plate_temp": ["100"],
     "textured_plate_temp_initial_layer": ["100"],
     "filament_vendor": ["Generic"],
+    "filament_preheat_temperature_delta": ["50"],
     "temperature_vitrification": ["170"],
     "fan_cooling_layer_time": ["5"],
     "fan_max_speed": ["30"],

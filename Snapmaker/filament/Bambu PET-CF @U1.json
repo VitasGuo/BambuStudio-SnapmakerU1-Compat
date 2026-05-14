@@ -32,6 +32,7 @@
     "eng_plate_temp": ["80"],
     "eng_plate_temp_initial_layer": ["80"],
     "filament_vendor": ["Bambu Lab"],
+    "filament_preheat_temperature_delta": ["50"],
     "filament_type": ["PET-CF"],
     "filament_adhesiveness_category": [800]
 }

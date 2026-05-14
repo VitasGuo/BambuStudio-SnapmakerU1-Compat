@@ -134,3 +134,52 @@ if (preset.vendor != nullptr && preset.vendor != active_printer.vendor)
 - Snapmaker 系列：`"filament_vendor": ["Snapmaker"]`
 
 **注意**：`filament_vendor` 是数组格式 `["value"]`，不是字符串 `"value"`。这与 BambuStudio 的其他配置字段格式一致。
+
+---
+
+## 12. 换色时喷头温度不够导致停机（最危险）
+
+**现象**：多色打印时，第一次换喷头报"温度不够"直接停止。单色打印正常。
+
+**根因**：`change_filament_gcode` 为空。BambuStudio 默认的换色流程只发出 `T{n}` 命令切换喷头，不会等待新喷头达到目标温度。而 start gcode 中 `M104 S0 T0 A0` 等命令把非活跃喷头设为 0°C（完全关闭），换色时新喷头是冰冷的，Klipper 固件检测到温度不够就报错停机。
+
+**Orca 的正确做法**（对比参考）：
+1. 提前 30 秒发出 `M104 S220 T3` 开始预热下一个喷头
+2. 换色时先 `M109 S220 T3` **等待**温度到位
+3. 确认温度后才发出 `T3` 切换命令
+4. 切换后执行 `SM_PRINT_PREEXTRUDE_FILAMENT INDEX=3` 预挤出
+5. 旧喷头冷却到 70°C（`M104 S70 T0`）
+
+**修复内容**：
+1. 填写 `change_filament_gcode`，包含 M109 等待温度 + T 切换 + SM_PRINT_PREEXTRUDE_FILAMENT
+2. 设置 `standby_temperature_delta: -150`（待机喷头降温到 70°C，与 Orca 一致）
+3. 设置 `filament_preheat_temperature_delta: -50`（BambuStudio 在换色前提前预热下一个喷头）
+
+**change_filament_gcode 内容**：
+```
+M104 S70 T{previous_extruder} ; cooldown previous extruder
+G91
+G1 Z1.5 F1800
+G90
+G1 F21000
+M109 S{new_filament_temp} T{next_extruder}
+M400
+T{next_extruder}
+SM_PRINT_PREEXTRUDE_FILAMENT INDEX={next_extruder}
+G90
+M104 S{new_filament_temp} T{next_extruder} ; ensure target temp
+```
+
+**关键变量说明**：
+- `{previous_extruder}` / `{next_extruder}` — 上一个/下一个挤出机编号（BambuStudio 内置变量）
+- `{new_filament_temp}` — 下一个耗材的目标温度（BambuStudio 内置变量，比 `nozzle_temperature[next_extruder]` 更可靠）
+- `{old_filament_temp}` — 上一个耗材的温度（可用于条件判断）
+- `SM_PRINT_PREEXTRUDE_FILAMENT INDEX=n` — Snapmaker 专有预挤出命令
+- `M400` — 等待所有运动命令完成后再切换
+
+**Orca 完整温度管理策略对比**：
+- 启动阶段：T1/T2/T3 全部关闭（S0），与 BambuStudio 一致
+- 换色前 30 秒：Orca 通过 `preheat_time=30` 自动插入 `M104 S220 T{n}` 预热
+- 换色时：`M109 S220 T{n}` 等待温度 → `T{n}` 切换 → `SM_PRINT_PREEXTRUDE_FILAMENT`
+- 换色后：旧喷头冷却到 70°C（`standby_temperature_delta=-150`）
+- BambuStudio 的 `PreCoolingInjector` 机制类似，但需要 `filament_preheat_temperature_delta` 和 `standby_temperature_delta` 正确设置

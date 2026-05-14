@@ -10,5 +10,6 @@
         "0.95"
     ],
     "compatible_printers": ["Snapmaker U1 (0.4 nozzle)"],
-    "filament_vendor": ["Snapmaker"]
+    "filament_vendor": ["Snapmaker"],
+    "filament_preheat_temperature_delta": ["50"]
 }

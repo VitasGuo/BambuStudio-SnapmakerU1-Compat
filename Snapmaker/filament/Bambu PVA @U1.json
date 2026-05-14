@@ -20,5 +20,6 @@
     "nozzle_temperature_range_high": ["250"],
     "slow_down_min_speed": ["20"],
     "slow_down_layer_time": ["7"],
-    "filament_vendor": ["Bambu Lab"]
+    "filament_vendor": ["Bambu Lab"],
+    "filament_preheat_temperature_delta": ["50"]
 }

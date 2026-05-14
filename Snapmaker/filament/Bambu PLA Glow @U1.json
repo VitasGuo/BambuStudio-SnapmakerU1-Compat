@@ -18,5 +18,6 @@
     "filament_density": ["1.26"],
     "filament_cost": ["29.99"],
     "temperature_vitrification": ["45"],
-    "filament_vendor": ["Bambu Lab"]
+    "filament_vendor": ["Bambu Lab"],
+    "filament_preheat_temperature_delta": ["50"]
 }

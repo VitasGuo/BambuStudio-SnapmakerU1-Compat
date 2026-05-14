@@ -13,5 +13,6 @@
     "hot_plate_temp_initial_layer": ["65"],
     "textured_plate_temp": ["65"],
     "textured_plate_temp_initial_layer": ["65"],
-    "filament_vendor": ["Generic"]
+    "filament_vendor": ["Generic"],
+    "filament_preheat_temperature_delta": ["50"]
 }
