@@ -119,8 +119,9 @@
         "-150"
     ],
     "filament_preheat_temperature_delta": [
-        "-50"
+        "50"
     ],
+    "enable_pre_heating": "1",
     "retract_restart_extra": [
         "0"
     ],

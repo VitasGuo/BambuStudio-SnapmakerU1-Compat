@@ -183,3 +183,72 @@ M104 S{new_filament_temp} T{next_extruder} ; ensure target temp
 - 换色时：`M109 S220 T{n}` 等待温度 → `T{n}` 切换 → `SM_PRINT_PREEXTRUDE_FILAMENT`
 - 换色后：旧喷头冷却到 70°C（`standby_temperature_delta=-150`）
 - BambuStudio 的 `PreCoolingInjector` 机制类似，但需要 `filament_preheat_temperature_delta` 和 `standby_temperature_delta` 正确设置
+
+---
+
+## 13. auxiliary_fan=0 导致辅助风扇不工作
+
+**现象**：BambuStudio 生成的 G-code 中没有 `M106 P2`（辅助风扇）命令，而 Orca 生成的 G-code 在换色和层变化时都有 `M106 P2 S178`。
+
+**根因**：`Snapmaker U1 (0.4 nozzle).json` 中 `auxiliary_fan: "0"`，BambuStudio 根据此标志决定是否生成辅助风扇命令。设为 0 时，整个辅助风扇系统被禁用。
+
+**Orca 的正确行为**：
+- 换色时：`M106 P2 S178`（辅助风扇 70% 转速，帮助冷却新喷头挤出的耗材）
+- 层变化时：`M106 P2 S178`（辅助风扇参与每层冷却）
+- 打印结束时：`M106 P2 S0`（关闭辅助风扇）
+
+**修复**：将 `auxiliary_fan` 从 `"0"` 改为 `"1"`。
+
+---
+
+## 14. enable_pre_heating=0 导致换色前无预热
+
+**现象**：v4 G-code 中换色前没有任何预热命令，而 Orca 在换色前 30 秒自动插入 `M104 S220 T{n} ; preheat T{n} time: 30s`。虽然 `filament_preheat_temperature_delta = 50` 已在耗材文件中设置，但 BambuStudio 的 `PreCoolingInjector` 未被激活。
+
+**根因**：`fdm_machine_common.json` 中缺少 `enable_pre_heating: "1"` 设置。BambuStudio 的预热系统需要此标志才能启用 `PreCoolingInjector`，即使 `filament_preheat_temperature_delta` 已正确设置。
+
+**BambuStudio 预热机制**：
+- `enable_pre_heating = 1`：启用 PreCoolingInjector
+- `filament_preheat_temperature_delta = 50`：预热目标温度 = nozzle_temp - 50 = 170°C
+- PreCoolingInjector 会在换色前自动插入 `M104 S170 T{n}` 命令
+
+**Orca 预热机制**（不同实现）：
+- `preheat_time = 30`：换色前 30 秒开始预热
+- `preheat_steps = 1`：预热步数
+- 直接预热到目标温度 220°C（不是 170°C）
+
+**修复**：在 `fdm_machine_common.json` 中添加 `enable_pre_heating: "1"`。
+
+---
+
+## 15. filament_preheat_temperature_delta 符号错误
+
+**现象**：`fdm_machine_common.json` 中 `filament_preheat_temperature_delta` 设为 `"-50"`（负值），而所有耗材文件中设为 `"50"`（正值）。
+
+**根因**：BambuStudio 的 PreCoolingInjector 计算预热温度为 `nozzle_temp - filament_preheat_temperature_delta`：
+- 如果 delta = 50：预热温度 = 220 - 50 = 170°C ✅
+- 如果 delta = -50：预热温度 = 220 - (-50) = 270°C ❌（过热！）
+
+耗材文件的值（50）覆盖了机器配置的值（-50），所以实际运行时预热温度是正确的 170°C。但机器配置中的值应该修正以保持一致性。
+
+**修复**：将 `filament_preheat_temperature_delta` 从 `["-50"]` 改为 `["50"]`。
+
+---
+
+## 16. ooze_prevention 与擦料塔不兼容（BambuStudio 限制）
+
+**现象**：启用 `ooze_prevention: "1"` 后切片报错："当启用擦料塔时 目前不支持防滴功能"。
+
+**根因**：BambuStudio 硬性限制——`ooze_prevention` 和 `enable_prime_tower` 不能同时启用。BambuStudio 的擦料塔逻辑需要所有喷头随时可用（保持工作温度），而防滴功能会将空闲喷头降温，两者冲突。
+
+**Orca 的行为**：Orca 允许 `ooze_prevention = 1` + 擦料塔同时启用，空闲喷头降温到 70°C。这是 Orca 的实现差异。
+
+**影响**：不启用 `ooze_prevention` 时，BambuStudio 换色后内部逻辑生成 `M104 T0 S220 N0`，将旧喷头重新加热到 220°C。这意味着空闲喷头会保持高温，可能产生少量漏料。
+
+**缓解措施**：
+1. U1 是换头式设计（非 IDEX），空闲喷头停泊在远离打印区域的位置，漏料影响较小
+2. 擦料塔会捕获大部分漏料
+3. `change_filament_gcode` 中的 `M104 S70 T{previous_extruder}` 仍会先发出冷却命令，只是随后被 BambuStudio 内部逻辑覆盖
+4. `standby_temperature_delta = -150` 在 `ooze_prevention = 0` 时不生效，但保留此设置以备将来 BambuStudio 解除限制
+
+**结论**：不设置 `ooze_prevention`，接受空闲喷头保持高温的折中方案。

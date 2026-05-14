@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v3.5
+# Snapmaker U1 BambuStudio 兼容包 v3.6
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**局域网直连打印**。
 
@@ -148,6 +148,7 @@ U1 内置 Moonraker 服务，兼容 OctoPrint API。BambuStudio 原生支持 Oct
 - **G-code 兼容性**：U1 使用 Klipper 固件，G-code 包含 `PRINT_START`/`PRINT_END` 宏、`DEFECT_DETECTION`、`TIMELAPSE`、`SM_PRINT` 等 Snapmaker 专有命令
 - **多色打印**：BambuStudio 支持多色切片，U1 的 4 工具头换色机制与 BambuLab AMS 不同但可正常工作
 - **耗材选择**：在 BambuStudio 中手动选择与 U1 工具头实际装载一致的耗材预设
+- **空闲喷头温度**：由于 BambuStudio 不允许同时启用防滴（ooze_prevention）和擦料塔，空闲喷头会保持工作温度。U1 换头式设计中空闲喷头停泊在远离打印区域的位置，漏料影响较小
 
 ---
 
@@ -164,6 +165,9 @@ A: 这是 BambuStudio 的耗材缓存问题。请重新运行 `install.bat`（v3
 
 **Q: 耗材品牌归类不正确（如 Bambu 耗材显示在 Snapmaker 下）？**
 A: v3.5 已修复此问题。请重新运行 `install.bat`。
+
+**Q: 多色打印换色时报"温度不够"？**
+A: v3.5+ 已修复此问题。换色 G-code 现在包含 M109 等待温度 + 预热命令。请确保使用 v3.5 或更高版本。
 
 **Q: 安装脚本报错 "Failed to copy" 或权限不足？**
 A: 需要以管理员身份运行 `install.bat`。右键 → 以管理员身份运行。
@@ -190,12 +194,13 @@ A: 重新运行 `install.bat` 即可。
 | `Snapmaker.json` | 品牌配置入口 |
 | `Snapmaker/` | 所有打印机、工艺、耗材配置文件 |
 | `process.md` | 项目开发进度记录 |
-| `traps.md` | 开发踩坑记录（BambuStudio 第三方适配的 12 个坑） |
+| `traps.md` | 开发踩坑记录（BambuStudio 第三方适配的 16 个坑） |
 
 ---
 
 ## 版本历史
 
+- **v3.6** (2026-05-15) - G-code 深度对比修复：启用辅助风扇（`auxiliary_fan=1`，换色时 `M106 P2 S178`）；启用预热（`enable_pre_heating=1`，换色前自动预热下一喷头）；修正 `filament_preheat_temperature_delta` 符号（-50→50）；记录 BambuStudio 防滴与擦料塔不兼容限制
 - **v3.5** (2026-05-14) - 完整工艺预设移植（10 个预设，从 Orca U1 + BBL A1 参考合并）；G-code 模板修复（TIMELAPSE/DEFECT_DETECTION/高温板 Z_OFFSET 条件分支）；filament_vendor 品牌归类修复
 - **v3.3** (2026-05-14) - 修复耗材可见性缓存问题（用 JSON 解析替代正则清理 filaments 数组）；所有 80 个耗材正确显示
 - **v3.0** (2026-05-14) - 全品牌耗材库支持（80 个耗材预设：Bambu Lab 44 种 + Generic 27 种 + Snapmaker 9 种）

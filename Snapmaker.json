@@ -1,6 +1,6 @@
 {
     "name":  "Snapmaker",
-    "version":  "03.05.00.00",
+    "version":  "03.06.00.00",
     "force_update":  "0",
     "description":  "Snapmaker U1 configurations for BambuStudio",
     "machine_model_list":  [

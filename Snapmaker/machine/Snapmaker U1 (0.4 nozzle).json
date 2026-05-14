@@ -27,7 +27,7 @@
     "single_extruder_multi_material": "0",
     "scan_first_layer": "0",
     "nozzle_type": "hardened_steel",
-    "auxiliary_fan": "0",
+    "auxiliary_fan": "1",
     "extruder_colour": [
         "#F5D547",
         "#4A8FD9",
