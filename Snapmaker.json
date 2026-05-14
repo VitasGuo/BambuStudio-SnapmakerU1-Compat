@@ -1,118 +1,434 @@
 {
-    "name": "Snapmaker",
-    "version": "02.00.01.00",
-    "force_update": "0",
-    "description": "Snapmaker U1 configurations for BambuStudio",
-    "machine_model_list": [
-        {
-            "name": "Snapmaker U1",
-            "sub_path": "machine/Snapmaker U1.json"
-        }
-    ],
-    "process_list": [
-        {
-            "name": "fdm_process_common",
-            "sub_path": "process/fdm_process_common.json"
-        },
-        {
-            "name": "0.20 Standard @Snapmaker U1",
-            "sub_path": "process/0.20 Standard @Snapmaker U1.json"
-        }
-    ],
-    "filament_list": [
-        {
-            "name": "fdm_filament_common",
-            "sub_path": "filament/fdm_filament_common.json"
-        },
-        {
-            "name": "fdm_filament_pla",
-            "sub_path": "filament/fdm_filament_pla.json"
-        },
-        {
-            "name": "fdm_filament_pet",
-            "sub_path": "filament/fdm_filament_pet.json"
-        },
-        {
-            "name": "fdm_filament_abs",
-            "sub_path": "filament/fdm_filament_abs.json"
-        },
-        {
-            "name": "fdm_filament_tpu",
-            "sub_path": "filament/fdm_filament_tpu.json"
-        },
-        {
-            "name": "fdm_filament_common_generic",
-            "sub_path": "filament/fdm_filament_common_generic.json"
-        },
-        {
-            "name": "fdm_filament_pla_generic",
-            "sub_path": "filament/fdm_filament_pla_generic.json"
-        },
-        {
-            "name": "fdm_filament_pet_generic",
-            "sub_path": "filament/fdm_filament_pet_generic.json"
-        },
-        {
-            "name": "fdm_filament_abs_generic",
-            "sub_path": "filament/fdm_filament_abs_generic.json"
-        },
-        {
-            "name": "fdm_filament_tpu_generic",
-            "sub_path": "filament/fdm_filament_tpu_generic.json"
-        },
-        {
-            "name": "Generic PLA @base",
-            "sub_path": "filament/Generic PLA @base.json"
-        },
-        {
-            "name": "Generic PLA @U1",
-            "sub_path": "filament/Generic PLA @U1.json"
-        },
-        {
-            "name": "Generic PETG @base",
-            "sub_path": "filament/Generic PETG @base.json"
-        },
-        {
-            "name": "Generic PETG @U1",
-            "sub_path": "filament/Generic PETG @U1.json"
-        },
-        {
-            "name": "Generic ABS @base",
-            "sub_path": "filament/Generic ABS @base.json"
-        },
-        {
-            "name": "Generic ABS @U1",
-            "sub_path": "filament/Generic ABS @U1.json"
-        },
-        {
-            "name": "Generic TPU @U1",
-            "sub_path": "filament/Generic TPU @U1.json"
-        },
-        {
-            "name": "Snapmaker PLA @U1",
-            "sub_path": "filament/Snapmaker PLA @U1.json"
-        },
-        {
-            "name": "Snapmaker PETG @U1",
-            "sub_path": "filament/Snapmaker PETG @U1.json"
-        },
-        {
-            "name": "Snapmaker ABS @U1",
-            "sub_path": "filament/Snapmaker ABS @U1.json"
-        },
-        {
-            "name": "Snapmaker TPU @U1",
-            "sub_path": "filament/Snapmaker TPU @U1.json"
-        }
-    ],
-    "machine_list": [
-        {
-            "name": "fdm_machine_common",
-            "sub_path": "machine/fdm_machine_common.json"
-        },
-        {
-            "name": "Snapmaker U1 (0.4 nozzle)",
-            "sub_path": "machine/Snapmaker U1 (0.4 nozzle).json"
-        }
-    ]
+    "name":  "Snapmaker",
+    "version":  "03.05.00.00",
+    "force_update":  "0",
+    "description":  "Snapmaker U1 configurations for BambuStudio",
+    "machine_model_list":  [
+                               {
+                                   "name":  "Snapmaker U1",
+                                   "sub_path":  "machine/Snapmaker U1.json"
+                               }
+                           ],
+    "process_list":  [
+                         {
+                             "name":  "fdm_process_common",
+                             "sub_path":  "process/fdm_process_common.json"
+                         },
+                         {
+                             "name":  "fdm_process_U1_0.08",
+                             "sub_path":  "process/fdm_process_U1_0.08.json"
+                         },
+                         {
+                             "name":  "fdm_process_U1_0.12",
+                             "sub_path":  "process/fdm_process_U1_0.12.json"
+                         },
+                         {
+                             "name":  "fdm_process_U1_0.16",
+                             "sub_path":  "process/fdm_process_U1_0.16.json"
+                         },
+                         {
+                             "name":  "fdm_process_U1_0.20",
+                             "sub_path":  "process/fdm_process_U1_0.20.json"
+                         },
+                         {
+                             "name":  "fdm_process_U1_0.24",
+                             "sub_path":  "process/fdm_process_U1_0.24.json"
+                         },
+                         {
+                             "name":  "fdm_process_U1_0.28",
+                             "sub_path":  "process/fdm_process_U1_0.28.json"
+                         },
+                         {
+                             "name":  "0.08 Extra Fine @Snapmaker U1",
+                             "sub_path":  "process/0.08 Extra Fine @Snapmaker U1.json"
+                         },
+                         {
+                             "name":  "0.08 High Quality @Snapmaker U1",
+                             "sub_path":  "process/0.08 High Quality @Snapmaker U1.json"
+                         },
+                         {
+                             "name":  "0.12 Fine @Snapmaker U1",
+                             "sub_path":  "process/0.12 Fine @Snapmaker U1.json"
+                         },
+                         {
+                             "name":  "0.12 High Quality @Snapmaker U1",
+                             "sub_path":  "process/0.12 High Quality @Snapmaker U1.json"
+                         },
+                         {
+                             "name":  "0.16 Optimal @Snapmaker U1",
+                             "sub_path":  "process/0.16 Optimal @Snapmaker U1.json"
+                         },
+                         {
+                             "name":  "0.16 High Quality @Snapmaker U1",
+                             "sub_path":  "process/0.16 High Quality @Snapmaker U1.json"
+                         },
+                         {
+                             "name":  "0.20 Standard @Snapmaker U1",
+                             "sub_path":  "process/0.20 Standard @Snapmaker U1.json"
+                         },
+                         {
+                             "name":  "0.20 Strength @Snapmaker U1",
+                             "sub_path":  "process/0.20 Strength @Snapmaker U1.json"
+                         },
+                         {
+                             "name":  "0.24 Draft @Snapmaker U1",
+                             "sub_path":  "process/0.24 Draft @Snapmaker U1.json"
+                         },
+                         {
+                             "name":  "0.28 Extra Draft @Snapmaker U1",
+                             "sub_path":  "process/0.28 Extra Draft @Snapmaker U1.json"
+                         }
+                     ],
+    "filament_list":  [
+                          {
+                              "sub_path":  "filament/fdm_filament_common.json",
+                              "name":  "fdm_filament_common"
+                          },
+                          {
+                              "sub_path":  "filament/fdm_filament_pet.json",
+                              "name":  "fdm_filament_pet"
+                          },
+                          {
+                              "sub_path":  "filament/fdm_filament_pla.json",
+                              "name":  "fdm_filament_pla"
+                          },
+                          {
+                              "sub_path":  "filament/fdm_filament_tpu.json",
+                              "name":  "fdm_filament_tpu"
+                          },
+                          {
+                              "sub_path":  "filament/fdm_filament_abs.json",
+                              "name":  "fdm_filament_abs"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu ABS @U1.json",
+                              "name":  "Bambu ABS @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu ABS-GF @U1.json",
+                              "name":  "Bambu ABS-GF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu ASA @U1.json",
+                              "name":  "Bambu ASA @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu ASA-Aero @U1.json",
+                              "name":  "Bambu ASA-Aero @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu ASA-CF @U1.json",
+                              "name":  "Bambu ASA-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PA6-CF @U1.json",
+                              "name":  "Bambu PA6-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PA6-GF @U1.json",
+                              "name":  "Bambu PA6-GF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PA-CF @U1.json",
+                              "name":  "Bambu PA-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PAHT-CF @U1.json",
+                              "name":  "Bambu PAHT-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PC @U1.json",
+                              "name":  "Bambu PC @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PC FR @U1.json",
+                              "name":  "Bambu PC FR @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PET-CF @U1.json",
+                              "name":  "Bambu PET-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PETG Basic @U1.json",
+                              "name":  "Bambu PETG Basic @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PETG HF @U1.json",
+                              "name":  "Bambu PETG HF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PETG Translucent @U1.json",
+                              "name":  "Bambu PETG Translucent @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PETG-CF @U1.json",
+                              "name":  "Bambu PETG-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Aero @U1.json",
+                              "name":  "Bambu PLA Aero @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Basic @U1.json",
+                              "name":  "Bambu PLA Basic @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Dynamic @U1.json",
+                              "name":  "Bambu PLA Dynamic @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Galaxy @U1.json",
+                              "name":  "Bambu PLA Galaxy @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Glow @U1.json",
+                              "name":  "Bambu PLA Glow @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Lite @U1.json",
+                              "name":  "Bambu PLA Lite @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Marble @U1.json",
+                              "name":  "Bambu PLA Marble @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Matte @U1.json",
+                              "name":  "Bambu PLA Matte @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Metal @U1.json",
+                              "name":  "Bambu PLA Metal @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Silk @U1.json",
+                              "name":  "Bambu PLA Silk @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Silk+ @U1.json",
+                              "name":  "Bambu PLA Silk+ @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Sparkle @U1.json",
+                              "name":  "Bambu PLA Sparkle @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Tough @U1.json",
+                              "name":  "Bambu PLA Tough @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Tough+ @U1.json",
+                              "name":  "Bambu PLA Tough+ @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Translucent @U1.json",
+                              "name":  "Bambu PLA Translucent @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA Wood @U1.json",
+                              "name":  "Bambu PLA Wood @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PLA-CF @U1.json",
+                              "name":  "Bambu PLA-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PPA-CF @U1.json",
+                              "name":  "Bambu PPA-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PPS-CF @U1.json",
+                              "name":  "Bambu PPS-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu PVA @U1.json",
+                              "name":  "Bambu PVA @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu Support for ABS @U1.json",
+                              "name":  "Bambu Support for ABS @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu Support For PLA @U1.json",
+                              "name":  "Bambu Support For PLA @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu Support For PLA-PETG @U1.json",
+                              "name":  "Bambu Support For PLA-PETG @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu TPU 85A @U1.json",
+                              "name":  "Bambu TPU 85A @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu TPU 90A @U1.json",
+                              "name":  "Bambu TPU 90A @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu TPU 95A @U1.json",
+                              "name":  "Bambu TPU 95A @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu TPU 95A HF @U1.json",
+                              "name":  "Bambu TPU 95A HF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Bambu TPU for AMS @U1.json",
+                              "name":  "Bambu TPU for AMS @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic ABS @U1.json",
+                              "name":  "Generic ABS @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic ASA @U1.json",
+                              "name":  "Generic ASA @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic BVOH @U1.json",
+                              "name":  "Generic BVOH @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic EVA @U1.json",
+                              "name":  "Generic EVA @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic HIPS @U1.json",
+                              "name":  "Generic HIPS @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PA-CF @U1.json",
+                              "name":  "Generic PA-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PC @U1.json",
+                              "name":  "Generic PC @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PCTG @U1.json",
+                              "name":  "Generic PCTG @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PE @U1.json",
+                              "name":  "Generic PE @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PE-CF @U1.json",
+                              "name":  "Generic PE-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PETG @U1.json",
+                              "name":  "Generic PETG @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PETG HF @U1.json",
+                              "name":  "Generic PETG HF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PETG-CF @U1.json",
+                              "name":  "Generic PETG-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PHA @U1.json",
+                              "name":  "Generic PHA @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PLA @U1.json",
+                              "name":  "Generic PLA @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PLA High Speed @U1.json",
+                              "name":  "Generic PLA High Speed @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PLA Silk @U1.json",
+                              "name":  "Generic PLA Silk @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PLA-CF @U1.json",
+                              "name":  "Generic PLA-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PP @U1.json",
+                              "name":  "Generic PP @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PPA-CF @U1.json",
+                              "name":  "Generic PPA-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PPA-GF @U1.json",
+                              "name":  "Generic PPA-GF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PP-CF @U1.json",
+                              "name":  "Generic PP-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PP-GF @U1.json",
+                              "name":  "Generic PP-GF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PPS-CF @U1.json",
+                              "name":  "Generic PPS-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic PVA @U1.json",
+                              "name":  "Generic PVA @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic TPU @U1.json",
+                              "name":  "Generic TPU @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Generic TPU for AMS @U1.json",
+                              "name":  "Generic TPU for AMS @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Snapmaker ABS @U1.json",
+                              "name":  "Snapmaker ABS @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Snapmaker PETG @U1.json",
+                              "name":  "Snapmaker PETG @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Snapmaker PLA @U1.json",
+                              "name":  "Snapmaker PLA @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Snapmaker PLA Basic @U1.json",
+                              "name":  "Snapmaker PLA Basic @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Snapmaker PLA Matte @U1.json",
+                              "name":  "Snapmaker PLA Matte @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Snapmaker PLA Silk @U1.json",
+                              "name":  "Snapmaker PLA Silk @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Snapmaker PLA SnapSpeed @U1.json",
+                              "name":  "Snapmaker PLA SnapSpeed @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Snapmaker PLA-CF @U1.json",
+                              "name":  "Snapmaker PLA-CF @U1"
+                          },
+                          {
+                              "sub_path":  "filament/Snapmaker TPU @U1.json",
+                              "name":  "Snapmaker TPU @U1"
+                          }
+                      ],
+    "machine_list":  [
+                         {
+                             "name":  "fdm_machine_common",
+                             "sub_path":  "machine/fdm_machine_common.json"
+                         },
+                         {
+                             "name":  "Snapmaker U1 (0.4 nozzle)",
+                             "sub_path":  "machine/Snapmaker U1 (0.4 nozzle).json"
+                         }
+                     ]
 }

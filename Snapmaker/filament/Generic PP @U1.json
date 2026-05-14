@@ -1,0 +1,17 @@
+{
+    "type": "filament",
+    "filament_id": "GFP97",
+    "setting_id": "GFP97_U1_00",
+    "name": "Generic PP @U1",
+    "from": "system",
+    "instantiation": "true",
+    "inherits": "fdm_filament_pet",
+    "compatible_printers": ["Snapmaker U1 (0.4 nozzle)"],
+    "enable_pressure_advance": ["1"],
+    "pressure_advance": ["0.02"],
+    "hot_plate_temp": ["100"],
+    "hot_plate_temp_initial_layer": ["100"],
+    "textured_plate_temp": ["100"],
+    "textured_plate_temp_initial_layer": ["100"],
+    "filament_vendor": ["Generic"]
+}

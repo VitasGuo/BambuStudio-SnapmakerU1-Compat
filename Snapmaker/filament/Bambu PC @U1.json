@@ -1,0 +1,20 @@
+{
+    "type": "filament",
+    "filament_id": "GFC00",
+    "setting_id": "GFC00_U1_00",
+    "name": "Bambu PC @U1",
+    "from": "system",
+    "instantiation": "true",
+    "inherits": "fdm_filament_abs",
+    "compatible_printers": ["Snapmaker U1 (0.4 nozzle)"],
+    "enable_pressure_advance": ["1"],
+    "pressure_advance": ["0.02"],
+    "hot_plate_temp": ["110"],
+    "hot_plate_temp_initial_layer": ["110"],
+    "textured_plate_temp": ["110"],
+    "textured_plate_temp_initial_layer": ["110"],
+    "filament_flow_ratio": ["0.94"],
+    "filament_density": ["1.185"],
+    "filament_cost": ["39.99"],
+    "filament_vendor": ["Bambu Lab"]
+}

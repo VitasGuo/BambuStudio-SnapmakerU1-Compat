@@ -1,0 +1,23 @@
+{
+    "type": "filament",
+    "filament_id": "GFU04",
+    "setting_id": "GFU04_U1_00",
+    "name": "Bambu TPU 85A @U1",
+    "from": "system",
+    "instantiation": "true",
+    "inherits": "fdm_filament_tpu",
+    "compatible_printers": ["Snapmaker U1 (0.4 nozzle)"],
+    "enable_pressure_advance": ["0"],
+    "hot_plate_temp": ["65"],
+    "hot_plate_temp_initial_layer": ["65"],
+    "textured_plate_temp": ["65"],
+    "textured_plate_temp_initial_layer": ["65"],
+    "filament_max_volumetric_speed": ["2.2"],
+    "filament_density": ["1.18"],
+    "filament_cost": ["44.99"],
+    "nozzle_temperature": ["225"],
+    "nozzle_temperature_initial_layer": ["225"],
+    "nozzle_temperature_range_high": ["240"],
+    "slow_down_layer_time": ["20"],
+    "filament_vendor": ["Bambu Lab"]
+}

@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v2.1
+# Snapmaker U1 BambuStudio 兼容包 v3.5
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**局域网直连打印**。
 
@@ -17,9 +17,8 @@
 
 1. 右键 `install.bat` → **以管理员身份运行**
 2. 脚本自动执行以下操作：
-   - 移除 OrcaSlicer 专有字段（BambuStudio 不兼容的配置项）
    - 检测 BambuStudio 安装路径
-   - 清除旧的 BambuStudio 配置缓存
+   - 清除旧的配置缓存和耗材缓存
    - 复制 Snapmaker 配置文件到 BambuStudio
    - 验证安装结果
 3. 如果未检测到 BambuStudio，手动输入安装路径（如 `C:\Program Files\Bambu Studio`）
@@ -51,11 +50,11 @@ U1 内置 Moonraker 服务，兼容 OctoPrint API。BambuStudio 原生支持 Oct
 ### 第四步：切片并直接发送到打印机
 
 1. 导入 3D 模型文件（STL / 3MF / STEP 等）
-2. 选择工艺预设（如 `0.20 Standard`）和耗材（如 `Snapmaker PLA`）
+2. 选择工艺预设（如 `0.20 Standard @Snapmaker U1`）和耗材（如 `Snapmaker PLA @U1`）
 3. 点击 **切片**
 4. 切片完成后，点击 **发送到打印机**（Upload to Printer）
 5. 勾选 **上传后开始打印**（Start Print after Upload）
-6. G-code 将自动上传到 U1 并开始打印 🎉
+6. G-code 将自动上传到 U1 并开始打印
 
 ### 卸载
 
@@ -65,7 +64,41 @@ U1 内置 Moonraker 服务，兼容 OctoPrint API。BambuStudio 原生支持 Oct
 
 ---
 
-## 工作流程图
+## 兼容包内容
+
+| 类别 | 内容 | 数量 |
+|------|------|------|
+| 打印机 | Snapmaker U1 (0.4 nozzle) | 1 |
+| 工艺预设 | 0.08~0.28mm（Extra Fine / Fine / Optimal / Standard / Draft 等） | 10 |
+| 耗材预设 | Bambu Lab 全系列 + Generic 通用 + Snapmaker 官方 | 80 |
+| 热床模型 | Snapmaker U1 热床 STL + 纹理 SVG + 封面图 | 3 |
+
+### 工艺预设列表
+
+| 预设 | 层高 | 特点 |
+|------|------|------|
+| 0.08 Extra Fine | 0.08mm | 极细层线，表面光滑 |
+| 0.08 High Quality | 0.08mm | 低速 + gyroid 填充，最高质量 |
+| 0.12 Fine | 0.12mm | 细层线，高质量 |
+| 0.12 High Quality | 0.12mm | 低速 + gyroid 填充 |
+| 0.16 Optimal | 0.16mm | 质量/速度平衡 |
+| 0.16 High Quality | 0.16mm | 低速 + gyroid 填充 |
+| 0.20 Standard | 0.20mm | 通用默认，适合大多数场景 |
+| 0.20 Strength | 0.20mm | 6 层壁 + 25% 填充，高强度 |
+| 0.24 Draft | 0.24mm | 快速草稿 |
+| 0.28 Extra Draft | 0.28mm | 极速草稿 |
+
+### 耗材预设列表
+
+| 品牌 | 包含材料 |
+|------|----------|
+| **Snapmaker** | PLA, PLA Basic, PLA Matte, PLA Silk, PLA SnapSpeed, PLA-CF, PETG, ABS, TPU |
+| **Bambu Lab** | PLA Basic, PLA Matte, PLA Silk, PLA-CF, PETG Basic, PETG HF, ABS, ASA, TPU 95A, PA-CF, PC, PVA, Support 等 44 种 |
+| **Generic** | PLA, PETG, ABS, ASA, TPU, PC, PA-CF, PVA, PP, PPS-CF 等 27 种 |
+
+---
+
+## 工作流程
 
 ```
 ┌──────────────┐   切片+发送   ┌──────────┐
@@ -74,34 +107,21 @@ U1 内置 Moonraker 服务，兼容 OctoPrint API。BambuStudio 原生支持 Oct
 └──────────────┘   局域网直连   └──────────┘
 ```
 
-**旧方式（仍可用）：**
-
-```
-┌──────────────┐    切片+导出    ┌─────────────────┐    发送G-code    ┌──────────┐
-│  BambuStudio │ ──────────────→ │  .gcode 文件     │ ───────────────→ │  U1 打印机 │
-│  (切片软件)   │                 │  (U盘/网络共享)   │                  │          │
-└──────────────┘                  └─────────────────┘                  └──────────┘
-                                         │
-                                         │ 或通过
-                                         ▼
-                                  ┌─────────────────┐
-                                  │  Snapmaker Orca  │
-                                  │  (发送到打印机)   │
-                                  └─────────────────┘
-```
-
 ---
 
-## 兼容包内容
+## 局域网直连功能范围
 
-| 目录 | 内容 | 文件数 |
-|------|------|--------|
-| `Snapmaker.json` | 品牌配置 | 1 |
-| `Snapmaker/machine/` | 打印机配置 + 热床模型/纹理 | ~120 |
-| `Snapmaker/process/` | 工艺预设 (0.06~0.56mm) | ~147 |
-| `Snapmaker/filament/` | 耗材预设 (Snapmaker + Generic PLA/PETG/ABS/TPU) | 17 |
+| 功能 | 支持状态 | 说明 |
+|------|----------|------|
+| G-code 上传 | ✅ | 通过 HTTP multipart 上传到 U1 |
+| 上传后自动打印 | ✅ | 上传时勾选 "Start Print after Upload" |
+| 连接测试 | ✅ | 验证 IP 和 API Key 是否正确 |
+| 打印温度控制 | ✅ | 由切片参数写入 G-code |
+| 获取打印机耗材信息 | ❌ | OctoPrint 协议无耗材管理 API |
+| 实时打印进度 | ❌ | OctoPrint 兼容层不支持状态推送 |
+| 远程暂停/取消 | ❌ | BambuStudio OctoPrint 模式不支持 |
 
-所有配置文件来源于 Snapmaker Orca 官方预设，已移除 BambuStudio 不兼容的 OrcaSlicer 专有字段。
+> **打印监控**：如需实时查看打印状态和进度，请在浏览器中访问 `http://<U1的IP>` 打开 U1 自带的 Fluidd 界面。
 
 ---
 
@@ -124,43 +144,10 @@ U1 内置 Moonraker 服务，兼容 OctoPrint API。BambuStudio 原生支持 Oct
 
 ## 注意事项
 
-- **局域网直连**：U1 通过 Moonraker 的 OctoPrint 兼容层与 BambuStudio 通信，支持文件上传和启动打印
 - **BambuStudio 更新后需重新安装**：更新可能覆盖配置文件，重新运行 `install.bat` 即可
-- **G-code 兼容性**：U1 使用 Klipper 固件，G-code 包含 `PRINT_START`/`PRINT_END` 宏
-- **多色打印**：BambuStudio 支持多色切片，但 U1 的换头机制与 BambuLab 的 AMS 不同。建议多色打印使用 Snapmaker Orca
-- **切片问题**：如遇切片异常，请优先使用 Snapmaker Orca 切片
-
-### 局域网直连功能范围
-
-OctoPrint 协议是通用 3D 打印机通信标准，功能范围与 BambuLab 专有协议有所不同：
-
-| 功能 | 支持状态 | 说明 |
-|------|----------|------|
-| G-code 上传 | ✅ | 通过 HTTP multipart 上传到 U1 |
-| 上传后自动打印 | ✅ | 上传时勾选 "Start Print after Upload" |
-| 连接测试 | ✅ | 验证 IP 和 API Key 是否正确 |
-| 手动选择耗材预设 | ✅ | 在 BambuStudio 中选择与 U1 实际装载匹配的耗材预设 |
-| 打印温度控制 | ✅ | 由切片参数写入 G-code，U1 执行时自动设置 |
-| 获取打印机耗材信息 | ❌ | OctoPrint 协议无耗材管理 API，BambuStudio 无法读取 U1 当前装载的耗材 |
-| 实时打印进度 | ❌ | OctoPrint 兼容层不支持状态推送，BambuStudio 中无法显示进度 |
-| 远程暂停/取消 | ❌ | BambuStudio OctoPrint 模式不支持远程控制 |
-
-> **耗材选择建议**：在 BambuStudio 中手动选择与 U1 工具头实际装载一致的耗材预设。使用 Snapmaker 官方耗材选择 `Snapmaker PLA @U1` 等预设；使用其他品牌耗材选择 `Generic PLA @U1` 等通用预设。切片后的温度、流量等参数会正确写入 G-code，不影响打印质量。
->
-> **打印监控**：如需实时查看打印状态和进度，请在浏览器中访问 `http://<U1的IP>` 打开 U1 自带的 Fluidd 界面。
-
----
-
-## 文件说明
-
-| 文件 | 说明 |
-|------|------|
-| `install.bat` | 安装启动器（调用 PowerShell） |
-| `install.ps1` | 安装脚本（字段清理 + 缓存清理 + 文件复制 + 验证） |
-| `uninstall.bat` | 卸载启动器 |
-| `uninstall.ps1` | 卸载脚本 |
-| `Snapmaker.json` | 品牌配置（BambuStudio 用来发现 Snapmaker 品牌） |
-| `Snapmaker/` | 所有打印机、工艺、耗材配置文件 |
+- **G-code 兼容性**：U1 使用 Klipper 固件，G-code 包含 `PRINT_START`/`PRINT_END` 宏、`DEFECT_DETECTION`、`TIMELAPSE`、`SM_PRINT` 等 Snapmaker 专有命令
+- **多色打印**：BambuStudio 支持多色切片，U1 的 4 工具头换色机制与 BambuLab AMS 不同但可正常工作
+- **耗材选择**：在 BambuStudio 中手动选择与 U1 工具头实际装载一致的耗材预设
 
 ---
 
@@ -172,73 +159,47 @@ A: 请确保完全关闭并重启 BambuStudio。如果仍看不到，检查文�
 **Q: 安装后 BambuStudio 报错 "Failed loading configuration file"？**
 A: 这通常是因为旧的配置缓存未清除。请手动删除 `%APPDATA%\BambuStudioBeta\system\Snapmaker` 目录和 `Snapmaker.json` 文件，然后重启 BambuStudio。重新运行 `install.bat` 也会自动清除缓存。
 
+**Q: 安装后只看到 2 个耗材，其余都不见？**
+A: 这是 BambuStudio 的耗材缓存问题。请重新运行 `install.bat`（v3.3+ 已修复此问题），脚本会自动清理 `BambuStudio.conf` 中的耗材缓存，重启后所有耗材会自动出现。
+
+**Q: 耗材品牌归类不正确（如 Bambu 耗材显示在 Snapmaker 下）？**
+A: v3.5 已修复此问题。请重新运行 `install.bat`。
+
 **Q: 安装脚本报错 "Failed to copy" 或权限不足？**
 A: 需要以管理员身份运行 `install.bat`。右键 → 以管理员身份运行。
 
 **Q: 测试连接时提示 "Mismatched type of print host"？**
 A: 确认主机类型选择的是 **OctoPrint**，且 U1 的 Moonraker 服务正常运行。在浏览器中访问 `http://<U1的IP>/api/version`，应返回包含 `"text": "OctoPrint (Moonraker ...)"` 的 JSON。
 
-**Q: 上传成功但打印没有自动开始？**
-A: 确保在上传对话框中勾选了 **Start Print after Upload**。如果 U1 正在打印或暂停状态，Moonraker 会将任务加入队列而非立即开始。
-
 **Q: 如何获取 U1 的 IP 地址？**
 A: 在 U1 触摸屏上进入 **设置** → **网络**，即可看到 IP 地址。或在路由器管理界面中查找名为 `Snapmaker` 的设备。
-
-**Q: 如何获取 Moonraker API Key？**
-A: 在浏览器中访问 `http://<U1的IP>` 打开 Fluidd 界面，点击右上角设置图标 → API。也可通过 SSH 登录 U1，运行 `cat /home/lava/moonraker/.moonraker_api_key`（路径可能不同）。
-
-**Q: 支持 4 色打印吗？**
-A: BambuStudio 支持多色切片，但 U1 的换头机制与 BambuLab 的 AMS 不同。建议多色打印使用 Snapmaker Orca。
-
-**Q: 局域网模式下看不到打印机上的耗材信息？**
-A: 这是正常的。OctoPrint 协议本身没有耗材管理 API，BambuStudio 无法读取 U1 当前装载的耗材。请在 BambuStudio 中手动选择与 U1 工具头实际装载一致的耗材预设，切片参数会正确写入 G-code，不影响打印。
-
-**Q: 局域网模式下无法暂停/取消打印？**
-A: BambuStudio 的 OctoPrint 模式不支持远程控制。如需暂停或取消，请在 U1 触摸屏上操作，或在浏览器中打开 Fluidd 界面（`http://<U1的IP>`）进行控制。
-
-**Q: 如何查看打印进度？**
-A: BambuStudio OctoPrint 模式不支持实时状态显示。请在浏览器中访问 `http://<U1的IP>` 打开 U1 自带的 Fluidd 界面查看实时进度。
 
 **Q: BambuStudio 更新后兼容包失效了？**
 A: 重新运行 `install.bat` 即可。
 
-**Q: 连接测试成功但上传失败？**
-A: 检查 API Key 是否正确。如果 U1 启用了 HTTPS，需要在 BambuStudio 中配置 CA 证书或使用 HTTP 连接。
-
 ---
 
-## 技术细节：移除的 OrcaSlicer 专有字段
+## 文件说明
 
-以下字段在 BambuStudio 的配置系统中不存在（通过对比 BambuStudio 源码 PrintConfig.cpp 确认），安装脚本会自动移除：
-
-| 字段名 | 类型 |
-|--------|------|
-| `slowdown_for_curled_perimeters` | 工艺 |
-| `preheat_time` | 工艺 |
-| `wipe_tower_extra_spacing` | 工艺 |
-| `min_width_top_surface` | 工艺 |
-| `travel_slope` | 工艺 |
-| `machine_tool_change_time` | 机器 |
-| `enable_filament_ramming` | 工艺 |
-| `purge_in_prime_tower` | 工艺 |
-| `retract_lift_enforce` | 工艺 |
-| `filament_retract_lift_enforce` | 耗材 |
-| `filament_slowdown_for_curled_perimeters` | 耗材 |
-| `filament_preheat_time` | 耗材 |
-| `filament_wipe_tower_extra_spacing` | 耗材 |
-| `filament_travel_slope` | 耗材 |
-| `filament_enable_filament_ramming` | 耗材 |
-| `filament_purge_in_prime_tower` | 耗材 |
+| 文件 | 说明 |
+|------|------|
+| `install.bat` | 安装启动器（调用 PowerShell） |
+| `install.ps1` | 安装脚本（缓存清理 + 文件复制 + 验证） |
+| `uninstall.bat` | 卸载启动器 |
+| `uninstall.ps1` | 卸载脚本（清理配置 + 缓存 + BambuStudio.conf） |
+| `Snapmaker.json` | 品牌配置入口 |
+| `Snapmaker/` | 所有打印机、工艺、耗材配置文件 |
+| `process.md` | 项目开发进度记录 |
+| `traps.md` | 开发踩坑记录（BambuStudio 第三方适配的 12 个坑） |
 
 ---
 
 ## 版本历史
 
-- **v2.1** (2026-05-14) - 新增 Generic 通用耗材预设（Generic PLA/PETG/ABS/TPU @U1），U1 现在可以使用任意品牌的耗材，不再局限于 Snapmaker 官方耗材。修复与 BBL 品牌 Generic 耗材名称冲突问题
-- **v2.0** (2026-05-14) - 🎉 支持局域网直连打印！U1 内置 Moonraker 兼容 OctoPrint API，BambuStudio 可通过 OctoPrint 主机类型直接上传 G-code 并启动打印，无需额外软件
-- **v1.3** (2026-05-14) - 全面对比 BambuStudio 源码，从不兼容字段 16 个扩展到 93 个；修复 process 文件加载报错；install/uninstall 增加 BambuStudio.conf 清理
-- **v1.2** (2026-05-14) - 修复闪退问题：不再使用 ConvertTo-Json（避免 Unicode 转义和格式破坏）；修正不兼容字段列表（保留 BambuStudio 支持的 host_type/thumbnails/long_retractions_when_cut 等字段）；install/uninstall 脚本增加 BambuStudio.conf 清理逻辑
-- **v1.1** (2026-05-13) - 修复字段移除逻辑（使用 JSON 解析替代正则）；修正不兼容字段列表（对比 BambuStudio 源码确认）；增加缓存清理；完善使用说明
+- **v3.5** (2026-05-14) - 完整工艺预设移植（10 个预设，从 Orca U1 + BBL A1 参考合并）；G-code 模板修复（TIMELAPSE/DEFECT_DETECTION/高温板 Z_OFFSET 条件分支）；filament_vendor 品牌归类修复
+- **v3.3** (2026-05-14) - 修复耗材可见性缓存问题（用 JSON 解析替代正则清理 filaments 数组）；所有 80 个耗材正确显示
+- **v3.0** (2026-05-14) - 全品牌耗材库支持（80 个耗材预设：Bambu Lab 44 种 + Generic 27 种 + Snapmaker 9 种）
+- **v2.0** (2026-05-14) - 支持局域网直连打印（OctoPrint 协议）
 - **v1.0** (2026-05-13) - 初始版本，基于 Snapmaker Orca 官方 U1 配置
 
 ---
@@ -253,9 +214,8 @@ A: 检查 API Key 是否正确。如果 U1 启用了 HTTPS，需要在 BambuStud
 
 - **OrcaSlicer** — AGPL-3.0 — https://github.com/SoftFever/OrcaSlicer
 - **BambuStudio** — AGPL-3.0 — https://github.com/bambulab/BambuStudio
-- **PrusaSlicer** — AGPL-3.0 — https://github.com/prusa3d/PrusaSlicer
 
-Snapmaker U1 的打印机配置、工艺预设和耗材预设源自 OrcaSlicer 项目的 Snapmaker U1 配置文件，已移除 BambuStudio 不兼容的 OrcaSlicer 专有字段。
+Snapmaker U1 的打印机配置、工艺预设和耗材预设源自 OrcaSlicer 项目的 Snapmaker U1 配置文件，已移除 BambuStudio 不兼容的 OrcaSlicer 专有字段。Bambu Lab 品牌耗材参数源自 BambuStudio 官方配置。
 
 ### 通信协议
 

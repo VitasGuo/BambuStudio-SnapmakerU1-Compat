@@ -12,7 +12,6 @@
     "filament_max_volumetric_speed": [
         "10"
     ],
-    "compatible_printers": [
-        "Snapmaker U1 (0.4 nozzle)"
-    ]
+    "compatible_printers": ["Snapmaker U1 (0.4 nozzle)"],
+    "filament_vendor": ["Snapmaker"]
 }

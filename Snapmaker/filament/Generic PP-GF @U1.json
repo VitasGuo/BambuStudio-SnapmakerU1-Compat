@@ -1,0 +1,21 @@
+{
+    "type": "filament",
+    "filament_id": "GFP95",
+    "setting_id": "GFP95_U1_00",
+    "name": "Generic PP-GF @U1",
+    "from": "system",
+    "instantiation": "true",
+    "inherits": "fdm_filament_pet",
+    "compatible_printers": ["Snapmaker U1 (0.4 nozzle)"],
+    "enable_pressure_advance": ["1"],
+    "pressure_advance": ["0.01"],
+    "hot_plate_temp": ["100"],
+    "hot_plate_temp_initial_layer": ["100"],
+    "textured_plate_temp": ["100"],
+    "textured_plate_temp_initial_layer": ["100"],
+    "filament_vendor": ["Generic"],
+    "filament_max_volumetric_speed": ["6"],
+    "filament_density": ["1.05"],
+    "filament_cost": ["59.99"],
+    "filament_type": ["PP-GF"]
+}

@@ -1,0 +1,12 @@
+{
+    "type": "process",
+    "setting_id": "GP_Snapmaker_013",
+    "name": "0.20 Strength @Snapmaker U1",
+    "inherits": "fdm_process_U1_0.20",
+    "from": "system",
+    "instantiation": "true",
+    "outer_wall_speed": "60",
+    "wall_loops": "6",
+    "sparse_infill_density": "25%",
+    "compatible_printers": ["Snapmaker U1 (0.4 nozzle)"]
+}

@@ -1,0 +1,19 @@
+{
+    "type": "filament",
+    "filament_id": "GFB00",
+    "setting_id": "GFB00_U1_00",
+    "name": "Bambu ABS @U1",
+    "from": "system",
+    "instantiation": "true",
+    "inherits": "fdm_filament_abs",
+    "compatible_printers": ["Snapmaker U1 (0.4 nozzle)"],
+    "enable_pressure_advance": ["1"],
+    "pressure_advance": ["0.02"],
+    "hot_plate_temp": ["100"],
+    "hot_plate_temp_initial_layer": ["100"],
+    "textured_plate_temp": ["100"],
+    "textured_plate_temp_initial_layer": ["100"],
+    "filament_flow_ratio": ["0.95"],
+    "filament_cost": ["24.99"],
+    "filament_vendor": ["Bambu Lab"]
+}

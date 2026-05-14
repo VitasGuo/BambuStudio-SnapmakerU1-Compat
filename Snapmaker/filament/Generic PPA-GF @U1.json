@@ -1,0 +1,19 @@
+{
+    "type": "filament",
+    "filament_id": "GFN96",
+    "setting_id": "GFN96_U1_00",
+    "name": "Generic PPA-GF @U1",
+    "from": "system",
+    "instantiation": "true",
+    "inherits": "fdm_filament_abs",
+    "compatible_printers": ["Snapmaker U1 (0.4 nozzle)"],
+    "enable_pressure_advance": ["1"],
+    "pressure_advance": ["0.01"],
+    "hot_plate_temp": ["100"],
+    "hot_plate_temp_initial_layer": ["100"],
+    "textured_plate_temp": ["100"],
+    "textured_plate_temp_initial_layer": ["100"],
+    "filament_max_volumetric_speed": ["6"],
+    "filament_vendor": ["Generic"],
+    "filament_type": ["PPA-GF"]
+}

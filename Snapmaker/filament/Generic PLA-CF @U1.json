@@ -1,0 +1,23 @@
+{
+    "type": "filament",
+    "filament_id": "GFL98",
+    "setting_id": "GFL98_U1_00",
+    "name": "Generic PLA-CF @U1",
+    "from": "system",
+    "instantiation": "true",
+    "inherits": "fdm_filament_pla",
+    "compatible_printers": ["Snapmaker U1 (0.4 nozzle)"],
+    "enable_pressure_advance": ["1"],
+    "pressure_advance": ["0.01"],
+    "hot_plate_temp": ["65"],
+    "hot_plate_temp_initial_layer": ["65"],
+    "textured_plate_temp": ["65"],
+    "textured_plate_temp_initial_layer": ["65"],
+    "filament_vendor": ["Generic"],
+    "filament_flow_ratio": ["0.95"],
+    "slow_down_layer_time": ["7"],
+    "additional_cooling_fan_speed": ["0"],
+    "cool_plate_temp": ["45"],
+    "cool_plate_temp_initial_layer": ["45"],
+    "filament_type": ["PLA-CF"]
+}
