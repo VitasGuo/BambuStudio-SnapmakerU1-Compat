@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能
 
-## 更新日期: 2026-05-14 (v3.5)
+## 更新日期: 2026-05-15 (v3.7)
 
 ---
 
@@ -156,6 +156,24 @@ BambuStudio-SnapmakerU1-Compat/
 ---
 
 ## 六、已知问题与修复记录
+
+### v3.6 修复（JSON 数组值类型一致性）
+
+**问题**：10 个耗材 JSON 文件中存在整数类型的数组值（如 `[702]`、`[1]`），而 BambuStudio 的约定是所有数组值必须为字符串类型（如 `["702"]`、`["1"]`）。
+
+**修复内容**（10 个文件，12 处修改）：
+1. `Bambu Support For PLA @U1.json`：`filament_adhesiveness_category: [702]` → `["702"]`，`filament_is_support: [1]` → `["1"]`
+2. `Bambu Support For PLA-PETG @U1.json`：`filament_adhesiveness_category: [705]` → `["705"]`，`filament_is_support: [1]` → `["1"]`
+3. `Bambu Support for ABS @U1.json`：`filament_adhesiveness_category: [706]` → `["706"]`，`filament_is_support: [1]` → `["1"]`
+4. `Bambu PET-CF @U1.json`：`filament_adhesiveness_category: [800]` → `["800"]`
+5. `Bambu ASA-Aero @U1.json`：`reduce_fan_stop_start_freq: [0]` → `["0"]`
+6. `Generic BVOH @U1.json`：`filament_adhesiveness_category: [797]` → `["797"]`
+7. `Generic HIPS @U1.json`：`filament_is_support: [1]` → `["1"]`
+8. `Generic EVA @U1.json`：`reduce_fan_stop_start_freq: [1]` → `["1"]`
+9. `Generic PE @U1.json`：`filament_adhesiveness_category: [901]` → `["901"]`
+10. `Generic PE-CF @U1.json`：`filament_adhesiveness_category: [901]` → `["901"]`
+
+**检查结果**：`Generic PP-CF @U1.json`、`Generic PP-GF @U1.json`、`Generic PPA-GF @U1.json` 无整数类型问题。
 
 ### v3.5 新增（完整工艺预设 + G-code 模板修复 + filament_vendor 修复）
 
@@ -520,6 +538,41 @@ BambuStudio 的兼容性检查有厂商隔离机制（`preset.vendor != active_p
 - [x] v3.3 耗材可见性缓存修复（JSON 解析替代正则，正确清理 filaments 数组）
 - [x] v3.4 G-code 模板补全（TIMELAPSE/DEFECT_DETECTION/Z_OFFSET 条件分支）+ filament_vendor 品牌归类修复
 - [x] v3.5 完整工艺预设移植（10个预设，从 Orca U1 + BBL A1 参考合并）+ G-code 模板修复 + filament_vendor 修复
+- [x] v3.6 G-code 深度对比修复（auxiliary_fan、enable_pre_heating、ooze_prevention、filament_preheat_temperature_delta 符号）
+- [x] v3.7 项目审查修复：补全 Bambu PPA-CF 配置；补全 Snapmaker 基础耗材关键字段；修复 TPU 热床温度；修复 PETG cool_plate_temp；修复 PE/PP/PCTG/PPA-CF filament_type；修复 PETG Basic temperature_vitrification；补全 PLA Dynamic filament_flow_ratio；CF/GF 添加 required_nozzle_HRC；统一数据类型；清理 fdm_process_U1_0.20；补全 PC/PAHT-CF 高温材料 nozzle_temperature；修复 C1 filament_id 重复（Snapmaker PLA/ABS/PETG/TPU 改为 SFSxxx）；修复 H2 machine_pause_gcode（空→PAUSE）
+
+### v3.7 审查未修改项（基于 G-code 实际对比）
+
+**H1：standby_temperature_delta 机器/工艺冲突**
+- 状态：未修改
+- 理由：G-code 显示 process 级 `-5` 未生效，实际使用 machine 级 `-150`（空闲喷头冷却到 70°C）；BambuStudio 通过 `M104 T0 S220 N0` 让固件将待机温度设为 0°C，这是与 Orca 的设计差异，不是 bug
+- 风险：无崩溃风险，换色等待可能略长
+
+**M1：change_filament_gcode Z 提升未归位**
+- 状态：未修改
+- 理由：G-code 显示后续通过绝对定位（G1 Z.4 / G1 Z.8）正确归位，内部 Z 跟踪偏移不影响实际定位
+- 风险：无
+
+**M2：0.08/0.12 工艺预设速度超 300mm/s**
+- 状态：未修改
+- 理由：当前 0.20mm 预设 G-code 中无打印移动超过 F18000（300mm/s）；`G1 F21000` 出现在 change_filament_gcode 中但从未被用于实际移动
+- 风险：无（当前预设），建议等实际用 0.08/0.12 预设打印后再验证
+
+**L1：extruder_colour/offset 只有 1 项**
+- 状态：未修改
+- 理由：G-code 显示 BambuStudio 正确输出了 4 个颜色和 4 个偏移量，common 中的单条目被 nozzle 配置正确覆盖
+- 风险：无
+
+**L2：bed_model/bed_texture 为空**
+- 状态：未修改
+- 理由：纯 UI 展示问题，对 G-code 和打印零影响
+- 风险：无
+
+**L3：default_filament_profile 只有 1 项**
+- 状态：未修改
+- 理由：G-code 显示正确配置了 4 个耗材（全 PLA，全 220°C），单条默认配置在所有耗材类型相同时工作正常
+- 风险：无（当前 PLA-only），混合耗材时风险低（BambuStudio 会自动处理）
+
 - [ ] 实际打印测试（待用户在 U1 上验证）
 - [ ] 更多喷嘴直径支持（0.2/0.6/0.8）
 - [ ] 更多工艺预设（0.08/0.12/0.16/0.24/0.28 等）

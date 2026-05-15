@@ -22,5 +22,6 @@
     "full_fan_speed_layer": ["2"],
     "overhang_fan_speed": ["40"],
     "overhang_fan_threshold": ["0%"],
-    "filament_type": ["PA-CF"]
+    "filament_type": ["PA-CF"],
+    "required_nozzle_HRC": ["55"]
 }

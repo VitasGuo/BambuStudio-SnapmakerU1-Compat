@@ -145,5 +145,5 @@
     "machine_end_gcode": "PRINT_END\nTIMELAPSE_STOP",
     "layer_change_gcode": "",
     "change_filament_gcode": "M104 S70 T{previous_extruder} ; cooldown previous extruder\nG91\nG1 Z1.5 F1800\nG90\nG1 F21000\nM109 S{new_filament_temp} T{next_extruder}\nM400\nT{next_extruder}\nSM_PRINT_PREEXTRUDE_FILAMENT INDEX={next_extruder}\nG90\nM104 S{new_filament_temp} T{next_extruder} ; ensure target temp",
-    "machine_pause_gcode": ""
+    "machine_pause_gcode": "PAUSE"
 }

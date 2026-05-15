@@ -20,5 +20,6 @@
     "additional_cooling_fan_speed": ["0"],
     "cool_plate_temp": ["45"],
     "cool_plate_temp_initial_layer": ["45"],
-    "filament_type": ["PLA-CF"]
+    "filament_type": ["PLA-CF"],
+    "required_nozzle_HRC": ["55"]
 }

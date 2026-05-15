@@ -20,6 +20,6 @@
     "cool_plate_temp_initial_layer": ["40"],
     "filament_vendor": ["Bambu Lab"],
     "filament_preheat_temperature_delta": ["50"],
-    "filament_adhesiveness_category": [702],
-    "filament_is_support": [1]
+    "filament_adhesiveness_category": ["702"],
+    "filament_is_support": ["1"]
 }

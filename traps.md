@@ -252,3 +252,33 @@ M104 S{new_filament_temp} T{next_extruder} ; ensure target temp
 4. `standby_temperature_delta = -150` 在 `ooze_prevention = 0` 时不生效，但保留此设置以备将来 BambuStudio 解除限制
 
 **结论**：不设置 `ooze_prevention`，接受空闲喷头保持高温的折中方案。
+
+---
+
+## 17. 跨材料基类继承导致参数缺失
+
+**现象**：Bambu PPA-CF @U1 继承 `fdm_filament_abs`（nozzle_temperature=240°C），但 PPA-CF 实际需要 290°C。打印时严重欠挤，几乎无法出料。
+
+**根因**：项目没有 `fdm_filament_ppa` 基类（BBL 官方有），PPA-CF 只能继承 `fdm_filament_abs`。但 ABS 的温度（240°C）与 PPA-CF（290°C）差距巨大，如果不覆盖 `nozzle_temperature`，会使用错误的温度。
+
+**解决方案**：在具体 @U1 文件中显式覆盖所有与基类不同的参数（nozzle_temperature、filament_type、filament_flow_ratio 等）。参照 BBL 官方 `fdm_filament_ppa` 源文件补全。
+
+---
+
+## 18. Snapmaker 基础耗材缺少关键覆盖导致默认值错误
+
+**现象**：Snapmaker PLA/ABS/PETG/TPU 4 个"plain"耗材文件缺少 `enable_pressure_advance`、`pressure_advance`、热床温度覆盖。TPU 热床只有 35°C（无法附着），PETG 冷板温度 60°C（会粘死）。
+
+**根因**：这 4 个文件是最初 v2.0 创建的最小化配置，只设了 `filament_flow_ratio` 和 `filament_max_volumetric_speed`，未覆盖热床温度和 PA 参数。而 Snapmaker 变体（PLA Basic/Matte 等）是后来 v3.0 批量生成的，包含了完整覆盖。
+
+**解决方案**：为 4 个 Snapmaker "plain" 文件补全 `enable_pressure_advance`、`pressure_advance`、热床温度覆盖。TPU 的 `enable_pressure_advance` 设为 `"0"`（禁用 PA）。
+
+---
+
+## 19. filament_type 缺失导致材料分类错误
+
+**现象**：Generic PE/PP/PCTG 在 BambuStudio 中显示为 PETG 类型，PPA-CF 显示为 ABS 类型。
+
+**根因**：这些材料继承 `fdm_filament_pet` 或 `fdm_filament_abs`，未覆盖 `filament_type`。BambuStudio 使用 `filament_type` 进行材料分类、兼容性检查和支撑材料匹配。
+
+**解决方案**：在具体 @U1 文件中显式设置正确的 `filament_type`（如 `"PE"`、`"PP"`、`"PCTG"`、`"PPA-CF"`）。

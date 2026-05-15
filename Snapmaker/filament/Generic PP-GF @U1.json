@@ -18,5 +18,6 @@
     "filament_max_volumetric_speed": ["6"],
     "filament_density": ["1.05"],
     "filament_cost": ["59.99"],
-    "filament_type": ["PP-GF"]
+    "filament_type": ["PP-GF"],
+    "required_nozzle_HRC": ["55"]
 }

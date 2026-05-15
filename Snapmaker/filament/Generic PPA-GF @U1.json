@@ -16,5 +16,6 @@
     "filament_max_volumetric_speed": ["6"],
     "filament_vendor": ["Generic"],
     "filament_preheat_temperature_delta": ["50"],
-    "filament_type": ["PPA-GF"]
+    "filament_type": ["PPA-GF"],
+    "required_nozzle_HRC": ["55"]
 }

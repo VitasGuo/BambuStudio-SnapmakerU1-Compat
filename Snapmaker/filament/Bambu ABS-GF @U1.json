@@ -24,5 +24,6 @@
     "overhang_fan_threshold": ["10%"],
     "filament_vendor": ["Bambu Lab"],
     "filament_preheat_temperature_delta": ["50"],
-    "filament_type": ["ABS-GF"]
+    "filament_type": ["ABS-GF"],
+    "required_nozzle_HRC": ["55"]
 }

@@ -29,5 +29,5 @@
     "filament_vendor": ["Bambu Lab"],
     "filament_preheat_temperature_delta": ["50"],
     "filament_type": ["ASA-AERO"],
-    "reduce_fan_stop_start_freq": [0]
+    "reduce_fan_stop_start_freq": ["0"]
 }

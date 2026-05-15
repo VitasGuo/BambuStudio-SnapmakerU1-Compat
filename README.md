@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v3.6
+# Snapmaker U1 BambuStudio 兼容包 v3.7
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**局域网直连打印**。
 
@@ -200,6 +200,7 @@ A: 重新运行 `install.bat` 即可。
 
 ## 版本历史
 
+- **v3.7** (2026-05-15) - 项目审查修复：补全 Bambu PPA-CF 配置（nozzle_temperature=290、filament_type=PPA-CF 等 18 个参数）；补全 Snapmaker 基础耗材关键字段（PA、热床温度等）；修复 Snapmaker TPU 热床温度（35→65°C）；修复 Snapmaker PETG cool_plate_temp（60→0）；修复 Generic PE/PP/PCTG filament_type；修复 PETG Basic temperature_vitrification（60→178）；补全 Bambu PLA Dynamic filament_flow_ratio；为 CF/GF 材料添加 required_nozzle_HRC；统一数据类型（int→string）；清理 fdm_process_U1_0.20 冗余覆盖
 - **v3.6** (2026-05-15) - G-code 深度对比修复：启用辅助风扇（`auxiliary_fan=1`，换色时 `M106 P2 S178`）；启用预热（`enable_pre_heating=1`，换色前自动预热下一喷头）；修正 `filament_preheat_temperature_delta` 符号（-50→50）；记录 BambuStudio 防滴与擦料塔不兼容限制
 - **v3.5** (2026-05-14) - 完整工艺预设移植（10 个预设，从 Orca U1 + BBL A1 参考合并）；G-code 模板修复（TIMELAPSE/DEFECT_DETECTION/高温板 Z_OFFSET 条件分支）；filament_vendor 品牌归类修复
 - **v3.3** (2026-05-14) - 修复耗材可见性缓存问题（用 JSON 解析替代正则清理 filaments 数组）；所有 80 个耗材正确显示

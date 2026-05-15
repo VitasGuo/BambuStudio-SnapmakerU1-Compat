@@ -23,5 +23,6 @@
     "nozzle_temperature_range_low": ["175"],
     "nozzle_temperature_range_high": ["220"],
     "temperature_vitrification": ["70"],
-    "filament_adhesiveness_category": [901]
+    "filament_adhesiveness_category": ["901"],
+    "filament_type": ["PE"]
 }

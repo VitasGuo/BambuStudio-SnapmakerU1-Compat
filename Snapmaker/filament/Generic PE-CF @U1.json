@@ -24,5 +24,6 @@
     "nozzle_temperature_range_high": ["220"],
     "temperature_vitrification": ["70"],
     "filament_type": ["PE-CF"],
-    "filament_adhesiveness_category": [901]
+    "filament_adhesiveness_category": ["901"],
+    "required_nozzle_HRC": ["55"]
 }

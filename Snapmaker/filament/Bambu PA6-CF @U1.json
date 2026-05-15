@@ -26,5 +26,6 @@
     "overhang_fan_threshold": ["0%"],
     "filament_vendor": ["Bambu Lab"],
     "filament_preheat_temperature_delta": ["50"],
-    "filament_type": ["PA6-CF"]
+    "filament_type": ["PA6-CF"],
+    "required_nozzle_HRC": ["55"]
 }

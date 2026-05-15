@@ -31,5 +31,6 @@
     "eng_plate_temp_initial_layer": ["70"],
     "filament_vendor": ["Bambu Lab"],
     "filament_preheat_temperature_delta": ["50"],
-    "filament_type": ["PETG-CF"]
+    "filament_type": ["PETG-CF"],
+    "required_nozzle_HRC": ["55"]
 }

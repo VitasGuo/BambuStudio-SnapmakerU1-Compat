@@ -30,5 +30,6 @@
     "cool_plate_temp_initial_layer": ["0"],
     "eng_plate_temp": ["70"],
     "eng_plate_temp_initial_layer": ["70"],
-    "filament_type": ["PETG-CF"]
+    "filament_type": ["PETG-CF"],
+    "required_nozzle_HRC": ["55"]
 }

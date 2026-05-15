@@ -17,5 +17,12 @@
     "filament_density": ["1.185"],
     "filament_cost": ["39.99"],
     "filament_vendor": ["Bambu Lab"],
-    "filament_preheat_temperature_delta": ["50"]
+    "filament_preheat_temperature_delta": ["50"],
+    "filament_type": ["PC"],
+    "nozzle_temperature": ["280"],
+    "nozzle_temperature_initial_layer": ["270"],
+    "nozzle_temperature_range_low": ["260"],
+    "nozzle_temperature_range_high": ["290"],
+    "temperature_vitrification": ["120"],
+    "filament_max_volumetric_speed": ["18"]
 }

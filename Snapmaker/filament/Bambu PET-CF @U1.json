@@ -34,5 +34,6 @@
     "filament_vendor": ["Bambu Lab"],
     "filament_preheat_temperature_delta": ["50"],
     "filament_type": ["PET-CF"],
-    "filament_adhesiveness_category": [800]
+    "filament_adhesiveness_category": ["800"],
+    "required_nozzle_HRC": ["55"]
 }
