@@ -6,6 +6,7 @@
 
 ## 前置条件
 
+- **操作系统**：仅适用于 **Windows** 平台（安装脚本为 `.bat` / `.ps1`，不支持 macOS / Linux）
 - 已安装 **BambuStudio**（[官方下载](https://bambulab.com/en/download/bambu-studio)）
 - Snapmaker U1 打印机与电脑处于**同一局域网**
 
