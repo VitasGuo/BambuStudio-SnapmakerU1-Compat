@@ -1,11 +1,11 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack Installer"
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack Reinstaller"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "  Snapmaker U1 BambuStudio Compatibility Pack v3.12" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compat Pack - Reinstall" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -18,7 +18,7 @@ if ($bambuProcess) {
 
 $pkgDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-Write-Host "  [1/5] Detecting BambuStudio..." -ForegroundColor White
+Write-Host "  [1/7] Detecting BambuStudio..." -ForegroundColor White
 $bambuDir = $null
 $searchPaths = @(
     "C:\Program Files\Bambu Studio",
@@ -53,9 +53,10 @@ if (-not (Test-Path "$bambuDir\resources\profiles")) {
 }
 
 Write-Host "  Found: $bambuDir" -ForegroundColor Green
+$profilesDir = "$bambuDir\resources\profiles"
 Write-Host ""
 
-$confirm = Read-Host "  Install Snapmaker U1 profiles? (Y/N)"
+$confirm = Read-Host "  Reinstall Snapmaker U1 profiles? (Y/N)"
 if ($confirm -ne "Y" -and $confirm -ne "y") {
     Write-Host "  Cancelled." -ForegroundColor Yellow
     Read-Host "Press Enter to exit"
@@ -64,7 +65,20 @@ if ($confirm -ne "Y" -and $confirm -ne "y") {
 
 Write-Host ""
 
-Write-Host "  [2/5] Clearing BambuStudio cache..." -ForegroundColor White
+Write-Host "  [2/7] Removing old profiles..." -ForegroundColor White
+if (Test-Path "$profilesDir\Snapmaker.json") {
+    Remove-Item "$profilesDir\Snapmaker.json" -Force
+    Write-Host "  Removed Snapmaker.json" -ForegroundColor Green
+}
+if (Test-Path "$profilesDir\Snapmaker") {
+    Remove-Item "$profilesDir\Snapmaker" -Recurse -Force
+    Write-Host "  Removed Snapmaker\ directory" -ForegroundColor Green
+}
+if (-not (Test-Path "$profilesDir\Snapmaker.json") -and -not (Test-Path "$profilesDir\Snapmaker")) {
+    Write-Host "  No old profiles found (OK)" -ForegroundColor DarkGray
+}
+
+Write-Host "  [3/7] Clearing BambuStudio system cache..." -ForegroundColor White
 $cacheDir = "$env:APPDATA\BambuStudioBeta\system\Snapmaker"
 $cacheVendor = "$env:APPDATA\BambuStudioBeta\system\Snapmaker.json"
 if (Test-Path $cacheDir) {
@@ -94,7 +108,7 @@ if (Test-Path $userDefaultDir) {
     }
 }
 
-Write-Host "  [3/5] Cleaning filament cache in BambuStudio.conf..." -ForegroundColor White
+Write-Host "  [4/7] Deep-cleaning BambuStudio.conf..." -ForegroundColor White
 $confPath = "$env:APPDATA\BambuStudioBeta\BambuStudio.conf"
 if (Test-Path $confPath) {
     try {
@@ -110,7 +124,16 @@ if (Test-Path $confPath) {
             if ($cleanedList.Count -ne $filamentList.Count) {
                 $conf.filaments = $cleanedList
                 $removedCount = $filamentList.Count - $cleanedList.Count
-                Write-Host "  Removed $removedCount cached filament entries (will be re-discovered on startup)" -ForegroundColor DarkGray
+                Write-Host "  Removed $removedCount cached filament entries" -ForegroundColor DarkGray
+                $changed = $true
+            }
+        }
+
+        if ($conf.models) {
+            $modelList = @($conf.models)
+            $cleanedModels = @($modelList | Where-Object { $_.vendor -ne 'Snapmaker' })
+            if ($cleanedModels.Count -ne $modelList.Count) {
+                $conf.models = $cleanedModels
                 $changed = $true
             }
         }
@@ -123,36 +146,64 @@ if (Test-Path $confPath) {
             }
         }
 
+        if ($conf.presets) {
+            if ($conf.presets.machine -match 'Snapmaker') {
+                $conf.presets.machine = 'Bambu Lab A1 0.4 nozzle'
+                $changed = $true
+            }
+            if ($conf.presets.process -match 'Snapmaker') {
+                $conf.presets.process = '0.20 Standard @Bambu Lab A1 0.4 nozzle'
+                $changed = $true
+            }
+            if ($conf.presets.filaments) {
+                $presetFilaments = @($conf.presets.filaments)
+                $cleanedPresetFilaments = @($presetFilaments | Where-Object {
+                    $_ -notmatch '@U1' -and $_ -notmatch 'Snapmaker'
+                })
+                if ($cleanedPresetFilaments.Count -eq 0) {
+                    $cleanedPresetFilaments = @("Bambu PLA Basic @BBL A1 0.4 nozzle")
+                }
+                if ($cleanedPresetFilaments.Count -ne $presetFilaments.Count -or $cleanedPresetFilaments[0] -ne $presetFilaments[0]) {
+                    $conf.presets.filaments = $cleanedPresetFilaments
+                    $changed = $true
+                }
+            }
+        }
+
         if ($changed) {
             Copy-Item $confPath "$confPath.bak" -Force
             $jsonOutput = $conf | ConvertTo-Json -Depth 10
             [System.IO.File]::WriteAllText($confPath, $jsonOutput, [System.Text.UTF8Encoding]::new($false))
-            Write-Host "  Cleaned filament cache in BambuStudio.conf (backup: .bak)" -ForegroundColor Green
+            Write-Host "  Deep-cleaned all Snapmaker references (backup: .bak)" -ForegroundColor Green
         } else {
-            Write-Host "  No Snapmaker/U1 cache to clean (OK)" -ForegroundColor DarkGray
+            Write-Host "  No Snapmaker references found (OK)" -ForegroundColor DarkGray
         }
     } catch {
-        Write-Host "  [!] Failed to parse BambuStudio.conf: $_" -ForegroundColor Yellow
-        Write-Host "  Falling back to regex-based cleanup..." -ForegroundColor Yellow
+        Write-Host "  [!] JSON parse failed, using regex fallback..." -ForegroundColor Yellow
         try {
             $confContent = [System.IO.File]::ReadAllText($confPath, [System.Text.UTF8Encoding]::new($false))
+            if ($confContent -match "Snapmaker") {
+                $confContent = $confContent -replace '\s*\{\s*"model":\s*"Snapmaker U1",\s*"nozzle_diameter":\s*"[^"]*",\s*"vendor":\s*"Snapmaker"\s*\},?', ''
+                $confContent = $confContent -replace '"Snapmaker U1 \([^)]+\)":\s*"[^"]*",?\s*', ''
+                $confContent = $confContent -replace '"machine":\s*"Snapmaker U1 \([^)]+\)"', '"machine": "Bambu Lab A1 0.4 nozzle"'
+                $confContent = $confContent -replace '"process":\s*"[^"]*@Snapmaker U1[^"]*"', '"process": "0.20 Standard @Bambu Lab A1 0.4 nozzle"'
+            }
             $confContent = $confContent -replace '(?m)^\s*"[^"]*@U1"\s*,?\s*$', ''
             $confContent = $confContent -replace '(?m)^\s*"Snapmaker (PLA|PLA Basic|PLA Matte|PLA Silk|PLA SnapSpeed|PLA-CF|PETG|PETG HF|ABS|TPU|TPU 90A|TPU 95A HF)[^"]*"\s*,?\s*$', ''
-            $confContent = $confContent -replace '"Snapmaker U1 \([^)]+\)":\s*"[^"]*",?\s*', ''
             $confContent = $confContent -replace ',(\s*\])', '$1'
             $confContent = $confContent -replace ',(\s*\})', '$1'
             $confContent = $confContent -replace '(\r?\n){3,}', "`n`n"
             [System.IO.File]::WriteAllText($confPath, $confContent, [System.Text.UTF8Encoding]::new($false))
-            Write-Host "  Cleaned via regex fallback" -ForegroundColor Yellow
+            Write-Host "  Deep-cleaned via regex fallback" -ForegroundColor Yellow
         } catch {
-            Write-Host "  [!] Regex fallback also failed. Manual cleanup may be needed." -ForegroundColor Red
+            Write-Host "  [X] Both JSON and regex cleanup failed" -ForegroundColor Red
         }
     }
 } else {
     Write-Host "  BambuStudio.conf not found (OK for first install)" -ForegroundColor DarkGray
 }
 
-Write-Host "  [4/5] Installing profiles..." -ForegroundColor White
+Write-Host "  [5/7] Installing profiles..." -ForegroundColor White
 try {
     Copy-Item "$pkgDir\Snapmaker.json" "$bambuDir\resources\profiles\Snapmaker.json" -Force
     Write-Host "  Snapmaker.json" -ForegroundColor Green
@@ -180,16 +231,20 @@ try {
     exit 1
 }
 
-Write-Host "  [5/5] Verifying..." -ForegroundColor White
+Write-Host "  [6/7] Verifying..." -ForegroundColor White
 $vendorOk = Test-Path "$bambuDir\resources\profiles\Snapmaker.json"
 $u1Ok = Test-Path "$bambuDir\resources\profiles\Snapmaker\machine\Snapmaker U1.json"
 $processOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\process\0.20 Standard @Snapmaker U1.json"
 $filamentOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Snapmaker PLA Basic @U1.json"
-$bblFilamentOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Bambu PLA Basic @U1.json"
+$petgHfOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Snapmaker PETG HF @U1.json"
+$tpu90aOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Snapmaker TPU 90A @U1.json"
+$tpu95aOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Snapmaker TPU 95A HF @U1.json"
 
 if ($vendorOk -and $u1Ok -and $processOk -and $filamentOk) {
-    Write-Host "  Verification passed!" -ForegroundColor Green
-    if ($bblFilamentOk) { Write-Host "  BBL filament support: enabled" -ForegroundColor DarkGray }
+    Write-Host "  Core verification passed!" -ForegroundColor Green
+    if ($petgHfOk) { Write-Host "  PETG HF: OK" -ForegroundColor DarkGray }
+    if ($tpu90aOk) { Write-Host "  TPU 90A: OK" -ForegroundColor DarkGray }
+    if ($tpu95aOk) { Write-Host "  TPU 95A HF: OK" -ForegroundColor DarkGray }
 } else {
     Write-Host "  [X] Verification failed!" -ForegroundColor Red
     if (-not $vendorOk) { Write-Host "  Missing: Snapmaker.json" -ForegroundColor Red }
@@ -200,17 +255,21 @@ if ($vendorOk -and $u1Ok -and $processOk -and $filamentOk) {
     exit 1
 }
 
+Write-Host "  [7/7] Listing installed Snapmaker filaments..." -ForegroundColor White
+$filamentDir = "$bambuDir\resources\profiles\Snapmaker\filament"
+$filamentFiles = Get-ChildItem $filamentDir -Filter "*@U1.json" | Sort-Object Name
+foreach ($f in $filamentFiles) {
+    $fContent = Get-Content $f.FullName -Raw | ConvertFrom-Json
+    Write-Host "    $($fContent.name)" -ForegroundColor Cyan
+}
+
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Green
-Write-Host "    Installation Successful!" -ForegroundColor Green
+Write-Host "    Reinstall Successful!" -ForegroundColor Green
 Write-Host "  ======================================================" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Next steps:" -ForegroundColor White
 Write-Host "    1. Start BambuStudio" -ForegroundColor White
-Write-Host "    2. If first install: Add Printer -> Snapmaker -> Snapmaker U1" -ForegroundColor DarkGray
-Write-Host "    3. All compatible filaments will auto-appear" -ForegroundColor White
-Write-Host ""
-Write-Host "  Note: Filament cache was cleared. BambuStudio will" -ForegroundColor DarkGray
-Write-Host "  re-discover all filaments on startup via default_materials." -ForegroundColor DarkGray
+Write-Host "    2. All filaments will auto-appear" -ForegroundColor White
 Write-Host ""
 Read-Host "Press Enter to exit"

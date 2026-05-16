@@ -10,7 +10,7 @@
         "0.98"
     ],
     "filament_max_volumetric_speed": [
-        "12"
+        "10"
     ],
     "filament_cost": [
         "25.4"
@@ -35,10 +35,10 @@
         "65"
     ],
     "nozzle_temperature": [
-        "220"
+        "230"
     ],
     "nozzle_temperature_initial_layer": [
-        "220"
+        "230"
     ],
     "nozzle_temperature_range_low": [
         "190"
@@ -50,10 +50,13 @@
         "45"
     ],
     "enable_pressure_advance": [
-        "1"
+        "0"
     ],
     "pressure_advance": [
-        "0.02"
+        "0.015"
+    ],
+    "filament_retraction_length": [
+        "0.2"
     ],
     "slow_down_min_speed": [
         "20"
@@ -61,5 +64,7 @@
     "slow_down_layer_time": [
         "4"
     ],
-    "compatible_printers": ["Snapmaker U1 (0.4 nozzle)"]
+    "compatible_printers": ["Snapmaker U1 (0.4 nozzle)"],
+    "dont_slow_down_outer_wall": ["1"],
+    "filament_retract_length_toolchange": ["5"]
 }

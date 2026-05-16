@@ -22,5 +22,5 @@
     "temperature_vitrification": ["220"],
     "fan_max_speed": ["30"],
     "filament_type": ["PPS-CF"],
-    "required_nozzle_HRC": ["55"]
+    "required_nozzle_HRC": ["40"]
 }

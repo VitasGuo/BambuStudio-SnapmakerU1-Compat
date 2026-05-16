@@ -195,7 +195,7 @@ if (Test-Path $confPath) {
                 $confContent = $confContent -replace '"process":\s*"[^"]*@Snapmaker U1[^"]*"', '"process": "0.20 Standard @Bambu Lab A1 0.4 nozzle"'
             }
             $confContent = $confContent -replace '(?m)^\s*"[^"]*@U1"\s*,?\s*$', ''
-            $confContent = $confContent -replace '(?m)^\s*"Snapmaker (PLA|PETG|ABS|TPU|PLA Basic|PLA Matte|PLA Silk|PLA SnapSpeed|PLA-CF)[^"]*"\s*,?\s*$', ''
+            $confContent = $confContent -replace '(?m)^\s*"Snapmaker (PLA|PLA Basic|PLA Matte|PLA Silk|PLA SnapSpeed|PLA-CF|PETG|PETG HF|ABS|TPU|TPU 90A|TPU 95A HF)[^"]*"\s*,?\s*$', ''
             $confContent = $confContent -replace ',(\s*\])', '$1'
             $confContent = $confContent -replace ',(\s*\})', '$1'
             $confContent = $confContent -replace '(\r?\n){3,}', "`n`n"

@@ -1,6 +1,6 @@
 {
     "name":  "Snapmaker",
-    "version":  "03.07.00.00",
+    "version":  "03.12.00.00",
     "force_update":  "0",
     "description":  "Snapmaker U1 configurations for BambuStudio",
     "machine_model_list":  [
@@ -385,16 +385,8 @@
                               "name":  "Generic TPU for AMS @U1"
                           },
                           {
-                              "sub_path":  "filament/Snapmaker ABS @U1.json",
-                              "name":  "Snapmaker ABS @U1"
-                          },
-                          {
-                              "sub_path":  "filament/Snapmaker PETG @U1.json",
-                              "name":  "Snapmaker PETG @U1"
-                          },
-                          {
-                              "sub_path":  "filament/Snapmaker PLA @U1.json",
-                              "name":  "Snapmaker PLA @U1"
+                              "sub_path":  "filament/Snapmaker PETG HF @U1.json",
+                              "name":  "Snapmaker PETG HF @U1"
                           },
                           {
                               "sub_path":  "filament/Snapmaker PLA Basic @U1.json",
@@ -413,12 +405,12 @@
                               "name":  "Snapmaker PLA SnapSpeed @U1"
                           },
                           {
-                              "sub_path":  "filament/Snapmaker PLA-CF @U1.json",
-                              "name":  "Snapmaker PLA-CF @U1"
+                              "sub_path":  "filament/Snapmaker TPU 90A @U1.json",
+                              "name":  "Snapmaker TPU 90A @U1"
                           },
                           {
-                              "sub_path":  "filament/Snapmaker TPU @U1.json",
-                              "name":  "Snapmaker TPU @U1"
+                              "sub_path":  "filament/Snapmaker TPU 95A HF @U1.json",
+                              "name":  "Snapmaker TPU 95A HF @U1"
                           }
                       ],
     "machine_list":  [

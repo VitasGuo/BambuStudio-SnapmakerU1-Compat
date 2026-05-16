@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能
 
-## 更新日期: 2026-05-15 (v3.7)
+## 更新日期: 2026-05-15 (v3.8)
 
 ---
 
@@ -539,7 +539,16 @@ BambuStudio 的兼容性检查有厂商隔离机制（`preset.vendor != active_p
 - [x] v3.4 G-code 模板补全（TIMELAPSE/DEFECT_DETECTION/Z_OFFSET 条件分支）+ filament_vendor 品牌归类修复
 - [x] v3.5 完整工艺预设移植（10个预设，从 Orca U1 + BBL A1 参考合并）+ G-code 模板修复 + filament_vendor 修复
 - [x] v3.6 G-code 深度对比修复（auxiliary_fan、enable_pre_heating、ooze_prevention、filament_preheat_temperature_delta 符号）
-- [x] v3.7 项目审查修复：补全 Bambu PPA-CF 配置；补全 Snapmaker 基础耗材关键字段；修复 TPU 热床温度；修复 PETG cool_plate_temp；修复 PE/PP/PCTG/PPA-CF filament_type；修复 PETG Basic temperature_vitrification；补全 PLA Dynamic filament_flow_ratio；CF/GF 添加 required_nozzle_HRC；统一数据类型；清理 fdm_process_U1_0.20；补全 PC/PAHT-CF 高温材料 nozzle_temperature；修复 C1 filament_id 重复（Snapmaker PLA/ABS/PETG/TPU 改为 SFSxxx）；修复 H2 machine_pause_gcode（空→PAUSE）
+- [x] v3.7 项目审查修复：补全 Bambu PPA-CF 配置；补全 Snapmaker 基础耗材关键字段；修复 TPU 热床温度；修复 PETG cool_plate_temp；修复 PE/PP/PCTG/PPA-CF filament_type；修复 PETG Basic temperature_vitrification；补全 PLA Dynamic filament_flow_ratio；CF/GF 添加 required_nozzle_HRC；统一数据类型；清理 fdm_process_U1_0.20；补全 PC/PAHT-CF 高温材料 nozzle_temperature；修复 C1 filament_id 重复（Snapmaker PLA/ABS/PETG/TPU 改为 SFSxxx）；修复 H2 machine_pause_gcode（空->PAUSE）
+
+### v3.8 补全修复：
+- 修复 Bambu Support For PLA-PETG：继承基类从 fdm_filament_pet 改为 fdm_filament_pla，热床温度从 80 改为 60，PA 从 0.04 改为 0.02
+- 补全 Bambu PVA 配置：添加 cool_plate_temp、nozzle_temperature、temperature_vitrification、fan_cooling_layer_time、filament_is_support、filament_soluble、filament_adhesiveness_category、close_fan_the_first_x_layers、overhang_fan_threshold、reduce_fan_stop_start_freq
+- 修复 Bambu PET-CF：热床温度从 80 改为 100，required_nozzle_HRC 从 55 改为 40
+- 修复 Generic 系列 CF/GF 材料：
+  - Generic PPS-CF：required_nozzle_HRC 从 55 改为 40
+  - Generic PLA-CF：required_nozzle_HRC 从 55 改为 40
+  - Generic PETG-CF：热床温度从 80 改为 70，required_nozzle_HRC 从 55 改为 40
 
 ### v3.7 审查未修改项（基于 G-code 实际对比）
 

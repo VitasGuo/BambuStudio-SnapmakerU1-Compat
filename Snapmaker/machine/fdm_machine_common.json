@@ -10,7 +10,7 @@
     "before_layer_change_gcode": ";BEFORE_LAYER_CHANGE\n;[layer_z]\nG92 E0\nTIMELAPSE_TAKE_FRAME\nDEFECT_DETECTION_DETECT\n",
     "default_print_profile": "0.20 Standard @Snapmaker U1",
     "deretraction_speed": [
-        "60"
+        "30"
     ],
     "extruder_colour": [
         "#F5D547"
@@ -107,10 +107,10 @@
         "1"
     ],
     "retraction_length": [
-        "0.8"
+        "1.5"
     ],
     "retract_length_toolchange": [
-        "2"
+        "10"
     ],
     "retract_restart_extra_toolchange": [
         "0"
@@ -126,7 +126,7 @@
         "0"
     ],
     "retraction_speed": [
-        "40"
+        "30"
     ],
     "silent_mode": "0",
     "single_extruder_multi_material": "0",
