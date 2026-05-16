@@ -196,7 +196,7 @@ A: 重新运行 `install.bat` 即可。
 | `Snapmaker.json` | 品牌配置入口 |
 | `Snapmaker/` | 所有打印机、工艺、耗材配置文件 |
 | `process.md` | 项目开发进度记录 |
-| `traps.md` | 开发踩坑记录（BambuStudio 第三方适配的 19 个坑） |
+| `traps.md` | 开发踩坑记录（BambuStudio 第三方适配的 24 个坑） |
 
 ---
 

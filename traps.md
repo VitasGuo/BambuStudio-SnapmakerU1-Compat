@@ -282,3 +282,53 @@ M104 S{new_filament_temp} T{next_extruder} ; ensure target temp
 **根因**：这些材料继承 `fdm_filament_pet` 或 `fdm_filament_abs`，未覆盖 `filament_type`。BambuStudio 使用 `filament_type` 进行材料分类、兼容性检查和支撑材料匹配。
 
 **解决方案**：在具体 @U1 文件中显式设置正确的 `filament_type`（如 `"PE"`、`"PP"`、`"PCTG"`、`"PPA-CF"`）。
+
+---
+
+## 20. 只看 @U1 文件参数不够，必须解析完整继承链有效值
+
+**现象**：v3.10 对比 @U1 文件参数认为 TPU 配置一致，但实际 G-code 中 TPU 温度、流速、风扇等参数与 Orca 差异巨大（max_volumetric_speed 差 3 倍）。
+
+**根因**：@U1 文件只包含覆盖值，大量参数从基类继承。只对比 @U1 文件本身无法发现继承链中的差异。例如 TPU @U1 没有覆盖 `nozzle_temperature`，所以继承了 `fdm_filament_tpu` 的 240°C，而 Orca 官方 U1 base 覆盖为 225°C。
+
+**解决方案**：从"对比 @U1 文件参数"升级为"解析完整继承链后对比有效参数值"。必须把 @U1 → @U1 base → fdm_filament_* → fdm_filament_common 的所有参数合并后，才能得到实际生效的参数值。
+
+---
+
+## 21. Orca GitHub 仓库版本已过时，官方安装版参数差异巨大
+
+**现象**：v3.9 之前参考的 Orca GitHub 仓库参数与官方安装版 Orca 有显著差异。例如 SnapSpeed PLA 热床温度 GitHub 版 45°C vs 安装版 65°C，enable_pressure_advance GitHub 版开启 vs 安装版全部关闭。
+
+**根因**：Orca GitHub 仓库的 Snapmaker 配置可能不是最新版本，官方安装包中的配置经过了额外调优。
+
+**解决方案**：以官方安装版 Orca 的参数为准，不依赖 GitHub 仓库。从安装版 Orca 的配置文件中提取参数进行对比。
+
+---
+
+## 22. retract_length_toolchange 严重偏低导致换色漏料
+
+**现象**：换色时严重漏料，擦料塔清洗不充分，打印件出现混色。
+
+**根因**：`retract_length_toolchange` 设为 2mm（参照 BBL A1 默认值），但 U1 官方值为 10mm。U1 是换头式设计，换色时需要更长的回抽来防止滴漏。
+
+**解决方案**：`fdm_machine_common.json` 中 `retract_length_toolchange` 从 2 改为 10。
+
+---
+
+## 23. Support For PLA-PETG 继承基类错误
+
+**现象**：Bambu Support For PLA-PETG @U1 继承 `fdm_filament_pet`，导致热床温度 80°C、PA 值 0.04，与 BBL 官方配置不一致。
+
+**根因**：PLA-PETG 支撑材料本质上是一种改性 PLA，应继承 `fdm_filament_pla` 基类。BBL 官方的 `Bambu Support For PLA-PETG @base` 继承 `fdm_filament_pla`，热床 60°C，PA 0.02。
+
+**解决方案**：将 `inherits` 从 `fdm_filament_pet` 改为 `fdm_filament_pla`，同时覆盖热床温度和 PA 值。
+
+---
+
+## 24. required_nozzle_HRC=55 对 U1 喷嘴过于严格
+
+**现象**：CF/GF 材料在 BambuStudio 中显示警告"需要 HRC 55 以上的喷嘴"，U1 原装喷嘴硬度可能不满足。
+
+**根因**：`required_nozzle_HRC: ["55"]` 是 BBL 官方值，针对 BBL 钢喷嘴。U1 使用不同材质的喷嘴，HRC 40 即可满足大多数 CF/GF 材料的打印需求。
+
+**解决方案**：将 U1 兼容包中所有 CF/GF 材料的 `required_nozzle_HRC` 从 55 改为 40。
