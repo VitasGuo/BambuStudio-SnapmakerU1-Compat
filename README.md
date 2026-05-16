@@ -189,6 +189,8 @@ A: 重新运行 `install.bat` 即可。
 |------|------|
 | `install.bat` | 安装启动器（调用 PowerShell） |
 | `install.ps1` | 安装脚本（缓存清理 + 文件复制 + 验证） |
+| `reinstall.bat` | 重装启动器（一键卸载+安装） |
+| `reinstall.ps1` | 重装脚本（先卸载再安装） |
 | `uninstall.bat` | 卸载启动器 |
 | `uninstall.ps1` | 卸载脚本（清理配置 + 缓存 + BambuStudio.conf） |
 | `Snapmaker.json` | 品牌配置入口 |
@@ -200,7 +202,15 @@ A: 重新运行 `install.bat` 即可。
 
 ## 版本历史
 
-- **v3.8** (2026-05-16) - Bambu/Generic 耗材参数全面对齐 BBL 官方源文件：修复 PPS-CF 温度（240→320）和流速；修复 ASA filament_type；补全 ABS/ABS-GF 温度和风扇参数；补全 Support for ABS 温度覆盖；修复 PA-CF 温度（280→290）和热床（110→100）；补全 PA6-CF/PA6-GF/PAHT-CF 参数；修复 PETG Basic 温度（250→245）和 temperature_vitrification（60→178）；修复 PETG HF 温度（245→240）；修复 PETG Translucent/PETG-CF 热床（80→70）；修复 TPU 全系列热床（65→45）；修复 PC/PC FR 热床（110→100）和风扇；补全 PPA-CF/PVA 完整配置；修复 Support For PLA-PETG 继承基类；修复 PET-CF 热床（80→100）和 nozzle HRC（55→40）；修复 Generic PPS-CF/PLA-CF/PETG-CF 的 nozzle HRC；Snapmaker 耗材更新（删除旧 PLA/ABS/PETG/TPU/PLA-CF，新增 PETG HF/TPU 90A/TPU 95A HF）
+- **v3.8** (2026-05-16) - 全面参数对齐与优化：
+  - **Bambu 耗材对齐 BBL 官方**：修复 PPS-CF 温度（240→320）和流速；修复 ASA filament_type；补全 ABS/ABS-GF 温度和风扇参数；补全 Support for ABS 温度覆盖；修复 PA-CF 温度（280→290）和热床（110→100）；补全 PA6-CF/PA6-GF/PAHT-CF 参数；修复 PETG Basic 温度（250→245）和 temperature_vitrification（60→178）；修复 PETG HF 温度（245→240）；修复 PETG Translucent/PETG-CF 热床（80→70）；修复 TPU 全系列热床（65→45）；修复 PC/PC FR 热床（110→100）和风扇；补全 PPA-CF/PVA 完整配置；修复 Support For PLA-PETG 继承基类；修复 PET-CF 热床（80→100）和 nozzle HRC（55→40）
+  - **Generic 耗材修复**：修复 PPS-CF/PLA-CF/PETG-CF 的 nozzle HRC（55→40）；修复 PETG-CF 热床（80→70）
+  - **Snapmaker 耗材优化**：PLA Basic/Matte/Silk/SnapSpeed 关闭 PA（enable_pressure_advance=0）；PLA Matte 流速比（0.98→1）、最大流速（15→22）、温度（220→215）；PLA Silk 温度（220→230）、流速（12→10）、PA（0.02→0.015）、添加回抽和 dont_slow_down_outer_wall；PLA SnapSpeed 流速比（0.98→0.966）、密度（1.32→1.24）、温度（230→220）、添加回抽和 Z-hop；删除旧 PLA/ABS/PETG/TPU/PLA-CF，新增 PETG HF/TPU 90A/TPU 95A HF；添加 filament_retract_length_toolchange
+  - **工艺预设优化**：bridge_flow（1→0.8）、bridge_acceleration（1000→50%）、inner_wall_acceleration（5000→10000）；添加 initial_layer_print_height；jerk 参数全面调整
+  - **机器参数调整**：retraction_length（0.8→1.5）、retract_length_toolchange（2→10）、deretraction_speed（60→30）、retraction_speed（40→30）
+  - **PLA 基类调整**：cool_plate_temp/eng_plate_temp（65→60）、hot_plate_temp_initial_layer（65→70）
+  - **新增 reinstall 脚本**：支持一键卸载+重装，无需分别运行两个脚本
+  - **安装脚本更新**：版本号升级、验证路径适配新耗材名、缓存清理正则更新
 - **v3.7** (2026-05-15) - 项目审查修复：补全 Bambu PPA-CF 配置（nozzle_temperature=290、filament_type=PPA-CF 等 18 个参数）；补全 Snapmaker 基础耗材关键字段（PA、热床温度等）；修复 Snapmaker TPU 热床温度（35→65°C）；修复 Snapmaker PETG cool_plate_temp（60→0）；修复 Generic PE/PP/PCTG filament_type；修复 PETG Basic temperature_vitrification（60→178）；补全 Bambu PLA Dynamic filament_flow_ratio；为 CF/GF 材料添加 required_nozzle_HRC；统一数据类型（int→string）；清理 fdm_process_U1_0.20 冗余覆盖
 - **v3.6** (2026-05-15) - G-code 深度对比修复：启用辅助风扇（`auxiliary_fan=1`，换色时 `M106 P2 S178`）；启用预热（`enable_pre_heating=1`，换色前自动预热下一喷头）；修正 `filament_preheat_temperature_delta` 符号（-50→50）；记录 BambuStudio 防滴与擦料塔不兼容限制
 - **v3.5** (2026-05-14) - 完整工艺预设移植（10 个预设，从 Orca U1 + BBL A1 参考合并）；G-code 模板修复（TIMELAPSE/DEFECT_DETECTION/高温板 Z_OFFSET 条件分支）；filament_vendor 品牌归类修复
