@@ -62,10 +62,12 @@ v1.x 方案（从 OrcaSlicer 复制后移除不兼容字段）失败原因：
 ```
 BambuStudio-SnapmakerU1-Compat/
 ├── install.bat              # 安装启动器（调用 PowerShell）
-├── install.ps1              # 安装脚本 v2.0（缓存清理 + 文件复制 + 验证）
+├── install.ps1              # 安装脚本 v3.12（缓存清理 + 文件复制 + 验证）
+├── reinstall.bat            # 重装启动器（一键卸载+安装）
+├── reinstall.ps1            # 重装脚本（先卸载再安装）
 ├── uninstall.bat            # 卸载启动器
 ├── uninstall.ps1            # 卸载脚本
-├── Snapmaker.json           # 品牌配置（仅 U1，14 个条目）
+├── Snapmaker.json           # 品牌配置（仅 U1）
 └── Snapmaker/
     ├── machine/
     │   ├── Snapmaker U1.json                    # 机器模型定义
@@ -73,29 +75,28 @@ BambuStudio-SnapmakerU1-Compat/
     │   └── fdm_machine_common.json              # 机器基础配置 (Klipper)
     ├── process/
     │   ├── fdm_process_common.json              # 工艺基础配置
-    │   └── 0.20 Standard @Snapmaker U1.json     # 0.20mm 标准工艺预设
+    │   └── fdm_process_U1_*.json                # 各层高工艺预设
     └── filament/
         ├── fdm_filament_common.json             # 耗材基础配置
         ├── fdm_filament_pla.json                # PLA 基类
         ├── fdm_filament_pet.json                # PETG 基类
         ├── fdm_filament_abs.json                # ABS 基类
         ├── fdm_filament_tpu.json                # TPU 基类
-        ├── Snapmaker PLA @U1.json               # PLA 预设
-        ├── Snapmaker PETG @U1.json              # PETG 预设
-        ├── Snapmaker ABS @U1.json               # ABS 预设
-        └── Snapmaker TPU @U1.json               # TPU 预设
+        ├── Snapmaker *.json                     # Snapmaker 品牌耗材
+        ├── Bambu *.json                         # Bambu Lab 品牌耗材
+        └── Generic *.json                       # Generic 通用耗材
 ```
 
 ### 配置继承链
 - **机器**: `fdm_machine_common` → `Snapmaker U1 (0.4 nozzle)`
-- **工艺**: `fdm_process_common` → `0.20 Standard @Snapmaker U1`
-- **耗材**: `fdm_filament_common` → `fdm_filament_pla` → `Snapmaker PLA @U1`（PETG/ABS/TPU 类似）
+- **工艺**: `fdm_process_common` → `fdm_process_U1_0.XX` → 具体预设（如 `0.20 Standard @Snapmaker U1`）
+- **耗材**: `fdm_filament_common` → `fdm_filament_pla` → `Snapmaker PLA Basic @U1`（PETG/ABS/TPU 类似）
 
 ### 关键技术点
 1. **Klipper 固件**：U1 使用 Klipper，不是 Marlin。`gcode_flavor: "klipper"`
 2. **换头式设计**：4 个独立工具头，`single_extruder_multi_material: "0"`，4 种挤出机颜色
 3. **Klipper 宏**：start_gcode 使用 `PRINT_START` 宏，end_gcode 使用 `PRINT_END` + `TIMELAPSE_STOP`
-4. **U1 特有参数**：20000mm/s² 加速度、500mm/s 空行程、0.8mm 回抽长度、Prime Tower 启用
+4. **U1 特有参数**：20000mm/s² 加速度、500mm/s 空行程、1.5mm 回抽长度、Prime Tower 启用
 5. **所有字段名均为 BambuStudio 原生**：参照 Anker 模板创建，不存在不兼容字段
 6. **完整 Start G-code**：包含 U1 全部初始化步骤（回零、调平、进料、校准、清洁喷嘴、画起始线）
 7. **相对挤出模式**：`use_relative_e_distances: "1"`，BambuStudio 擦料塔硬性要求
@@ -111,7 +112,11 @@ BambuStudio-SnapmakerU1-Compat/
 3. 重启 BambuStudio
 4. 在"添加打印机"中选择 Snapmaker → U1
 
-### 方式二：手动安装
+### 方式二：重装（卸载+安装一步完成）
+1. 右键 `reinstall.bat` → 以管理员身份运行
+2. 脚本自动：深度清理 → 卸载 → 安装 → 验证
+
+### 方式三：手动安装
 1. 将 `Snapmaker.json` 复制到 `C:\Program Files\Bambu Studio\resources\profiles\`
 2. 将 `Snapmaker\` 目录复制到 `C:\Program Files\Bambu Studio\resources\profiles\`
 3. 删除 `%APPDATA%\BambuStudioBeta\system\Snapmaker` 缓存目录
@@ -157,23 +162,186 @@ BambuStudio-SnapmakerU1-Compat/
 
 ## 六、已知问题与修复记录
 
-### v3.6 修复（JSON 数组值类型一致性）
+### v3.12 修复（G-code 验证 + Snapmaker 耗材品牌对齐官方 + Bambu/Generic 耗材全面对齐 BBL 官方）
 
-**问题**：10 个耗材 JSON 文件中存在整数类型的数组值（如 `[702]`、`[1]`），而 BambuStudio 的约定是所有数组值必须为字符串类型（如 `["702"]`、`["1"]`）。
+**G-code 对比验证**：使用同一模型（水浪纹），分别在 Orca 和 BambuStudio 中用相同耗材切片，对比 G-code 中的实际参数值。
 
-**修复内容**（10 个文件，12 处修改）：
-1. `Bambu Support For PLA @U1.json`：`filament_adhesiveness_category: [702]` → `["702"]`，`filament_is_support: [1]` → `["1"]`
-2. `Bambu Support For PLA-PETG @U1.json`：`filament_adhesiveness_category: [705]` → `["705"]`，`filament_is_support: [1]` → `["1"]`
-3. `Bambu Support for ABS @U1.json`：`filament_adhesiveness_category: [706]` → `["706"]`，`filament_is_support: [1]` → `["1"]`
-4. `Bambu PET-CF @U1.json`：`filament_adhesiveness_category: [800]` → `["800"]`
-5. `Bambu ASA-Aero @U1.json`：`reduce_fan_stop_start_freq: [0]` → `["0"]`
-6. `Generic BVOH @U1.json`：`filament_adhesiveness_category: [797]` → `["797"]`
-7. `Generic HIPS @U1.json`：`filament_is_support: [1]` → `["1"]`
-8. `Generic EVA @U1.json`：`reduce_fan_stop_start_freq: [1]` → `["1"]`
-9. `Generic PE @U1.json`：`filament_adhesiveness_category: [901]` → `["901"]`
-10. `Generic PE-CF @U1.json`：`filament_adhesiveness_category: [901]` → `["901"]`
+**PLA 系列验证结果**：✅ 全部一致（Basic/Matte/Silk/SnapSpeed 的温度、风扇、流量、回抽等参数完全匹配）
 
-**检查结果**：`Generic PP-CF @U1.json`、`Generic PP-GF @U1.json`、`Generic PPA-GF @U1.json` 无整数类型问题。
+**重大发现：Orca 官方 Snapmaker 品牌耗材与兼容包不一致**：
+- Orca 的 Snapmaker 品牌耗材清单：PLA Basic、PLA Matte、PLA Silk、PLA SnapSpeed、PETG HF、TPU 90A、TPU 95A HF
+- 兼容包的 Snapmaker 品牌耗材清单：PLA、PLA Basic、PLA Matte、PLA Silk、PLA SnapSpeed、PLA-CF、PETG、ABS、TPU
+- 差异：Orca 没有 PLA/PLA-CF/ABS，PETG 是 HF 版本，TPU 按硬度分两种
+
+**耗材品牌对齐**：
+
+| 操作 | 文件 | 原因 |
+|------|------|------|
+| 删除 | Snapmaker PLA @U1 | Orca 无此耗材 |
+| 删除 | Snapmaker PLA-CF @U1 | Orca 无此耗材 |
+| 删除 | Snapmaker ABS @U1 | Orca 无此耗材 |
+| 删除 | Snapmaker PETG @U1 | 替换为 PETG HF |
+| 删除 | Snapmaker TPU @U1 | 拆分为 90A 和 95A HF |
+| 新增 | Snapmaker PETG HF @U1 | 匹配 Orca 官方，温度 245°C、max_vol_speed 20、密度 1.28 |
+| 新增 | Snapmaker TPU 90A @U1 | 匹配 Orca 官方，max_vol_speed 3.2、flow_ratio 1.045、风扇 100% |
+| 新增 | Snapmaker TPU 95A HF @U1 | 匹配 Orca 官方，max_vol_speed 9、flow_ratio 1.067、风扇 50/10 |
+
+**PETG HF vs 标准 PETG 关键差异**：温度 245 vs 230、max_vol_speed 20 vs 8、密度 1.28 vs 1.25、temp_vitrification 70 vs 178
+
+**TPU 90A vs 95A HF 关键差异**：90A 更软（max_vol_speed 3.2 vs 9、flow_ratio 1.045 vs 1.067）、90A 风扇全开（100/100 vs 50/10）、90A 冷却更保守（slow_down 14s vs 10s）
+
+**新增 reinstall.bat/ps1**：合并卸载+安装流程，深度清理 BambuStudio.conf 缓存（filaments/models/presets/nozzle_volume_types 全部清理），解决"刷新不生效"问题。
+
+**修复 install.ps1/uninstall.ps1**：验证步骤从 `Snapmaker PLA @U1.json` 改为 `Snapmaker PLA Basic @U1.json`；正则更新覆盖新耗材名（PETG HF/TPU 90A/TPU 95A HF）。
+
+**Bambu 耗材对齐 BBL 官方源文件**：
+- 修复 PPS-CF 温度（240→320）和流速
+- 修复 ASA filament_type
+- 补全 ABS/ABS-GF 温度和风扇参数
+- 补全 Support for ABS 温度覆盖
+- 修复 PA-CF 温度（280→290）和热床（110→100）
+- 补全 PA6-CF/PA6-GF/PAHT-CF 参数
+- 修复 PETG Basic 温度（250→245）和 temperature_vitrification（60→178）
+- 修复 PETG HF 温度（245→240）
+- 修复 PETG Translucent/PETG-CF 热床（80→70）
+- 修复 TPU 全系列热床（65→45）
+- 修复 PC/PC FR 热床（110→100）和风扇
+- 补全 PPA-CF/PVA 完整配置
+- 修复 Support For PLA-PETG 继承基类（fdm_filament_pet→fdm_filament_pla）
+- 修复 PET-CF 热床（80→100）和 nozzle HRC（55→40）
+
+**Generic 耗材修复**：
+- 修复 PPS-CF/PLA-CF/PETG-CF 的 nozzle HRC（55→40）
+- 修复 PETG-CF 热床（80→70）
+
+### v3.11 修复（Snapmaker 耗材全量对齐官方安装版 Orca — 完整继承链解析）
+
+**重大发现**：v3.10 的耗材对比只看了 @U1 文件本身，未解析完整继承链的有效值。解析 Orca 完整链（@U1 → @U1 base → fdm_filament_* → fdm_filament_common）后发现大量隐藏差异，尤其是 TPU 和 ABS/PETG 的温度偏差。
+
+**方法论改进**：从"对比 @U1 文件参数"升级为"解析完整继承链后对比有效参数值"。
+
+**各耗材修复明细**：
+
+| 耗材 | 修复项 | 严重程度 |
+|------|--------|---------|
+| TPU @U1 | nozzle_temperature 240→225, nozzle_temperature_initial_layer 240→230, max_volumetric_speed 15→4.5, fan_max/min/overhang 100→70, slow_down_for_layer_cooling 1→0, pressure_advance 0.04→0.01, temperature_vitrification 60→45, filament_density 1.24→1.22, retraction_speed/deretraction_speed nil→25, z_hop nil→0 Normal Lift, hot_plate_temp 65→60, retract_when_changing_layer nil→0 | CRITICAL |
+| ABS @U1 | nozzle_temperature 240→255, nozzle_temperature_initial_layer 240→265, filament_retraction_length nil→0.6, filament_z_hop nil→0.7, fan_min_speed 10→15, temperature_vitrification 110→100, slow_down_min_speed 10→20, nozzle_temperature_range_high 270→280 | HIGH |
+| PETG @U1 | nozzle_temperature 250→230, hot_plate_temp 80→75, filament_retraction_length nil→1.8, filament_retraction_speed nil→35, filament_z_hop_types nil→Spiral Lift, nozzle_temperature_range_high 260→270 | HIGH |
+| PLA @U1 | max_volumetric_speed 15→14, temperature_vitrification 60→65, overhang_fan_threshold 50%→0%, slow_down_min_speed 10→15, nozzle_temperature_range_high 230→240 | MEDIUM |
+| PLA Basic @U1 | 添加 filament_retract_length_toolchange: 10 | LOW |
+| PLA Matte @U1 | 添加 filament_retract_length_toolchange: 5 | LOW |
+| PLA Silk @U1 | 添加 dont_slow_down_outer_wall: 1, filament_retract_length_toolchange: 5 | LOW |
+| PLA SnapSpeed @U1 | 添加 filament_retract_length_toolchange: 5 | LOW |
+| PLA-CF @U1 | 添加 filament_minimal_purge_on_wipe_tower: 50, filament_retract_length_toolchange: 5 | LOW |
+
+**TPU 是差异最大的耗材**：max_volumetric_speed 差 3 倍（15 vs 4.5），温度差 15°C，风扇策略完全不同（100% vs 70%），slow_down_for_layer_cooling 相反（1 vs 0）。使用 v3.10 的 TPU 参数会导致严重过挤和拉丝。
+
+**ABS/PETG 温度偏差**：ABS 低 15°C（240 vs 255），PETG 高 20°C（250 vs 230）。温度偏差会直接影响打印质量。
+
+### v3.10 修复（全量 Snapmaker 耗材对齐官方安装版 Orca）
+
+**重大发现**：之前参考的 GitHub 仓库版本已过时，官方安装版 Orca 参数有显著差异（如 SnapSpeed 热床温度 45→65、enable_pressure_advance 全部关闭等）。
+
+**系统性修复**：
+1. **enable_pressure_advance**：除 PLA-CF 外全部从 1 改为 **0**（Orca 官方 U1 配置关闭 PA）
+
+**各耗材修复明细**：
+
+| 耗材 | 修复项 |
+|------|--------|
+| PLA @U1 | hot_plate_temp 65→55, hot_plate_temp_initial_layer 65→55, PA关闭 |
+| PLA Basic @U1 | hot_plate_temp_initial_layer 70→65, PA关闭 |
+| PLA Matte @U1 | nozzle_temperature 220→215, flow_ratio 0.98→1, max_vol_speed 15→22, hot_plate_temp_initial_layer 70→65, PA关闭 |
+| PLA Silk @U1 | nozzle_temperature 220→230, max_vol_speed 12→10, PA 0.02→0.015, retraction_length 添加0.2, PA关闭 |
+| PLA SnapSpeed @U1 | hot_plate_temp 45→65(回退v3.9错误), hot_plate_temp_initial_layer 45→65, flow_ratio 0.98→0.966, retraction_length 添加1.2, z_hop 添加0.4 Slope Lift, PA关闭 |
+| PLA-CF @U1 | hot_plate_temp_initial_layer 70→65 |
+| PETG @U1 | PA 0.04→0.02, max_vol_speed 10→8, nozzle_temp_initial_layer 240→250, density 1.27→1.25, PA关闭 |
+| ABS @U1 | hot_plate_temp 100→110, hot_plate_temp_initial_layer 100→105, max_vol_speed 添加8, fan_max_speed 添加15, PA关闭 |
+| TPU @U1 | 无差异 ✅ |
+
+### v3.9 修复（V2 G-code 验证 — 热床温度修正）
+
+**发现**：V2 G-code 验证发现 `hot_plate_temp_initial_layer` 仍为 65°C，原因是 SnapSpeed @U1 文件覆盖了基类的值。
+
+**关键发现**：Orca 官方 SnapSpeed PLA 的热床温度远低于普通 PLA：
+- SnapSpeed: hot_plate_temp=45, hot_plate_temp_initial_layer=45（不是 65/70！）
+- PLA Basic/Matte: hot_plate_temp=65, hot_plate_temp_initial_layer=70
+- PLA Silk: hot_plate_temp=65, hot_plate_temp_initial_layer=65
+
+**修复**：
+1. `Snapmaker PLA SnapSpeed @U1.json`：hot_plate_temp 65→45, hot_plate_temp_initial_layer 65→45
+2. `Snapmaker PLA Basic @U1.json`：hot_plate_temp_initial_layer 65→70
+3. `Snapmaker PLA Matte @U1.json`：hot_plate_temp_initial_layer 65→70
+4. `Snapmaker PLA-CF @U1.json`：hot_plate_temp_initial_layer 65→70
+5. `Snapmaker PLA Silk @U1.json`：无需修改（65 已是 Orca 官方值）
+
+### v3.8 修复（水浪纹模型 G-code 深度对比 — 参数对齐 Orca 官方值）
+
+**对比方法**：使用同一多色模型（水浪纹），同一耗材（Snapmaker PLA SnapSpeed），分别在 BambuStudio 和 Snapmaker Orca 中切片，对比 G-code 中的实际参数值。
+
+**CRITICAL 修复**：
+1. **retract_length_toolchange 严重偏低**：2 → 10（Orca 官方值），换色回抽只有 2mm 导致严重漏料
+2. **Snapmaker PLA SnapSpeed 喷嘴温度过高**：230°C → 220°C，比 Orca 官方值高 10°C 导致过挤拉丝
+
+**HIGH 修复**：
+3. **retraction_length 偏低**：0.8 → 1.5，回抽不足导致漏料
+4. **inner_wall_acceleration 偏低**：5000 → 10000，内墙加速度只有 Orca 一半
+5. **bridge_acceleration 偏低**：1000(绝对) → 50%(=5000)，桥接加速度极低
+6. **bridge_flow 过高**：1.0 → 0.8，桥接过挤导致下垂
+7. **initial_layer_print_height 偏低**：所有工艺预设添加首层高度覆盖（0.08→0.1, 0.12→0.2, 0.16→0.2, 0.20→0.25, 0.24→0.3, 0.28→0.3）
+
+**MEDIUM 修复**：
+8. **deretraction_speed 过高**：60 → 30，复进过快导致欠挤
+9. **retraction_speed 过高**：40 → 30，回抽过快可能打滑
+10. **filament_density 偏差**：1.32 → 1.24（Orca 官方值）
+11. **filament_max_volumetric_speed 偏高**：22 → 20（Orca 官方值）
+12. **所有 jerk 值偏高**：对齐 Orca 官方值（default_jerk 15→0, infill_jerk 15→9, initial_layer_jerk 12→9, inner_wall_jerk 15→9, outer_wall_jerk 10→9, top_surface_jerk 12→9, travel_jerk 20→12）
+13. **fdm_filament_pla 热床温度修正**：cool_plate_temp 65→60, eng_plate_temp 65→60, hot_plate_temp_initial_layer 65→70
+
+**修改文件清单**（10 个）：
+- `fdm_machine_common.json`：retract_length_toolchange, retraction_length, deretraction_speed, retraction_speed
+- `fdm_process_common.json`：inner_wall_acceleration, bridge_acceleration, bridge_flow, 7 个 jerk 值
+- `fdm_process_U1_0.20.json`：添加 initial_layer_print_height=0.25
+- `fdm_process_U1_0.08.json`：添加 initial_layer_print_height=0.1, bridge_flow 1→0.8
+- `fdm_process_U1_0.12.json`：添加 initial_layer_print_height=0.2, bridge_flow 1→0.8
+- `fdm_process_U1_0.16.json`：添加 initial_layer_print_height=0.2, bridge_flow 1→0.8
+- `fdm_process_U1_0.24.json`：添加 initial_layer_print_height=0.3, bridge_flow 1→0.8
+- `fdm_process_U1_0.28.json`：添加 initial_layer_print_height=0.3, bridge_flow 1→0.8
+- `Snapmaker PLA SnapSpeed @U1.json`：nozzle_temperature 230→220, filament_density 1.32→1.24, filament_max_volumetric_speed 22→20
+- `fdm_filament_pla.json`：cool_plate_temp 65→60, eng_plate_temp 65→60, hot_plate_temp_initial_layer 65→70
+
+### v3.7 修复（项目审查 — 配置完整性与数据一致性）
+
+**审查发现**：全面审查 85 个耗材文件 + 12 个机器/工艺文件，发现 5 个 CRITICAL、5 个 HIGH、8 个 MEDIUM、10 个 LOW 级别问题。
+
+**CRITICAL 修复**：
+1. **Snapmaker TPU 热床温度过低**：继承 `fdm_filament_tpu` 的 `hot_plate_temp=35`，TPU 无法附着 → 覆盖为 65°C
+2. **PPA-CF filament_type 缺失**：Bambu/Generic PPA-CF 继承 ABS 的 filament_type → 添加 `"PPA-CF"` 覆盖
+3. **Bambu PPA-CF 配置极度不完整**：缺少 nozzle_temperature（继承 240°C，实际需 290°C）、filament_flow_ratio、filament_density 等 18 个参数 → 参照 BBL 官方 `fdm_filament_ppa` 补全
+
+**HIGH 修复**：
+4. **Snapmaker 基础耗材缺少关键字段**：PLA/ABS/PETG/TPU 4 个文件缺少 enable_pressure_advance、pressure_advance、热床温度覆盖 → 补全
+5. **Snapmaker PETG cool_plate_temp 不当**：继承 60°C，PETG 会粘死冷板 → 改为 0（禁用冷板）
+
+**MEDIUM 修复**：
+6. **PETG Basic temperature_vitrification 异常**：60 → 178（与 PETG 基类一致）
+7. **CF/GF 材料缺少 required_nozzle_HRC**：21 个文件添加 `required_nozzle_HRC: ["40"]`（PPA-CF/PA-CF 系列）或 `["55"]`（其他 CF/GF）
+8. **Generic PE/PP/PCTG filament_type 缺失**：添加 `"PE"`/`"PP"`/`"PCTG"` 覆盖
+9. **Bambu PLA Dynamic 缺少 filament_flow_ratio**：添加 `["0.98"]`
+10. **数据类型不一致**：10 个文件 12 处整数→字符串（如 `[702]` → `["702"]`）
+
+**LOW 修复**：
+11. **fdm_process_U1_0.20 冗余覆盖**：移除 8 个与 fdm_process_common 相同的值，添加显式 `layer_height: "0.2"`
+12. **fdm_filament_common 默认 vendor**：`"Snapmaker"` → `""`（基类不应指定厂商）
+
+**待验证项**（需要 G-code 验证后再决定）：
+- filament_id 重复（4 对 Snapmaker/Generic 共享 ID）
+- 高温材料 nozzle_temperature 缺失（PC/PAHT-CF 等，C2）
+- standby_temperature_delta 机器/工艺冲突（H1）
+- machine_pause_gcode 为空（H2）
+- change_filament_gcode Z 归位问题（M1）
+- 0.08/0.12 工艺预设速度超限（M2）
+- bed_model/bed_texture 为空（L2）
 
 ### v3.5 新增（完整工艺预设 + G-code 模板修复 + filament_vendor 修复）
 
@@ -539,17 +707,12 @@ BambuStudio 的兼容性检查有厂商隔离机制（`preset.vendor != active_p
 - [x] v3.4 G-code 模板补全（TIMELAPSE/DEFECT_DETECTION/Z_OFFSET 条件分支）+ filament_vendor 品牌归类修复
 - [x] v3.5 完整工艺预设移植（10个预设，从 Orca U1 + BBL A1 参考合并）+ G-code 模板修复 + filament_vendor 修复
 - [x] v3.6 G-code 深度对比修复（auxiliary_fan、enable_pre_heating、ooze_prevention、filament_preheat_temperature_delta 符号）
-- [x] v3.7 项目审查修复：补全 Bambu PPA-CF 配置；补全 Snapmaker 基础耗材关键字段；修复 TPU 热床温度；修复 PETG cool_plate_temp；修复 PE/PP/PCTG/PPA-CF filament_type；修复 PETG Basic temperature_vitrification；补全 PLA Dynamic filament_flow_ratio；CF/GF 添加 required_nozzle_HRC；统一数据类型；清理 fdm_process_U1_0.20；补全 PC/PAHT-CF 高温材料 nozzle_temperature；修复 C1 filament_id 重复（Snapmaker PLA/ABS/PETG/TPU 改为 SFSxxx）；修复 H2 machine_pause_gcode（空->PAUSE）
-
-### v3.12 全面参数对齐与优化：
-- **Bambu 耗材对齐 BBL 官方**：修复 PPS-CF 温度（240→320）和流速；修复 ASA filament_type；补全 ABS/ABS-GF 温度和风扇参数；补全 Support for ABS 温度覆盖；修复 PA-CF 温度（280→290）和热床（110→100）；补全 PA6-CF/PA6-GF/PAHT-CF 参数；修复 PETG Basic 温度（250→245）和 temperature_vitrification（60→178）；修复 PETG HF 温度（245→240）；修复 PETG Translucent/PETG-CF 热床（80→70）；修复 TPU 全系列热床（65→45）；修复 PC/PC FR 热床（110→100）和风扇；补全 PPA-CF/PVA 完整配置；修复 Support For PLA-PETG 继承基类；修复 PET-CF 热床（80→100）和 nozzle HRC（55→40）
-- **Generic 耗材修复**：修复 PPS-CF/PLA-CF/PETG-CF 的 nozzle HRC（55→40）；修复 PETG-CF 热床（80→70）
-- **Snapmaker 耗材优化**：PLA Basic/Matte/Silk/SnapSpeed 关闭 PA（enable_pressure_advance=0）；PLA Matte 流速比（0.98→1）、最大流速（15→22）、温度（220→215）；PLA Silk 温度（220→230）、流速（12→10）、PA（0.02→0.015）、添加回抽和 dont_slow_down_outer_wall；PLA SnapSpeed 流速比（0.98→0.966）、密度（1.32→1.24）、温度（230→220）、添加回抽和 Z-hop；删除旧 PLA/ABS/PETG/TPU/PLA-CF，新增 PETG HF/TPU 90A/TPU 95A HF；添加 filament_retract_length_toolchange
-- **工艺预设优化**：bridge_flow（1→0.8）、bridge_acceleration（1000→50%）、inner_wall_acceleration（5000→10000）；添加 initial_layer_print_height；jerk 参数全面调整
-- **机器参数调整**：retraction_length（0.8→1.5）、retract_length_toolchange（2→10）、deretraction_speed（60→30）、retraction_speed（40→30）
-- **PLA 基类调整**：cool_plate_temp/eng_plate_temp（65→60）、hot_plate_temp_initial_layer（65→70）
-- **新增 reinstall 脚本**：支持一键卸载+重装，无需分别运行两个脚本
-- **安装脚本更新**：版本号升级到 v3.12、验证路径适配新耗材名、缓存清理正则更新
+- [x] v3.7 项目审查修复：补全 Bambu PPA-CF 配置（18 个参数）；补全 Snapmaker 基础耗材关键字段（PA/热床温度）；修复 Snapmaker TPU 热床温度（35→65°C）；修复 Snapmaker PETG cool_plate_temp（60→0）；修复 Generic PE/PP/PCTG filament_type；修复 PETG Basic temperature_vitrification（60→178）；补全 Bambu PLA Dynamic filament_flow_ratio；CF/GF 材料添加 required_nozzle_HRC（21 个文件）；统一数据类型 int→string（10 个文件 12 处）；清理 fdm_process_U1_0.20 冗余覆盖；fdm_filament_common 默认 vendor 改为空；补全 PC/PAHT-CF 高温材料 nozzle_temperature（PC=280°C, PAHT-CF=290°C）；修复 C1 filament_id 重复（Snapmaker PLA/ABS/PETG/TPU 改为 SFSxxx）；修复 H2 machine_pause_gcode（空→PAUSE）
+- [x] v3.8 G-code 深度对比修复（retract_length_toolchange、retraction_length、bridge_flow/acceleration、jerk、initial_layer_print_height）
+- [x] v3.9 V2 G-code 验证热床温度修正（SnapSpeed 45°C、Basic/Matte 70°C）
+- [x] v3.10 全量 Snapmaker 耗材对齐官方安装版 Orca（PA 关闭、温度/流速/热床修正）
+- [x] v3.11 完整继承链解析修复（TPU CRITICAL、ABS/PETG HIGH、PLA MEDIUM）
+- [x] v3.12 G-code 验证 + Snapmaker 耗材品牌对齐官方 + Bambu/Generic 耗材全面对齐 BBL 官方 + reinstall 脚本
 
 ### v3.7 审查未修改项（基于 G-code 实际对比）
 
