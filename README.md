@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v3.8
+# Snapmaker U1 BambuStudio 兼容包 v3.12
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**局域网直连打印**。
 
@@ -202,7 +202,7 @@ A: 重新运行 `install.bat` 即可。
 
 ## 版本历史
 
-- **v3.8** (2026-05-16) - 全面参数对齐与优化：
+- **v3.12** (2026-05-16) - 全面参数对齐与优化：
   - **Bambu 耗材对齐 BBL 官方**：修复 PPS-CF 温度（240→320）和流速；修复 ASA filament_type；补全 ABS/ABS-GF 温度和风扇参数；补全 Support for ABS 温度覆盖；修复 PA-CF 温度（280→290）和热床（110→100）；补全 PA6-CF/PA6-GF/PAHT-CF 参数；修复 PETG Basic 温度（250→245）和 temperature_vitrification（60→178）；修复 PETG HF 温度（245→240）；修复 PETG Translucent/PETG-CF 热床（80→70）；修复 TPU 全系列热床（65→45）；修复 PC/PC FR 热床（110→100）和风扇；补全 PPA-CF/PVA 完整配置；修复 Support For PLA-PETG 继承基类；修复 PET-CF 热床（80→100）和 nozzle HRC（55→40）
   - **Generic 耗材修复**：修复 PPS-CF/PLA-CF/PETG-CF 的 nozzle HRC（55→40）；修复 PETG-CF 热床（80→70）
   - **Snapmaker 耗材优化**：PLA Basic/Matte/Silk/SnapSpeed 关闭 PA（enable_pressure_advance=0）；PLA Matte 流速比（0.98→1）、最大流速（15→22）、温度（220→215）；PLA Silk 温度（220→230）、流速（12→10）、PA（0.02→0.015）、添加回抽和 dont_slow_down_outer_wall；PLA SnapSpeed 流速比（0.98→0.966）、密度（1.32→1.24）、温度（230→220）、添加回抽和 Z-hop；删除旧 PLA/ABS/PETG/TPU/PLA-CF，新增 PETG HF/TPU 90A/TPU 95A HF；添加 filament_retract_length_toolchange

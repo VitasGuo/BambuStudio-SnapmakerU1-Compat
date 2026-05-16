@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能
 
-## 更新日期: 2026-05-15 (v3.8)
+## 更新日期: 2026-05-16 (v3.12)
 
 ---
 
@@ -541,14 +541,15 @@ BambuStudio 的兼容性检查有厂商隔离机制（`preset.vendor != active_p
 - [x] v3.6 G-code 深度对比修复（auxiliary_fan、enable_pre_heating、ooze_prevention、filament_preheat_temperature_delta 符号）
 - [x] v3.7 项目审查修复：补全 Bambu PPA-CF 配置；补全 Snapmaker 基础耗材关键字段；修复 TPU 热床温度；修复 PETG cool_plate_temp；修复 PE/PP/PCTG/PPA-CF filament_type；修复 PETG Basic temperature_vitrification；补全 PLA Dynamic filament_flow_ratio；CF/GF 添加 required_nozzle_HRC；统一数据类型；清理 fdm_process_U1_0.20；补全 PC/PAHT-CF 高温材料 nozzle_temperature；修复 C1 filament_id 重复（Snapmaker PLA/ABS/PETG/TPU 改为 SFSxxx）；修复 H2 machine_pause_gcode（空->PAUSE）
 
-### v3.8 补全修复：
-- 修复 Bambu Support For PLA-PETG：继承基类从 fdm_filament_pet 改为 fdm_filament_pla，热床温度从 80 改为 60，PA 从 0.04 改为 0.02
-- 补全 Bambu PVA 配置：添加 cool_plate_temp、nozzle_temperature、temperature_vitrification、fan_cooling_layer_time、filament_is_support、filament_soluble、filament_adhesiveness_category、close_fan_the_first_x_layers、overhang_fan_threshold、reduce_fan_stop_start_freq
-- 修复 Bambu PET-CF：热床温度从 80 改为 100，required_nozzle_HRC 从 55 改为 40
-- 修复 Generic 系列 CF/GF 材料：
-  - Generic PPS-CF：required_nozzle_HRC 从 55 改为 40
-  - Generic PLA-CF：required_nozzle_HRC 从 55 改为 40
-  - Generic PETG-CF：热床温度从 80 改为 70，required_nozzle_HRC 从 55 改为 40
+### v3.12 全面参数对齐与优化：
+- **Bambu 耗材对齐 BBL 官方**：修复 PPS-CF 温度（240→320）和流速；修复 ASA filament_type；补全 ABS/ABS-GF 温度和风扇参数；补全 Support for ABS 温度覆盖；修复 PA-CF 温度（280→290）和热床（110→100）；补全 PA6-CF/PA6-GF/PAHT-CF 参数；修复 PETG Basic 温度（250→245）和 temperature_vitrification（60→178）；修复 PETG HF 温度（245→240）；修复 PETG Translucent/PETG-CF 热床（80→70）；修复 TPU 全系列热床（65→45）；修复 PC/PC FR 热床（110→100）和风扇；补全 PPA-CF/PVA 完整配置；修复 Support For PLA-PETG 继承基类；修复 PET-CF 热床（80→100）和 nozzle HRC（55→40）
+- **Generic 耗材修复**：修复 PPS-CF/PLA-CF/PETG-CF 的 nozzle HRC（55→40）；修复 PETG-CF 热床（80→70）
+- **Snapmaker 耗材优化**：PLA Basic/Matte/Silk/SnapSpeed 关闭 PA（enable_pressure_advance=0）；PLA Matte 流速比（0.98→1）、最大流速（15→22）、温度（220→215）；PLA Silk 温度（220→230）、流速（12→10）、PA（0.02→0.015）、添加回抽和 dont_slow_down_outer_wall；PLA SnapSpeed 流速比（0.98→0.966）、密度（1.32→1.24）、温度（230→220）、添加回抽和 Z-hop；删除旧 PLA/ABS/PETG/TPU/PLA-CF，新增 PETG HF/TPU 90A/TPU 95A HF；添加 filament_retract_length_toolchange
+- **工艺预设优化**：bridge_flow（1→0.8）、bridge_acceleration（1000→50%）、inner_wall_acceleration（5000→10000）；添加 initial_layer_print_height；jerk 参数全面调整
+- **机器参数调整**：retraction_length（0.8→1.5）、retract_length_toolchange（2→10）、deretraction_speed（60→30）、retraction_speed（40→30）
+- **PLA 基类调整**：cool_plate_temp/eng_plate_temp（65→60）、hot_plate_temp_initial_layer（65→70）
+- **新增 reinstall 脚本**：支持一键卸载+重装，无需分别运行两个脚本
+- **安装脚本更新**：版本号升级到 v3.12、验证路径适配新耗材名、缓存清理正则更新
 
 ### v3.7 审查未修改项（基于 G-code 实际对比）
 
