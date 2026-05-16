@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v3.7
+# Snapmaker U1 BambuStudio 兼容包 v3.8
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**局域网直连打印**。
 
@@ -92,7 +92,7 @@ U1 内置 Moonraker 服务，兼容 OctoPrint API。BambuStudio 原生支持 Oct
 
 | 品牌 | 包含材料 |
 |------|----------|
-| **Snapmaker** | PLA, PLA Basic, PLA Matte, PLA Silk, PLA SnapSpeed, PLA-CF, PETG, ABS, TPU |
+| **Snapmaker** | PLA Basic, PLA Matte, PLA Silk, PLA SnapSpeed, PETG HF, TPU 90A, TPU 95A HF |
 | **Bambu Lab** | PLA Basic, PLA Matte, PLA Silk, PLA-CF, PETG Basic, PETG HF, ABS, ASA, TPU 95A, PA-CF, PC, PVA, Support 等 44 种 |
 | **Generic** | PLA, PETG, ABS, ASA, TPU, PC, PA-CF, PVA, PP, PPS-CF 等 27 种 |
 
@@ -194,12 +194,13 @@ A: 重新运行 `install.bat` 即可。
 | `Snapmaker.json` | 品牌配置入口 |
 | `Snapmaker/` | 所有打印机、工艺、耗材配置文件 |
 | `process.md` | 项目开发进度记录 |
-| `traps.md` | 开发踩坑记录（BambuStudio 第三方适配的 16 个坑） |
+| `traps.md` | 开发踩坑记录（BambuStudio 第三方适配的 19 个坑） |
 
 ---
 
 ## 版本历史
 
+- **v3.8** (2026-05-16) - Bambu/Generic 耗材参数全面对齐 BBL 官方源文件：修复 PPS-CF 温度（240→320）和流速；修复 ASA filament_type；补全 ABS/ABS-GF 温度和风扇参数；补全 Support for ABS 温度覆盖；修复 PA-CF 温度（280→290）和热床（110→100）；补全 PA6-CF/PA6-GF/PAHT-CF 参数；修复 PETG Basic 温度（250→245）和 temperature_vitrification（60→178）；修复 PETG HF 温度（245→240）；修复 PETG Translucent/PETG-CF 热床（80→70）；修复 TPU 全系列热床（65→45）；修复 PC/PC FR 热床（110→100）和风扇；补全 PPA-CF/PVA 完整配置；修复 Support For PLA-PETG 继承基类；修复 PET-CF 热床（80→100）和 nozzle HRC（55→40）；修复 Generic PPS-CF/PLA-CF/PETG-CF 的 nozzle HRC；Snapmaker 耗材更新（删除旧 PLA/ABS/PETG/TPU/PLA-CF，新增 PETG HF/TPU 90A/TPU 95A HF）
 - **v3.7** (2026-05-15) - 项目审查修复：补全 Bambu PPA-CF 配置（nozzle_temperature=290、filament_type=PPA-CF 等 18 个参数）；补全 Snapmaker 基础耗材关键字段（PA、热床温度等）；修复 Snapmaker TPU 热床温度（35→65°C）；修复 Snapmaker PETG cool_plate_temp（60→0）；修复 Generic PE/PP/PCTG filament_type；修复 PETG Basic temperature_vitrification（60→178）；补全 Bambu PLA Dynamic filament_flow_ratio；为 CF/GF 材料添加 required_nozzle_HRC；统一数据类型（int→string）；清理 fdm_process_U1_0.20 冗余覆盖
 - **v3.6** (2026-05-15) - G-code 深度对比修复：启用辅助风扇（`auxiliary_fan=1`，换色时 `M106 P2 S178`）；启用预热（`enable_pre_heating=1`，换色前自动预热下一喷头）；修正 `filament_preheat_temperature_delta` 符号（-50→50）；记录 BambuStudio 防滴与擦料塔不兼容限制
 - **v3.5** (2026-05-14) - 完整工艺预设移植（10 个预设，从 Orca U1 + BBL A1 参考合并）；G-code 模板修复（TIMELAPSE/DEFECT_DETECTION/高温板 Z_OFFSET 条件分支）；filament_vendor 品牌归类修复
