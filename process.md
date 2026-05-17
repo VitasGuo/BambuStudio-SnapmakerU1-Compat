@@ -716,10 +716,10 @@ BambuStudio 的兼容性检查有厂商隔离机制（`preset.vendor != active_p
 
 ### v3.7 审查未修改项（基于 G-code 实际对比）
 
-**H1：standby_temperature_delta 机器/工艺冲突**
-- 状态：未修改
-- 理由：G-code 显示 process 级 `-5` 未生效，实际使用 machine 级 `-150`（空闲喷头冷却到 70°C）；BambuStudio 通过 `M104 T0 S220 N0` 让固件将待机温度设为 0°C，这是与 Orca 的设计差异，不是 bug
-- 风险：无崩溃风险，换色等待可能略长
+**H1：standby_temperature_delta 机器/工艺冲突 → 升级为 CRITICAL，见 traps.md #25**
+- 状态：未修改（BambuStudio 源码限制，需修改源码才能解决）
+- 根因：BambuStudio 自行增加了 `ooze_prevention` 和 `wipe_tower` 互斥检查（PrusaSlicer 原版没有），导致空闲喷头无法降温。WipeTower 代码还会生成 `M104 Tn Sxxx N0` 把空闲喷头重新加热。详见 traps.md #25
+- 风险：空闲喷头保持高温，PETG 持续渗出；U1 换头式设计影响可控但不理想
 
 **M1：change_filament_gcode Z 提升未归位**
 - 状态：未修改

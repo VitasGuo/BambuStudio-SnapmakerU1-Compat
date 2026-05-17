@@ -332,3 +332,28 @@ M104 S{new_filament_temp} T{next_extruder} ; ensure target temp
 **根因**：`required_nozzle_HRC: ["55"]` 是 BBL 官方值，针对 BBL 钢喷嘴。U1 使用不同材质的喷嘴，HRC 40 即可满足大多数 CF/GF 材料的打印需求。
 
 **解决方案**：将 U1 兼容包中所有 CF/GF 材料的 `required_nozzle_HRC` 从 55 改为 40。
+
+---
+
+## 25. BambuStudio 擦料塔模式下空闲喷头无法降温（BambuStudio 自有限制，非 PrusaSlicer 原生）
+
+**现象**：多喷头打印时，A 喷头切换到 B 喷头后，A 喷头仍保持打印温度（245°C），不会降温到待机温度。`change_filament_gcode` 中的 `M104 S70 T0` 被 BambuStudio 内部生成的 `M104 T0 S245 N0` 覆盖。
+
+**根因**：
+
+1. **BambuStudio 增加了互斥限制**（PrusaSlicer 原版没有）：`Print.cpp:1416-1417` 硬性禁止 `ooze_prevention` 和 `enable_prime_tower` 同时启用。PrusaSlicer 原生的 `OozePrevention` 类（`GCode.cpp:253-296`）设计上就是和擦料塔配合使用的——换刀前降温、换刀后升温，两者可以共存。
+
+2. **WipeTower 重新加热空闲喷头**：`WipeTower.cpp:1328-1337` 的 `format_line_M104` 生成 `M104 Tn Sxxx N0` 命令（`N0` 表示"由切片器生成"），在擦料塔擦料阶段把空闲喷头重新加热到工作温度。BambuStudio 假设所有喷头随时可用（保持工作温度），因为 BBL 打印机是单喷头多耗材（SEMM）方案，不存在"空闲喷头"概念。
+
+3. **BambuStudio 用 `filament_pre_cooling_temperature` 替代了经典 `ooze_prevention`**（`PrintConfig.cpp:2689-2713`），但这个参数是为 SEMM 方案设计的，不是为 U1 这种多独立喷头方案设计的。
+
+4. **`standby_temperature_delta` 在 `ooze_prevention=0` 时不生效**，而 `ooze_prevention` 又不能和擦料塔同时启用，形成死锁。
+
+**解决方案**（待实施）：
+
+修改 BambuStudio 源码，移除互斥限制：
+- `Print.cpp:1416-1417`：注释掉 `ooze_prevention` 和 `wipe_tower` 的互斥检查
+- 启用 `ooze_prevention: "1"` + `standby_temperature_delta: "-150"`
+- 可能需要额外修改 WipeTower 代码，避免对空闲喷头生成重新加热命令（`M104 Tn Sxxx N0`）
+
+**影响**：空闲喷头保持高温导致 PETG 持续渗出，U1 换头式设计漏料影响相对可控（空闲喷头停泊在远离打印区域的位置），但长期高温待机浪费电力、加速喷头磨损。
