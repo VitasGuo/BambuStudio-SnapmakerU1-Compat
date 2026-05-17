@@ -6,15 +6,19 @@
 
 ## 前置条件
 
-- **操作系统**：仅适用于 **Windows** 平台（安装脚本为 `.bat` / `.ps1`，不支持 macOS / Linux）
+- **操作系统**：**Windows**（提供自动安装脚本）或 **Linux**（手动安装）
 - 已安装 **BambuStudio**（[官方下载](https://bambulab.com/en/download/bambu-studio)）
 - Snapmaker U1 打印机与电脑处于**同一局域网**
+
+> **macOS**：BambuStudio 官方未提供 macOS 版本，如通过第三方方式运行，安装方法与 Linux 类似。
 
 ---
 
 ## 快速开始
 
 ### 第一步：安装兼容包
+
+#### Windows（自动安装）
 
 1. 右键 `install.bat` → **以管理员身份运行**
 2. 脚本自动执行以下操作：
@@ -25,6 +29,51 @@
 3. 如果未检测到 BambuStudio，手动输入安装路径（如 `C:\Program Files\Bambu Studio`）
 4. 输入 `Y` 确认安装
 5. 看到 "Installation Successful!" 表示安装完成
+
+#### Linux（手动安装）
+
+1. **确定 BambuStudio 资源目录**：
+   - FHS 安装（deb/rpm）：`/usr/share/BambuStudio/resources/profiles/`
+   - AppImage / tarball：`<BambuStudio安装目录>/resources/profiles/`
+   - 可通过运行 `bambustudio --help` 或查找 `resources/profiles/BBL` 来确认
+
+2. **关闭 BambuStudio**
+
+3. **清除旧缓存**：
+   ```bash
+   rm -rf ~/.config/BambuStudioBeta/system/Snapmaker
+   rm -f  ~/.config/BambuStudioBeta/system/Snapmaker.json
+   ```
+
+4. **清除用户预设残留**：
+   ```bash
+   find ~/.config/BambuStudioBeta/user/default/ -name "*Snapmaker*" -o -name "*@U1*" | xargs rm -f
+   ```
+
+5. **复制配置文件**（需要 sudo）：
+   ```bash
+   # 将 <profiles_dir> 替换为第一步确定的路径
+   sudo cp Snapmaker.json <profiles_dir>/Snapmaker.json
+   sudo rm -rf <profiles_dir>/Snapmaker
+   sudo cp -r Snapmaker    <profiles_dir>/Snapmaker
+   ```
+
+6. **清理 BambuStudio.conf 中的耗材缓存**（重要！否则只显示 2 个耗材）：
+   ```bash
+   # 需要 jq 工具：sudo apt install jq / sudo dnf install jq
+   CONF=~/.config/BambuStudioBeta/BambuStudio.conf
+   if [ -f "$CONF" ]; then
+       cp "$CONF" "$CONF.bak"
+       jq 'if .filaments then .filaments |= [.[] | select(test("@U1|Snapmaker ") | not)] else . end' "$CONF" > "$CONF.tmp" && mv "$CONF.tmp" "$CONF"
+   fi
+   ```
+
+7. **验证**：确认以下文件存在：
+   ```bash
+   ls <profiles_dir>/Snapmaker.json
+   ls <profiles_dir>/Snapmaker/machine/"Snapmaker U1.json"
+   ls <profiles_dir>/Snapmaker/filament/"Snapmaker PLA Basic @U1.json"
+   ```
 
 ### 第二步：在 BambuStudio 中添加打印机
 
@@ -59,9 +108,37 @@ U1 内置 Moonraker 服务，兼容 OctoPrint API。BambuStudio 原生支持 Oct
 
 ### 卸载
 
+#### Windows
+
 1. 右键 `uninstall.bat` → **以管理员身份运行**
 2. 输入 `Y` 确认卸载
 3. 重启 BambuStudio
+
+#### Linux
+
+```bash
+# 1. 删除配置文件（将 <profiles_dir> 替换为实际路径）
+sudo rm <profiles_dir>/Snapmaker.json
+sudo rm -rf <profiles_dir>/Snapmaker
+
+# 2. 清除缓存
+rm -rf ~/.config/BambuStudioBeta/system/Snapmaker
+rm -f  ~/.config/BambuStudioBeta/system/Snapmaker.json
+
+# 3. 清除用户预设残留
+find ~/.config/BambuStudioBeta/user/default/ -name "*Snapmaker*" -o -name "*@U1*" | xargs rm -f
+
+# 4. 清理 BambuStudio.conf 中的 Snapmaker 引用（需要 jq）
+CONF=~/.config/BambuStudioBeta/BambuStudio.conf
+if [ -f "$CONF" ]; then
+    cp "$CONF" "$CONF.bak"
+    jq 'if .filaments then .filaments |= [.[] | select(test("@U1|Snapmaker ") | not)] else . end
+        | if .models then .models |= [.[] | select(.vendor != "Snapmaker")] else . end' \
+        "$CONF" > "$CONF.tmp" && mv "$CONF.tmp" "$CONF"
+fi
+
+# 5. 重启 BambuStudio
+```
 
 ---
 
@@ -145,24 +222,25 @@ U1 内置 Moonraker 服务，兼容 OctoPrint API。BambuStudio 原生支持 Oct
 
 ## 注意事项
 
-- **BambuStudio 更新后需重新安装**：更新可能覆盖配置文件，重新运行 `install.bat` 即可
+- **BambuStudio 更新后需重新安装**：更新可能覆盖配置文件，Windows 重新运行 `install.bat`，Linux 重新执行手动安装步骤即可
 - **G-code 兼容性**：U1 使用 Klipper 固件，G-code 包含 `PRINT_START`/`PRINT_END` 宏、`DEFECT_DETECTION`、`TIMELAPSE`、`SM_PRINT` 等 Snapmaker 专有命令
 - **多色打印**：BambuStudio 支持多色切片，U1 的 4 工具头换色机制与 BambuLab AMS 不同但可正常工作
 - **耗材选择**：在 BambuStudio 中手动选择与 U1 工具头实际装载一致的耗材预设
 - **空闲喷头温度**：由于 BambuStudio 不允许同时启用防滴（ooze_prevention）和擦料塔，空闲喷头会保持工作温度。U1 换头式设计中空闲喷头停泊在远离打印区域的位置，漏料影响较小
+- **Linux 耗材缓存**：安装后如果只看到 2 个耗材，说明 `BambuStudio.conf` 中的耗材缓存未清理，请按安装步骤第 6 步操作
 
 ---
 
 ## 常见问题
 
 **Q: 安装后 BambuStudio 中看不到 Snapmaker U1？**
-A: 请确保完全关闭并重启 BambuStudio。如果仍看不到，检查文件是否正确复制到 `Bambu Studio\resources\profiles\` 目录。
+A: 请确保完全关闭并重启 BambuStudio。如果仍看不到，检查文件是否正确复制到 `resources/profiles/` 目录（Windows: `C:\Program Files\Bambu Studio\resources\profiles\`，Linux: 见安装步骤第 1 步）。
 
 **Q: 安装后 BambuStudio 报错 "Failed loading configuration file"？**
-A: 这通常是因为旧的配置缓存未清除。请手动删除 `%APPDATA%\BambuStudioBeta\system\Snapmaker` 目录和 `Snapmaker.json` 文件，然后重启 BambuStudio。重新运行 `install.bat` 也会自动清除缓存。
+A: 这通常是因为旧的配置缓存未清除。Windows: 重新运行 `install.bat`；Linux: 手动删除 `~/.config/BambuStudioBeta/system/Snapmaker` 目录和 `Snapmaker.json` 文件，然后重启 BambuStudio。
 
 **Q: 安装后只看到 2 个耗材，其余都不见？**
-A: 这是 BambuStudio 的耗材缓存问题。请重新运行 `install.bat`（v3.3+ 已修复此问题），脚本会自动清理 `BambuStudio.conf` 中的耗材缓存，重启后所有耗材会自动出现。
+A: 这是 BambuStudio 的耗材缓存问题。Windows: 重新运行 `install.bat`（v3.3+ 已修复此问题）；Linux: 按安装步骤第 6 步清理 `BambuStudio.conf` 中的耗材缓存，重启后所有耗材会自动出现。
 
 **Q: 耗材品牌归类不正确（如 Bambu 耗材显示在 Snapmaker 下）？**
 A: v3.5 已修复此问题。请重新运行 `install.bat`。
@@ -171,7 +249,7 @@ A: v3.5 已修复此问题。请重新运行 `install.bat`。
 A: v3.5+ 已修复此问题。换色 G-code 现在包含 M109 等待温度 + 预热命令。请确保使用 v3.5 或更高版本。
 
 **Q: 安装脚本报错 "Failed to copy" 或权限不足？**
-A: 需要以管理员身份运行 `install.bat`。右键 → 以管理员身份运行。
+A: Windows: 需要以管理员身份运行 `install.bat`。右键 → 以管理员身份运行。Linux: 复制到系统目录需要 `sudo`。
 
 **Q: 测试连接时提示 "Mismatched type of print host"？**
 A: 确认主机类型选择的是 **OctoPrint**，且 U1 的 Moonraker 服务正常运行。在浏览器中访问 `http://<U1的IP>/api/version`，应返回包含 `"text": "OctoPrint (Moonraker ...)"` 的 JSON。
@@ -180,7 +258,10 @@ A: 确认主机类型选择的是 **OctoPrint**，且 U1 的 Moonraker 服务正
 A: 在 U1 触摸屏上进入 **设置** → **网络**，即可看到 IP 地址。或在路由器管理界面中查找名为 `Snapmaker` 的设备。
 
 **Q: BambuStudio 更新后兼容包失效了？**
-A: 重新运行 `install.bat` 即可。
+A: Windows: 重新运行 `install.bat`；Linux: 重新执行手动安装步骤。
+
+**Q: Linux 下如何确定 BambuStudio 的资源目录？**
+A: 运行 `find / -path "*/resources/profiles/BBL" -type d 2>/dev/null` 查找。常见位置：`/usr/share/BambuStudio/resources/profiles/`（FHS 安装）或 `<解压目录>/resources/profiles/`（AppImage/tarball）。
 
 ---
 

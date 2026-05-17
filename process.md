@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能
 
-## 更新日期: 2026-05-16 (v3.12)
+## 更新日期: 2026-05-17 (v3.13)
 
 ---
 
@@ -161,6 +161,32 @@ BambuStudio-SnapmakerU1-Compat/
 ---
 
 ## 六、已知问题与修复记录
+
+### v3.13 新增（Linux 平台支持）
+
+**源码分析结论**：兼容包的所有 JSON 配置文件（Snapmaker.json、80+ 个机器/工艺/耗材文件）100% 跨平台通用，BambuStudio 在所有平台上使用完全相同的逻辑加载 `resources/profiles/` 目录。Linux 和 Windows 的差异仅在路径：
+
+| 项目 | Windows | Linux |
+|------|---------|-------|
+| 资源目录 | `C:\Program Files\Bambu Studio\resources\profiles\` | `/usr/share/BambuStudio/resources/profiles/`（FHS）或 `<安装目录>/resources/profiles/`（AppImage） |
+| 数据目录 | `%APPDATA%\BambuStudioBeta\` | `~/.config/BambuStudioBeta/`（XDG 规范） |
+| 系统缓存 | `%APPDATA%\BambuStudioBeta\system\Snapmaker\` | `~/.config/BambuStudioBeta/system/Snapmaker/` |
+| 配置文件 | `%APPDATA%\BambuStudioBeta\BambuStudio.conf` | `~/.config/BambuStudioBeta/BambuStudio.conf` |
+
+**源码依据**：
+- `GUI_App.cpp:2482-2490`：Linux 使用 `$XDG_CONFIG_HOME/BambuStudioBeta`（默认 `~/.config/BambuStudioBeta`）
+- `BambuStudio.cpp:8137-8146`：Linux FHS 安装使用 `SLIC3R_FHS_RESOURCES`（通常 `/usr/share/BambuStudio/resources`），AppImage 使用 `<安装目录>/resources`
+- `AppConfig.cpp:1474-1487`：配置文件路径为 `data_dir()/BambuStudio.conf`
+- `Preset.hpp:18`：`PRESET_SYSTEM_DIR = "system"`，所有平台一致
+
+**变更内容**：
+- README.md 更新：前置条件从"仅 Windows"改为"Windows + Linux"
+- README.md 新增：Linux 手动安装步骤（7 步，含缓存清理和 jq 命令）
+- README.md 新增：Linux 手动卸载步骤
+- README.md 更新：常见问题适配 Linux 路径，新增 Linux 资源目录查找 FAQ
+- README.md 更新：注意事项适配双平台
+
+**不提供 Linux 安装脚本的原因**：Linux 发行版和安装方式多样（FHS/AppImage/Flatpak/tarball），路径差异大，用户自行处理更灵活。
 
 ### v3.12 修复（G-code 验证 + Snapmaker 耗材品牌对齐官方 + Bambu/Generic 耗材全面对齐 BBL 官方）
 
@@ -713,6 +739,7 @@ BambuStudio 的兼容性检查有厂商隔离机制（`preset.vendor != active_p
 - [x] v3.10 全量 Snapmaker 耗材对齐官方安装版 Orca（PA 关闭、温度/流速/热床修正）
 - [x] v3.11 完整继承链解析修复（TPU CRITICAL、ABS/PETG HIGH、PLA MEDIUM）
 - [x] v3.12 G-code 验证 + Snapmaker 耗材品牌对齐官方 + Bambu/Generic 耗材全面对齐 BBL 官方 + reinstall 脚本
+- [x] v3.13 Linux 平台支持（README 更新手动安装/卸载步骤，源码分析确认配置文件跨平台通用）
 
 ### v3.7 审查未修改项（基于 G-code 实际对比）
 
