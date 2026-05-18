@@ -357,3 +357,22 @@ M104 S{new_filament_temp} T{next_extruder} ; ensure target temp
 - 可能需要额外修改 WipeTower 代码，避免对空闲喷头生成重新加热命令（`M104 Tn Sxxx N0`）
 
 **影响**：空闲喷头保持高温导致 PETG 持续渗出，U1 换头式设计漏料影响相对可控（空闲喷头停泊在远离打印区域的位置），但长期高温待机浪费电力、加速喷头磨损。
+
+---
+
+## 26. bed_model/bed_texture 为空导致热床显示默认矩形形状
+
+**现象**：BambuStudio 中 Snapmaker U1 的热床显示为默认矩形，而非 U1 实际的热床形状（圆角矩形+标记）。项目目录下已有 `Snapmaker U1_bed.stl` 和 `Snapmaker U1_texture.svg`，但未被加载。
+
+**根因**：`Snapmaker U1.json`（machine_model 配置）中 `bed_model: ""` 和 `bed_texture: ""` 为空字符串。BambuStudio 的 `system_printer_bed_model()`（Preset.cpp:4003-4012）在 `bed_model` 为空时直接返回空字符串，不加载任何模型文件。
+
+路径解析逻辑：
+1. 先查找 `data_dir()/vendor/{vendor_id}/{bed_model}`（用户缓存目录）
+2. 若不存在，查找 `resources_dir()/profiles/{vendor_id}/{bed_model}`（安装目录）
+3. `bed_model` 值为相对于 vendor 根目录的文件名（如 `"Snapmaker U1_bed.stl"`）
+
+**解决方案**：在 `Snapmaker U1.json` 中填入正确的文件名：
+- `"bed_model": "Snapmaker U1_bed.stl"`
+- `"bed_texture": "Snapmaker U1_texture.svg"`
+
+**参考**：Anker M5 官方配置 `"bed_model": "M5-CE-bed.stl"`，文件放在 `profiles/Anker/` 根目录下。

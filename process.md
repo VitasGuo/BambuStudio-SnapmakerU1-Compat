@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能
 
-## 更新日期: 2026-05-17 (v3.13)
+## 更新日期: 2026-05-18 (v3.14)
 
 ---
 
@@ -161,6 +161,23 @@ BambuStudio-SnapmakerU1-Compat/
 ---
 
 ## 六、已知问题与修复记录
+
+### v3.14 修复（热床 3D 模型和纹理加载）
+
+**问题**：BambuStudio 中 Snapmaker U1 的热床显示为默认矩形形状，而非 U1 的实际热床形状。
+
+**根因**：`Snapmaker U1.json`（machine_model）中 `bed_model` 和 `bed_texture` 字段为空字符串，BambuStudio 无法加载热床 3D 模型和纹理贴图。虽然项目目录下已有 `Snapmaker U1_bed.stl` 和 `Snapmaker U1_texture.svg` 文件，但未在配置中引用。
+
+**源码路径解析逻辑**（Preset.cpp:4003-4012）：
+1. 先查找 `data_dir()/vendor/{vendor_id}/{bed_model}`（用户缓存目录）
+2. 若不存在，查找 `resources_dir()/profiles/{vendor_id}/{bed_model}`（安装目录）
+3. `bed_model` 值为相对于 vendor 根目录的文件名
+
+**参考**：Anker M5 官方配置使用 `"bed_model": "M5-CE-bed.stl"`，文件放在 `profiles/Anker/` 根目录下。
+
+**修复内容**：
+- `Snapmaker U1.json`：`bed_model` 从 `""` 改为 `"Snapmaker U1_bed.stl"`
+- `Snapmaker U1.json`：`bed_texture` 从 `""` 改为 `"Snapmaker U1_texture.svg"`
 
 ### v3.13 新增（Linux 平台支持）
 
@@ -740,6 +757,7 @@ BambuStudio 的兼容性检查有厂商隔离机制（`preset.vendor != active_p
 - [x] v3.11 完整继承链解析修复（TPU CRITICAL、ABS/PETG HIGH、PLA MEDIUM）
 - [x] v3.12 G-code 验证 + Snapmaker 耗材品牌对齐官方 + Bambu/Generic 耗材全面对齐 BBL 官方 + reinstall 脚本
 - [x] v3.13 Linux 平台支持（README 更新手动安装/卸载步骤，源码分析确认配置文件跨平台通用）
+- [x] v3.14 热床 3D 模型和纹理加载修复（bed_model/bed_texture 从空字符串改为实际文件名）
 
 ### v3.7 审查未修改项（基于 G-code 实际对比）
 
