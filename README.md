@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v3.12
+# Snapmaker U1 BambuStudio 兼容包 v3.14
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**局域网直连打印**。
 
@@ -278,12 +278,20 @@ A: 运行 `find / -path "*/resources/profiles/BBL" -type d 2>/dev/null` 查找�
 | `Snapmaker.json` | 品牌配置入口 |
 | `Snapmaker/` | 所有打印机、工艺、耗材配置文件 |
 | `process.md` | 项目开发进度记录 |
-| `traps.md` | 开发踩坑记录（BambuStudio 第三方适配的 24 个坑） |
+| `traps.md` | 开发踩坑记录（BambuStudio 第三方适配的 26 个坑） |
 
 ---
 
 ## 版本历史
 
+- **v3.14** (2026-05-18) - 热床 3D 模型和纹理加载修复：
+  - 修复 BambuStudio 中热床显示为默认矩形形状的问题
+  - 在 `Snapmaker U1.json` 中添加 `bed_model: "Snapmaker U1_bed.stl"` 和 `bed_texture: "Snapmaker U1_texture.svg"`
+  - 之前两个字段为空，导致 U1 实际热床形状无法加载
+- **v3.13** (2026-05-17) - Linux 平台支持：
+  - 兼容包所有 JSON 配置文件 100% 跨平台通用
+  - README 新增 Linux 手动安装/卸载步骤
+  - 新增 Linux 资源目录查找 FAQ
 - **v3.12** (2026-05-16) - 全面参数对齐与优化：
   - **Bambu 耗材对齐 BBL 官方**：修复 PPS-CF 温度（240→320）和流速；修复 ASA filament_type；补全 ABS/ABS-GF 温度和风扇参数；补全 Support for ABS 温度覆盖；修复 PA-CF 温度（280→290）和热床（110→100）；补全 PA6-CF/PA6-GF/PAHT-CF 参数；修复 PETG Basic 温度（250→245）和 temperature_vitrification（60→178）；修复 PETG HF 温度（245→240）；修复 PETG Translucent/PETG-CF 热床（80→70）；修复 TPU 全系列热床（65→45）；修复 PC/PC FR 热床（110→100）和风扇；补全 PPA-CF/PVA 完整配置；修复 Support For PLA-PETG 继承基类；修复 PET-CF 热床（80→100）和 nozzle HRC（55→40）
   - **Generic 耗材修复**：修复 PPS-CF/PLA-CF/PETG-CF 的 nozzle HRC（55→40）；修复 PETG-CF 热床（80→70）
