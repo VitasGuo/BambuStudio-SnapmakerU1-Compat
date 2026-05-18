@@ -372,7 +372,28 @@ M104 S{new_filament_temp} T{next_extruder} ; ensure target temp
 3. `bed_model` 值为相对于 vendor 根目录的文件名（如 `"Snapmaker U1_bed.stl"`）
 
 **解决方案**：在 `Snapmaker U1.json` 中填入正确的文件名：
-- `"bed_model": "Snapmaker U1_bed.stl"`
+- `"bed_model": "Snapmaker U1_bed_texture.stl"`（含浮雕 logo 的版本）
 - `"bed_texture": "Snapmaker U1_texture.svg"`
 
 **参考**：Anker M5 官方配置 `"bed_model": "M5-CE-bed.stl"`，文件放在 `profiles/Anker/` 根目录下。
+
+---
+
+## 27. bed_texture SVG 不会被渲染，热床 logo 必须嵌入 STL 模型
+
+**现象**：配置了 `bed_texture` 指向 SVG 文件后，BambuStudio 中热床仍不显示 Snapmaker logo。Anker M5 打印机可以显示 logo。
+
+**根因**：BambuStudio 和 OrcaSlicer 的 `3DBed.cpp` 中，`render_texture()` 函数**整体被注释掉了**：
+
+- BambuStudio `3DBed.cpp:460-467`：`render_system()` 中 `render_texture(bottom, canvas)` 被注释
+- OrcaSlicer 同样注释掉了 `render_texture` 调用
+- `3DBed.cpp:219-223`：`texture_filename` 赋值逻辑被注释
+- `3DBed.cpp:262`：`m_texture_filename = texture_filename` 被注释
+
+`bed_texture` 字段虽然存在于 JSON 配置中，但 SVG 纹理的加载和渲染代码全部禁用。
+
+Anker M5 能显示 logo 是因为其 bed STL 文件中**直接嵌入了 logo 的 3D 几何体**（720 三角形，含浮雕文字），而非通过 SVG 纹理实现。对比：Anker M5 bed STL 720 三角形/36KB，Snapmaker J1 bed STL 1356 三角形/67KB，Snapmaker U1 原 bed STL 仅 344 三角形/17KB。
+
+此外，STL 格式只能存储几何体（顶点和法线），不能存储颜色或纹理信息，因此即使嵌入 logo 几何体也只能以同色浮雕形式显示。
+
+**解决方案**：将 Snapmaker logo 以 3D 浮雕几何体嵌入 `Snapmaker U1_bed_texture.stl` 中，并将 `bed_model` 指向此文件。如需彩色 logo，需修改 BambuStudio 源码恢复 `render_texture` 渲染逻辑后自行编译。
