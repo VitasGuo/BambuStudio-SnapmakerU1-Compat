@@ -365,7 +365,9 @@ if (-not (Test-Path $bridgeSrc)) {
         Write-Host "  Installing npm dependencies..." -ForegroundColor White
         try {
             Push-Location $bridgeDst
-            & $nodePath "$((Get-Command npm -ErrorAction SilentlyContinue).Source ?? (Join-Path (Split-Path $nodePath) 'npm.cmd'))" install --production 2>&1 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+            $npmCmd = (Get-Command npm -ErrorAction SilentlyContinue)
+            if (-not $npmCmd) { $npmCmd = Join-Path (Split-Path $nodePath) 'npm.cmd' } else { $npmCmd = $npmCmd.Source }
+            & $nodePath $npmCmd install --production 2>&1 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
             Pop-Location
             Write-Host "  npm dependencies installed" -ForegroundColor Green
         } catch {
