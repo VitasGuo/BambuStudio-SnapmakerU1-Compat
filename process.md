@@ -1,9 +1,532 @@
 # Snapmaker U1 BambuStudio 兼容包
 
 ## 项目目标
-将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能
+将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 更新日期: 2026-05-18 (v3.14)
+## 更新日期: 2026-05-25 (v5.7.1)
+
+---
+
+## v5.7.1 排版优化 + 中文术语修正 + Snapmaker logo
+
+### 变更
+1. **中文翻译修正为3D打印专业术语**：工具→喷头、目标温度→设定温度、模型风扇→冷却风扇、归零→回原点、已装载→已装入、空闲→待机、在线→已连接等
+2. **排版优化**（不改功能）：
+   - Control 面板：温度项更紧凑（间距/gap/padding 缩小），温度显示格式 `200/200°C` 替代 `200°C / 200°C`
+   - 风扇/速度行：添加 `flex-wrap:wrap` 防止中文横向溢出，图标/字号/间距统一缩小
+   - 耗材 slot：统一 `.fil-det` class 替代内联样式，字号 12px，行高 1.3
+   - 面板 header/body：padding 缩小，字号从 16px→15px
+   - Tool tabs / Step tabs：字号缩小，间距收紧
+   - Z 按钮：尺寸从 112×38→100×34
+   - Feed Status 区：字号缩小，间距优化
+3. **左上角 logo 替换为 Snapmaker 品牌图标**：`bridge/web/snapmaker.png`，服务端新增 `/snapmaker.png` 路由
+
+### 修改文件
+- `bridge/web/webui.html` — CSS 排版优化；中文术语修正；logo 替换
+- `bridge/web/snapmaker.png` — 新增品牌图标
+- `bridge-node/server.js` — 版本号 5.7.0→5.7.1；新增 `/snapmaker.png` 路由
+- `bridge-node/package.json` — 版本号 5.7.0→5.7.1
+- `bridge-node/package-lock.json` — 版本号 5.4.0→5.7.1
+- `reinstall.ps1` / `install.ps1` / `uninstall.ps1` — v5.7.1
+
+---
+
+## v5.7.0 WebUI 中英文切换 + Filament 流量校准 + Speed 5 挡
+
+### 变更
+1. **WebUI 中英文切换**：默认中文，顶栏 "中/EN" 按钮一键切换，语言偏好保存到 localStorage
+2. **Filament 流量校准按钮**：每个耗材 slot 下方 "流量校准/Flow Cal" 按钮
+3. **Speed 5 挡**：50/80/100/120/150%，与设备屏幕对应
+
+### i18n 实现方案
+- `I18N` 对象包含 `en` 和 `zh` 两套翻译字典（50+ 条目）
+- `data-i18n` 属性标记静态 HTML 元素，`setLang()` 遍历 DOM 更新
+- `data-i18n-ph` 属性标记 input placeholder
+- `t(key)` 函数处理 JS 动态生成的文本
+- 默认语言 `zh`，存储在 `localStorage.bridge_lang`
+
+### 修改文件
+- `bridge/web/webui.html` — 完整 i18n 系统；Flow Cal 按钮；Speed 5 挡
+- `bridge-node/server.js` — 版本号 5.6.0→5.7.0
+- `bridge-node/package.json` — 版本号 5.6.0→5.7.0
+- `reinstall.ps1` / `install.ps1` / `uninstall.ps1` — v5.6.0→v5.7.0
+- `process.md` — 版本记录
+
+---
+
+## v5.6.0 Filament 流量校准 + Speed 5 挡
+
+### 变更
+1. **Filament 模块新增流量校准按钮**：每个耗材 slot 下方添加 "Flow Cal" 按钮，点击后发送 `SM_PRINT_FLOW_CALIBRATE INDEX=n` G-code 命令。打印中自动禁用，点击后 5 秒冷却防止重复触发
+2. **Control 模块 Speed 从 4 挡改为 5 挡**：与设备屏幕对应，50% / 80% / 100% / 120% / 150%
+
+### 修改文件
+- `bridge/web/webui.html` — 新增 `.fil-cal-btn` CSS；4 个耗材 slot 添加 Flow Cal 按钮；新增 `calibrateFlow()` 函数；Speed 按钮从 4 挡改为 5 挡
+- `bridge-node/server.js` — 版本号 5.5.0→5.6.0
+- `bridge-node/package.json` — 版本号 5.5.0→5.6.0
+- `reinstall.ps1` / `install.ps1` / `uninstall.ps1` — v5.5.0→v5.6.0
+
+---
+
+## v5.5.0 WebUI 全面替换 fetch→JSONP，绕过 BambuStudio WebView XHR 限制
+
+### 核心发现
+BambuStudio 的 WebView（wxWebView）**阻止了 `fetch()` 和 `XMLHttpRequest`**，但允许 `<script>` 和 `<img>` 标签的原生加载。这是 WebUI 数据不显示的根本原因。
+
+### 解决方案
+采用 JSONP 风格的 `<script>` 标签加载方式绕过限制：
+- **bridgeGET(path, cb)**：Moonraker 端点通过 `/api/bridge/proxy.js?path=xxx&cb=callbackName` 代理；Bridge 端点通过 `path.js` JSONP 端点直接返回
+- **bridgePOST(path, body, cb)**：将 POST 参数编码为 query string，通过 `path.js?param1=1&param2=0&cb=callbackName` 的 GET 请求完成
+- **Camera 轮询**：`new Image()` 替代 `fetch() + blob`
+- **初始数据**：`<script src="/api/bridge/init-data.js">` 直接加载
+
+### 服务端新增端点
+1. `GET /api/bridge/pending_print.js` — JSONP 版本，返回 `cb({filename: "..."})`
+2. `GET /api/bridge/confirm_print.js` — JSONP 版本，query params 传选项
+3. `GET /api/bridge/cancel_pending.js` — JSONP 版本
+4. `GET /api/bridge/debug/logs.js` — JSONP 版本
+
+### 前端替换（10 处 fetch→bridgeGET/bridgePOST）
+1. `loadFiles()` — Print Job 文件列表
+2. `onPendingPrint()` — 打印确认耗材信息
+3. `printFile()` — 打印文件耗材信息
+4. `closePrintModal()` — 取消打印
+5. `doPrint()` — 确认打印 + 查询 pending
+6. WS onopen — 查询 pending_print
+7. `loadFilamentInfo()` — 耗材信息加载
+8. `loadDebugLogs()` — Debug 日志
+9. 初始数据加载（已在 v5.4.0 完成）
+10. Camera 轮询（已在 v5.4.0 完成）
+
+### 修改文件
+- `bridge-node/server.js` — 版本号 5.4.0→5.5.0；新增 4 个 JSONP 端点
+- `bridge/web/webui.html` — 重写 bridgeGET/bridgePOST；替换全部 10 处 fetch()
+- `bridge-node/package.json` — 版本号 5.4.0→5.5.0
+- `reinstall.ps1` — v5.4.0→v5.5.0
+- `install.ps1` — v5.4.0→v5.5.0
+- `uninstall.ps1` — v5.4.0→v5.5.0
+- `process.md` — 版本记录
+- `traps.md` — 新增 #79
+
+### 已知问题
+- 需要在 BambuStudio WebView 中实际测试所有功能
+
+---
+
+## v5.4.0 代理链路完整修复 — Fluidd/Camera/打印一体化代理
+
+### 核心思路
+Bridge 的唯一职责是代理。代理通了，Fluidd、Camera、打印自然都通。此前 Fluidd 一直 Connecting、Camera 获取旧照片、打印 formidable 报错等问题，根因都是代理不完整。
+
+### 变更
+1. **中间件顺序调整**：`express.raw()` 移到 `express.json()` 之前，确保二进制请求体（G-code 上传）不被 JSON parser 消费
+2. **Fluidd SPA 回退路由**：新增 `app.get("/fluidd/{*path}", ...)` 返回 `index.html`，解决 Vue Router 导航到子路径时 404 的问题
+3. **`proxyToMoonraker` 完全重写**：完整转发所有响应头（除 `transfer-encoding`、`connection`），改进 body 处理逻辑（支持 Buffer/string/JSON 三种类型）
+4. **WebSocket 代理改进**：添加 `moonrakerWs.on("error")` 处理，改进 close 中的清理逻辑，添加消息丢弃日志
+5. **Webcam 代理改进**：完整转发响应头，与 `proxyToMoonraker` 保持一致
+6. **安装脚本版本同步**：reinstall.ps1 / install.ps1 / uninstall.ps1 全部更新到 v5.4.0
+
+### 代理链路验证结果（全部通过）
+- ✅ HTTP 代理：`/api/version`、`/server/info`、`/printer/info`、`/access/token`、`/server/database/item` 正确返回 JSON
+- ✅ WebSocket 代理：`server.connection.identify` 正确响应（`connection_id` 正常）
+- ✅ Fluidd config.json：正确返回 `endpoints: [{"url": "/"}]`
+- ✅ Fluidd 静态资源：JS (559KB) 和 CSS (69KB) 正确返回
+- ✅ Fluidd SPA 回退：`/fluidd/printer` 返回 `index.html`
+- ✅ Camera 快照：`/server/files/camera/monitor.jpg` 返回 JPEG 图片
+
+### 修改文件
+- `bridge-node/server.js` — 版本号 5.3.0→5.4.0；中间件顺序；Fluidd SPA 回退；proxyToMoonraker 重写；WS 代理改进；Webcam 代理改进
+- `reinstall.ps1` — v5.2.2→v5.4.0
+- `install.ps1` — v5.2.2→v5.4.0
+- `uninstall.ps1` — v5.2→v5.4.0
+- `process.md` — 版本记录
+- `traps.md` — 新增 #70~#73
+
+### 已知问题
+- 需要在 BambuStudio WebView 中实际测试 Fluidd 是否能通过 Bridge 代理成功连接 Moonraker
+
+---
+
+## v5.2.2 修复 Fluidd Connecting + Camera 轮询 + 缓存
+
+### 变更
+- 修复 Fluidd 一直 Connecting（WebSocket 代理竞态条件：客户端消息在 Moonraker WS 连接前被丢弃）
+- 修复摄像头图片轮询不刷新（Express ETag 缓存 + WebView 缓存）
+- 修复摄像头一次加载失败就停止轮询（改为连续 5 次失败才停止）
+- 移除侧边栏刷新按钮，只保留顶栏刷新按钮
+- 禁用 Express ETag 生成（`app.set("etag", false)`）
+- 添加全局 Cache-Control/Pragma no-cache 头
+
+### 修改文件
+- `bridge-node/server.js` - WebSocket 代理消息队列；禁用 ETag；全局缓存头
+- `bridge/web/webui.html` - 摄像头连续错误计数；移除侧边栏刷新按钮
+
+### 已知问题
+- 需要添加 debug 日志模块（用户反馈时方便排查问题）traps.md #66 #67
+
+---
+
+## v5.2.1 修复摄像头视频流 + 代理二进制数据
+
+### 变更
+- 修复 WebUI 摄像头模块无法显示视频（`proxyToMoonraker` 使用 `r.text()` 破坏二进制 JPEG 数据）
+- 将 `proxyToMoonraker` 改为 `Buffer.from(await r.arrayBuffer())` 正确处理二进制响应
+- 修复 Fluidd iframe 连接问题（拦截 `/access/token` 返回空 token + config.json endpoints 配置）
+- 修复 WebUI 热床温度不显示（初始查询 URL 添加 `heater_bed`）
+- 修复 Express 5 `{*path}` 返回数组问题（添加 `wcPath()` 辅助函数）
+- 添加界面刷新按钮
+- 安装脚本添加 `npm install --production` 步骤
+
+### 修改文件
+- `bridge-node/server.js` - 修复 proxyToMoonraker 二进制数据处理；添加 wcPath 辅助函数；拦截 /access/token；简化根路由和 config API
+- `bridge/web/webui.html` - 添加侧边栏导航、Fluidd 标签页、切换逻辑、刷新按钮、heater_bed 查询
+- `bridge/web/dist/config.json` - Fluidd endpoints 配置
+- `reinstall.ps1` / `install.ps1` - 添加 npm install --production 步骤
+- `traps.md` - 新增 #62~#65
+
+---
+
+## v5.2 集成 Fluidd 到 WebUI，实现统一界面
+
+### 变更
+- 将 Fluidd 直接作为 WebUI 的一个模块，不再需要来回切换
+- 侧边栏新增两个导航选项：Device（设备控制）和 Fluidd（控制台）
+- Device 标签页：保留原有的 2x2 网格布局（Camera、Control、Print Job、Filament）
+- Fluidd 标签页：使用 iframe 嵌入完整的 Fluidd 界面，包括 G-code 控制台、温度图表、文件管理等
+- 移除顶部的模式切换按钮
+- 简化后端代码，移除 mode 相关 API 逻辑
+- Setup 页面移除模式选择，默认使用集成界面
+
+### 修改文件
+- `bridge/web/webui.html` - 添加侧边栏导航、Fluidd 标签页、切换逻辑
+- `bridge-node/server.js` - 移除 mode 参数处理、renderFluiddWrapper、mode API，简化根路由
+- `process.md` - 版本记录
+
+---
+
+## v5.1 mDNS 自动检测完善 + Setup 页面重设计 + 文档更新
+
+### 变更
+- Setup 页面重设计：Scan Network 大按钮为主操作，手动输入 IP 降为备选（"or enter manually" 分隔线下方）
+- Setup 页面副标题从"Connect your Klipper printer"改为"Auto-detection did not find a printer on your network."，明确告知自动检测已尝试
+- Setup 页面提示信息更新：强调打印机需开机且在同一网络
+- README.md 用户安装流程重写：4 步简化为 3 步，移除手动输入 IP 步骤
+- 安装脚本 Next steps 更新：提示 mDNS 自动检测，无需手动输入 IP
+- 全项目审查：移除所有"手动输入 IP"的过时描述
+
+### 修改文件
+- `bridge-node/server.js` - Setup 页面重设计（Scan 为主，手动为备）
+- `README.md` - 用户流程 4 步→3 步
+- `install.ps1` - Next steps 更新
+- `reinstall.ps1` - Next steps 更新
+- `process.md` - 版本记录
+
+---
+
+## v5.0 Node.js Bridge 重构 + 原生打印确认对话框 + 冗余清理
+
+### 变更
+- Bridge 从 Python 重构为 Node.js（`bridge-node/` 替代 `bridge/server/`）
+- 新增 Windows 原生打印确认对话框（`bridge-node/dialog.js`）
+- 切片后点击 Print → Bridge 弹出 WinForms 对话框（耗材选择 + 打印选项）
+- 安全修复：Base64 编码防止 PowerShell 变量注入、随机化临时文件名
+- 代码审查修复 12 个问题（3 严重 + 4 中等 + 5 轻微）
+- 安装脚本全部更新：Python→Node.js，v4.9→v5.0
+- 清理旧 Python Bridge 代码（`bridge/server/`, `bridge/setup.bat`, `bridge/start.bat`）
+- 清理构建产物（`bridge-node/dist/`, `bridge-node/node_modules/`）
+- 更新 `.gitignore`、`README.md`
+
+### 修改文件
+- `bridge-node/server.js` — 新文件，Node.js Bridge 核心
+- `bridge-node/dialog.js` — 新文件，跨平台原生对话框
+- `bridge-node/package.json` — 新文件，Node.js 依赖
+- `bridge-node/build.js` — 新文件，esbuild 打包脚本
+- `reinstall.ps1` — v5.0，Python→Node.js
+- `install.ps1` — v5.0，Python→Node.js
+- `uninstall.ps1` — v5.0，停止进程兼容 Node.js
+- `README.md` — 重写，反映 v5.0 架构
+- `.gitignore` — 更新规则
+- 删除 `bridge/server/`（main.py, installer.py, print_dialog.py, requirements.txt）
+- 删除 `bridge/setup.bat`, `bridge/start.bat`
+
+---
+
+## v4.8 完整代码审查修复
+
+### 审查发现并修复的问题
+1. **`gcode()` 函数使用不存在的 HTTP 端点** — 所有 G-code 命令（移动/加热/风扇/灯光/暂停/恢复/取消）通过 `/printer/gcode/script` HTTP 端点发送，但该端点在 U1 Moonraker 中不存在。修复：优先使用 WebSocket JSON-RPC 发送，HTTP 作为 fallback
+2. **`doPrintSimple()` 使用不存在的 HTTP 端点且无安全检测** — 修复：改用 WebSocket JSON-RPC + `SDCARD_PRINT_FILE` 命令，添加打印机状态检查
+3. **`BRIDGE_VERSION` 未更新** — 从 `"4.0"` 更新到 `"4.7"`
+4. **WebSocket 代理中重复 `import websockets`** — 删除函数内部的重复导入
+5. **`_notify_webui` 使用已弃用的 `asyncio.get_event_loop()`** — 改为 `asyncio.get_running_loop()`
+6. **`doPrint()` else 分支未清除 pending_print_file** — WebSocket 发送成功后调用 `/api/bridge/cancel_pending` 清除 Bridge 端的 pending 状态
+
+### 修改文件
+- `bridge/server/main.py` — 版本号更新；删除重复导入；修复弃用 API
+- `bridge/web/webui.html` — `gcode()` 改用 WebSocket 优先；`doPrintSimple()` 改用 WebSocket + 安全检测；清除 pending 状态
+
+---
+
+## v4.7 G-code 参数格式 + Physical Printer 覆盖修复
+
+### 问题
+1. 打印确认对话框点击 Start Print 后报 "unable to parse True"/"unable to parse False"
+2. 切片后打印不触发确认对话框（上传直接到打印机，绕过 Bridge）
+
+### 根因
+- **问题 1**：Klipper 的 G-code 宏解析器不能识别字符串 `"True"`/`"False"`，只接受数字 `1`/`0`。Fluidd 日志明确显示：`!! Error on 'SDCARD_PRINT_FILE_WITH_PARAMETERS ... AUTO_BED_LEVELING="True"': unable to parse True`
+- **问题 2**：用户自定义 machine 配置 `Snapmaker U1 (0.4 nozzle) - 拷贝.json` 中 `"print_host": "192.168.1.12"` 覆盖了系统配置的 `"print_host": "http://127.0.0.1:13628"`，导致 BambuStudio 直接与打印机通信，绕过 Bridge
+
+### 修复
+- **G-code 参数格式**：`AUTO_BED_LEVELING="True"` → `AUTO_BED_LEVELING=1`，`FLOW_CALIBRATE="False"` → `FLOW_CALIBRATE=0`（去掉引号，用数字代替字符串）
+- **Bridge `confirm_print`**：同样改为数字格式，并将布尔值转换逻辑统一
+- **Physical Printer 配置**：需要用户手动在 BambuStudio 中修改 Physical Printer 的 print_host 为 `http://127.0.0.1:13628`
+
+### 修改文件
+- `bridge/web/webui.html` — `doPrint()` 参数格式 `True/False` → `1/0`
+- `bridge/server/main.py` — `confirm_print` 参数格式统一转换
+
+### 用户操作
+⚠️ reinstall 脚本已自动修补用户配置中的 `print_host`（v4.9）。如手动在 BambuStudio 中重新添加 Physical Printer，需确保 print_host 设为 `http://127.0.0.1:13628`
+
+---
+
+## v4.6 WebSocket G-code + 安全检测 + 日志增强
+
+### 问题
+1. 打印确认对话框点击 Start Print 后报 "gcode failed"
+2. 打印无安全检测，耗材加载中/热端移动中也能启动打印
+3. 切片后打印不触发确认对话框（上传成功但通知未到达 WebUI）
+
+### 根因
+- **问题 1**：U1 Moonraker 的 `/printer/gcode/script` **没有注册为 HTTP 端点**（klippy_apis.py 中只注册了 `/printer/print/start` 等端点，`gcode/script` 只是 Klipper 内部 RPC 端点）。WebUI 和 Bridge 通过 HTTP POST 调用此端点会返回 404
+- **问题 2**：`doPrint()` 没有检查打印机状态
+- **问题 3**：上传拦截逻辑正确（文件已上传到 Moonraker），但需要日志确认 `print=true` 是否被正确拦截
+
+### 修复
+- **WebUI `doPrint()`**：else 分支改用 WebSocket JSON-RPC 发送 `printer.gcode.script`（通过已有的 WebSocket 连接），不再使用 HTTP 端点
+- **Bridge `confirm_print`**：改用 `websockets` 库建立临时 WebSocket 连接到 Moonraker，发送 `printer.gcode.script` JSON-RPC 请求，读取响应确认成功/失败
+- **安全检测**：`doPrint()` 添加 `print_stats.state` 检查，printing/paused 状态禁止启动新打印
+- **布尔值格式**：JavaScript `true/false` → Python `True/False`（与 klippy_apis.py 一致）
+- **日志增强**：上传拦截添加详细日志（content_type、filename、print_flag、uploaded_path、Moonraker 响应状态）
+
+### 修改文件
+- `bridge/server/main.py` — `confirm_print` 改用 WebSocket；上传拦截加日志
+- `bridge/web/webui.html` — `doPrint()` 改用 WebSocket JSON-RPC；添加安全检测
+
+---
+
+## v4.5 打印确认流程关键修复
+
+### 问题
+1. BambuStudio 切片后点打印不触发确认对话框
+2. 从文件列表触发确认对话框后，点击 Start Print 打印机无反应
+
+### 根因
+- **问题 2**：U1 Moonraker 的 `/server/files/start_local_print` 端点注册时使用 `transports=(TransportType.all() & ~TransportType.HTTP)`，**明确排除了 HTTP 传输**，只支持 WebSocket/MQTT。Bridge 和 WebUI 通过 HTTP POST 调用此端点会被 Moonraker 拒绝
+- **问题 1**：BambuStudio 上传时 WebUI 可能还没加载（用户在 Prepare 标签页），WebSocket 通知发出后无人接收。WebUI 加载后不检查 pending print
+
+### 修复
+- Bridge 的 `confirm_print` 端点改为通过 `/printer/gcode/script` 发送 `SDCARD_PRINT_FILE_WITH_PARAMETERS` G-code 命令（参考 klippy_apis.py:332 的 `start_print_advanced` 实现），绕过 HTTP 传输限制
+- WebUI 的 `doPrint()` else 分支也改用 G-code 方式而非 `/server/files/start_local_print`
+- WebUI 的 `doPrint()` 添加 HTTP 状态码检查和错误提示
+- WebSocket 连接建立后检查 `/api/bridge/pending_print`，如有待确认打印则弹出对话框
+
+### 修改文件
+- `bridge/server/main.py` — `confirm_print` 改用 G-code 发送
+- `bridge/web/webui.html` — `doPrint()` 改用 G-code；添加 pending print 检查；添加错误提示
+
+---
+
+## v4.4 热床模型高度修复
+
+### 问题
+切片界面热床模型高度不对，薄模型（如首层 0.2mm）会和热床模型重叠导致显示异常
+
+### 根因
+`Snapmaker U1_bed_texture.stl`（bed_model）的 Z 范围为 0.000 ~ 0.510，整个模型在 Z=0（打印面）之上。BambuStudio 默认 Z 偏移仅 -0.03（[3DBed.cpp:609](file:///c:/Users/VitasGuo/Documents/SOLO/3D-printer/BambuStudio-master/BambuStudio-master/src/slic3r/GUI/3DBed.cpp#L609)），偏移后模型顶部仍在 Z=0.480，远高于打印面
+
+### 修复
+- `Snapmaker U1_bed_texture.stl`：所有 Z 坐标下移 0.510，Z 范围从 `0.000~0.510` → `-0.510~0.000`
+- `Snapmaker U1_bed.stl`：所有 Z 坐标下移 0.050，Z 范围从 `-0.450~0.050` → `-0.500~0.000`
+- 偏移后模型顶部在 Z=-0.03，刚好在打印面之下，不再与模型重叠
+
+### 修改文件
+- `Snapmaker/Snapmaker U1_bed_texture.stl` — Z 坐标下移 0.510
+- `Snapmaker/Snapmaker U1_bed.stl` — Z 坐标下移 0.050
+
+---
+
+## v4.3 Bridge 代理打印 4 个关键 Bug 修复
+
+### 核心改动
+- **Bug 1: 初始查询缺少 `print_stats`/`display_status`** — 页面加载时的 HTTP 查询只查了 extruder/fan/gcode_move 等，没有查 `print_stats` 和 `display_status`。`D.print_stats` 始终为 `{}`，`ps.state` 为 `undefined`，`if(ps.state)` 判断失败，按钮永远不更新。修复：添加 `print_stats` 和 `display_status` 到初始查询 URL，查询完成后调用 `upd({})` 触发完整 UI 更新
+- **Bug 2: WebSocket 订阅响应未处理** — `ws.onmessage` 只处理 `notify_status_update`，但 WebSocket 订阅的初始响应格式是 `{result: {status: {...}}}`（没有 `method` 字段），被完全忽略。修复：添加 `if(m.result&&m.result.status)upd(m.result.status)` 处理订阅响应
+- **Bug 3: `bridge_confirm_print` 不读取请求体** — 参数 `options: dict = None` 被 FastAPI 当作 query parameter，前端发送的 JSON 选项（auto_bed_leveling/flow_calibrate/timelapse）永远为 None。修复：改为 `request: Request` + `await request.json()` 读取请求体
+- **Bug 4: 上传拦截仍转发 `print=true` 导致直接打印** — 旧代码将原始 multipart body（含 `print=true`）直接转发给 Moonraker 的 `/api/files/local`，Moonraker 收到后立即启动打印。Bridge 虽然设置了 `pending_print_file`，但打印已经开始了。修复：改用 `request.form()` 解析 multipart 表单，提取 file 和 print 字段，使用 Moonraker 原生上传 API (`/server/files/upload`) 只上传文件不启动打印，然后返回 OctoPrint 兼容响应给 BambuStudio
+
+### 技术细节
+- Moonraker 原生上传 API `/server/files/upload` 不会自动启动打印（不像 OctoPrint 兼容层 `/api/files/local` 会根据 `print=true` 自动启动）
+- 原生 API 响应格式：`{"result": {"item": {"path": "test.gcode", "root": "gcodes", ...}, "action": "create_file"}}`
+- Bridge 返回 OctoPrint 兼容格式：`{"files": [{"name": "test.gcode", "path": "test.gcode", "origin": "local"}], "done": 1}`
+- BambuStudio 的 OctoPrint 上传只检查 HTTP 状态码，不严格解析响应体
+
+### 配置提醒
+- reinstall 脚本已自动修补用户配置中的 `print_host`（v4.9+）
+- 如果 Physical Printer 仍指向打印机 IP，BambuStudio 会直接与 Moonraker 通信，绕过 Bridge，打印确认对话框不会触发
+- machine JSON 中的 `print_host: "http://127.0.0.1:13628"` 只影响新建的 Physical Printer，已有的 Physical Printer 由 reinstall 脚本自动修补
+
+### 修改文件
+- `bridge/web/webui.html` — 初始查询添加 print_stats/display_status；查询后调用 upd({})；WebSocket 订阅响应处理
+- `bridge/server/main.py` — _handle_upload_with_confirm 改用原生上传 API；bridge_confirm_print 改用 Request 读取请求体
+
+---
+
+## v4.2 Print Job 修复 + 打印确认对话框 + Bridge 代理打印
+
+### 核心改动
+- **Print Job 按钮状态修复** — `printing` 状态不再要求 `display_status.progress!=null`，只要 `print_stats.state==='printing'` 就显示 Pause+Stop 按钮；idle 状态显示具体状态文本（Complete/Cancelled/Error/Idle）
+- **删除 Record 按钮** — U1 不支持录像功能
+- **Camera 播放按钮修复** — 添加 `camProbing` 状态，探测期间显示 "Detecting camera..."；探测完成后更新 UI 文本
+- **打印确认对话框** — 点击文件列表中的 gcode 文件后弹出确认对话框：
+  - 耗材选择：4 个挤出机的类型/颜色/状态，可勾选
+  - 打印选项：Auto Bed Leveling / Flow Calibration / Timelapse
+  - 使用 `POST /server/files/start_local_print` API
+- **Bridge 代理打印** — machine JSON 添加 `print_host` 和 `host_type: octoprint`，BambuStudio 切片打印请求经过 Bridge 代理
+  - `POST /api/files/local` 上传拦截：`print=true` 时上传文件但不启动打印，通过 WebSocket 通知 WebUI 弹出确认对话框
+  - 新增 API：`/api/bridge/pending_print`、`/api/bridge/confirm_print`、`/api/bridge/cancel_pending`
+  - WebSocket 客户端跟踪（`ws_bridge_clients`），Bridge 事件通过 `notify_bridge_event` 注入
+
+### 技术细节
+- U1 Moonraker 有 OctoPrint 兼容层，`/api/version` 返回 `"OctoPrint (Moonraker 1.3.0)"`
+- `SDCARD_PRINT_FILE_WITH_PARAMETERS` 宏支持 `AUTO_BED_LEVELING`、`FLOW_CALI`、`TIME_LAPSE_CAMERA` 参数
+- `POST /server/files/start_local_print` 接受 `{path, options, print_plate}` 参数
+- BambuStudio OctoPrint 上传使用 multipart form，`print=true` 字段控制是否自动启动打印
+
+### 修改文件
+- `bridge/web/webui.html` — Print Job 按钮逻辑；Camera 修复；打印确认对话框；WebSocket 事件处理
+- `bridge/server/main.py` — 上传拦截；pending print 管理；WebSocket 客户端跟踪；Bridge 事件通知
+- `Snapmaker/machine/Snapmaker U1 (0.4 nozzle).json` — 添加 `print_host` 和 `host_type`
+
+---
+
+## v4.1 摄像头模块改造 + mDNS 打印机自动发现
+
+### 核心改动
+- **摄像头从 MJPEG stream 改为 snapshot 轮询** — U1 不提供 MJPEG 视频流（`/webcam/?action=stream` 返回 502），而是通过 `/server/files/camera/monitor.jpg` 单张 JPEG 照片轮询方式实现（500ms 间隔），与 Snapmaker App 和 OrcaSlicer 行为一致
+- **移除旧的摄像头探测逻辑** — 删除 `printerHost`/`camUrl`/`probeCam()` 变量和函数，改为 IIFE 直接探测 `/server/files/camera/monitor.jpg`
+- **简化摄像头架构** — 不再需要获取打印机 IP 来拼接摄像头 URL，所有请求通过桥接代理转发
+- **mDNS 打印机自动发现** — 新增 `/api/bridge/scan` 端点，通过 zeroconf 库扫描 `_snapmaker._tcp.local.` mDNS 服务自动发现局域网内的 Snapmaker 打印机
+- **Setup 页面扫描按钮** — IP 输入框旁添加 Scan 按钮，点击后自动扫描并填充打印机 IP；单台自动填充，多台显示列表供选择
+
+### mDNS 发现机制
+- U1 的 Moonraker 配置了 `[zeroconf]` 段，`mdns_hostname: U1`
+- 服务类型：`_snapmaker._tcp.local.`（Snapmaker 专有，非标准 Moonraker 的 `_moonraker._tcp.local`）
+- 服务属性包含：`ip`（IP 地址）、`device_name`、`sn`、`machine_type`、`version` 等
+- 扫描使用同步 `zeroconf.Zeroconf` + `ServiceBrowser`，在线程池中运行避免阻塞事件循环
+- 默认扫描超时 5 秒，最长 10 秒
+
+### 修改文件
+- `bridge/server/main.py` — 新增 `/api/bridge/scan` 端点；setup 页面添加 Scan 按钮和扫描结果展示
+- `bridge/server/requirements.txt` — 新增 `zeroconf>=0.100.0`
+- `bridge/web/webui.html` — `toggleCam()`/`pollCam()`/`camError()`/`showCamErr()` 改为 snapshot 轮询；删除 `printerHost`/`camUrl`/`probeCam()` 旧逻辑；`camAvail` 通过 IIFE 探测初始化
+- `traps.md` #46 — 根因从"mjpegstreamer 未运行"改为"U1 使用 snapshot 轮询方式，非 MJPEG stream"
+
+---
+
+## v4.0 完整发布版
+
+### 核心改进
+- **Bridge 完全集成** — 安装到 BambuStudio 目录，兼容包原目录可删除
+- **开机自启** — 创建 Windows Startup 快捷方式，登录时 Bridge 自动后台运行
+- **配置独立** — `bridge_config.json` 移到 `%APPDATA%\BambuStudio-Bridge\`，避免 Program Files 权限问题
+- **模式切换优化** — 两种模式按钮完全统一，添加防重复点击，提升响应速度
+
+### 安装脚本改进
+- `install.ps1` — 7 步完整流程，自动启动 Bridge
+- `reinstall.ps1` — 9 步完整重装，更新所有文件
+- `uninstall.ps1` — 7 步完整清理，包括 APPDATA 配置
+
+### 版本统一
+- Bridge: v4.0
+- 兼容包: v4.0
+
+---
+
+## v3.22 Bridge 安装到 BambuStudio 目录 + 开机自启（Bridge v0.6.0）
+
+**核心改动**：Bridge 服务器安装到 BambuStudio 安装目录下（`C:\Program Files\Bambu Studio\bridge\`），不再依赖兼容包原始目录。安装后可删除兼容包目录
+
+**配置文件迁移**：`bridge_config.json` 从 bridge/ 目录迁移到 `%APPDATA%\BambuStudio-Bridge\`，避免 Program Files 写入权限问题。首次加载时自动从旧位置迁移配置
+
+**开机自启**：安装脚本创建 VBS 隐藏启动器（`start-hidden.vbs`）+ Windows Startup 文件夹快捷方式，Bridge 在登录时自动后台运行，无需手动启动
+
+**install.ps1 重写**：7 步→7 步（增加 Bridge 安装 + 自启配置 + 自动启动），安装完成后 Bridge 立即可用
+
+**uninstall.ps1 重写**：6 步→6 步（增加 Bridge 停止 + 目录删除 + 自启快捷方式清理）
+
+**reinstall.ps1 重写**：7 步→9 步（增加 Bridge 停止 + 重装 + 自启更新 + 自动启动）
+
+---
+
+## v3.21 修复（Bridge v0.5.1 — WebUI 去 zoom + 按钮统一 + 热床居中）
+
+**WebUI 去 zoom 方案**：移除 `body{zoom:1.4}`，所有 CSS 尺寸直接按 ~1.4x 放大（根字体 13px→18px，sidebar 56px→76px，topbar 40px→56px，按钮 font-size 10px→14px 等）。新增 `.tbtn` CSS 类统一管理 Light/Fan/Speed 按钮样式，清除所有冗余内联 `font-size`。修复 "Loading files..." 文字过小（11px→15px）
+
+**Fluidd wrapper 按钮统一**：模式切换按钮从 `padding:3px 10px; font-size:10px` 改为 `padding:5px 14px; font-size:14px`，与 WebUI 模式完全一致。设备名从 14px 改为 20px
+
+**热床 STL 居中**：`Snapmaker U1_bed_texture.stl` 从左下角原点（X: -2.5~273.5, Y: -10.5~282.5）居中为以中心为原点（X: -138~138, Y: -146.5~146.5）。原因：BambuStudio 的 `update_model_offset()` 将 STL 的 (0,0,0) 移到 `printable_area` 中心 (135,135)，如果 STL 以左下角为原点，偏移后热床会偏到右上角（traps.md #41）
+
+---
+
+## v3.20 修复（WebUI 缩放 + BambuStudio 集成准备）
+
+**WebUI 缩放**：添加 `body { zoom: 1.4 }` 使界面在 100% 浏览器缩放下即可舒适使用（之前需要 150%）
+
+**BambuStudio 集成关键配置**：在 `Snapmaker U1 (0.4 nozzle).json` 中添加 `"print_host_webui": "http://127.0.0.1:13628"`，使 BambuStudio 的 Device 标签页自动加载桥接服务器 WebUI
+
+**setup.bat 修复**：重写 `python312._pth` 配置逻辑（直接 `Set-Content` 而非 `-replace`），添加 `python312.zip` 解压到 `Lib/` 的步骤
+
+**reinstall.ps1 更新**：Next steps 增加 Bridge 启动步骤和 Device 标签页使用说明
+
+---
+
+## v3.19 修复（Bridge v0.5.0 — Light/Camera/Filament 三项修复）
+
+**Light 修复**：`SET_LED` 命令增加 `WHITE=1` 参数。U1 的 `cavity_led` 有 4 通道 `[RED, GREEN, BLUE, WHITE]`，缺少 WHITE 通道灯不亮（traps.md #38）
+
+**Camera 修复**：MJPEG 视频流改为直接指向打印机 IP，绕过桥接代理。通过 `/api/bridge/config` 获取 `printer_host`，摄像头 URL 从 `http://localhost:13628/webcam/` 改为 `http://{printer_ip}/webcam/`（traps.md #39）
+
+**Filament 修复**：耗材类型和颜色信息从 `snapmaker/print_task.json` 获取（`filament_type`、`filament_color_rgba`、`filament_sub_type`），而非 `filament_feed` 对象（该对象只有物理状态，无材料类型）。新增 `loadFilamentInfo()` 函数（traps.md #40）
+
+**关键发现**：U1 的耗材数据架构
+- `filament_feed left/right`：物理传感器状态（`filament_detected`、`channel_state`）
+- `snapmaker/print_task.json`：耗材配置信息（类型/颜色/厂商/SKU）
+- `filament_parameters`：材料参数库（流量/温度参数，按材料类型→厂商→子类型组织）
+
+---
+
+## v3.18 新增（Bridge 服务器 Python 环境重建 + U1 Moonraker 源码分析）
+
+**Python 环境重建**：旧 `bambustudio-bridge` 目录已删除，在新位置 `BambuStudio-SnapmakerU1-Compat/bridge/python/` 重新安装嵌入式 Python 3.12.9 环境：
+- 下载 python-3.12.9-embed-amd64.zip 并解压
+- 修复 `python312._pth`（4 行：`.`、`Lib`、`Lib\site-packages`、`import site`）
+- 解压 `python312.zip` 到 `Lib/` 目录
+- 通过 Python urllib 下载 `get-pip.py` 并安装 pip 26.1.1
+- 通过阿里云镜像安装所有依赖（fastapi 0.136.1、uvicorn 0.47.0、httpx 0.28.1、websockets 16.0、pystray 0.19.5、Pillow 12.2.0 等）
+
+**U1 Moonraker 源码分析**（`u1-moonraker-main`）：
+- `lava/moonraker.conf`：无 `[webcam]` 段，确认摄像头需通过 octoprint_compat 默认配置（`stream_url = /webcam/?action=stream`）或数据库配置
+- `snapmakercloud.py`：Snapmaker 专有云打印组件，支持 3MF/Gcode/ZIP 文件下载和远程打印，通过 MQTT 与设备通信
+- `octoprint_compat.py`：默认摄像头配置 `streamUrl: '/webcam/?action=stream'`，`webcamEnabled: true`
+- `webcam.py`：支持从配置文件和数据库两种来源加载摄像头，部分 URL 自动转换为本地地址
+- `authorization`：U1 默认信任 `192.0.0.0/8`（覆盖所有 192.x.x.x 地址）
+
+**清理**：
+- 删除临时文件 `bridge/do-setup.ps1` 和 `bridge/python/get-pip.py`
+- 旧 `bambustudio-bridge` 目录已完全删除
+
+**验证**：桥接服务器 v0.4.0 成功启动在 `http://127.0.0.1:13628`，WebUI 模式正常加载，API 代理正常工作（G-code 文件列表、缩略图、WebSocket 订阅等）
 
 ---
 
@@ -23,6 +546,137 @@ U1 内置 Moonraker 服务（基于 Klipper），Moonraker 提供了 **OctoPrint
 - `host_type` 默认值就是 `htOctoPrint`，无需修改任何代码
 
 **配置步骤**：在 BambuStudio 物理打印机设置中选择 OctoPrint 主机类型，输入 U1 的 IP 地址和 Moonraker API Key。
+
+### U1 网页控制方案（v3.15 新增）
+
+BambuStudio 原生支持在 Device 标签中嵌入 WebView 显示非 BBL 打印机的 Web 控制面板。U1 内置 Moonraker 服务，可以在 BambuStudio 中加载 Fluidd 控制面板。
+
+**Snapmaker Orca 的设备页面架构**：
+
+Snapmaker 官方安装版 OrcaSlicer 的设备页面 URL 是 `http://127.0.0.1:13619/web/flutter_web/index.html`，这是一个**本地 HTTP 服务器 + Flutter Web 应用**的方案，**不是 Fluidd/Mainsail**。这个 Flutter Web 应用是 Snapmaker 的闭源定制功能，在开源的 OrcaSlicer 仓库中不存在（已确认源码中无 `flutter_web`、`13619`、`DeviceWeb` 等关键字）。
+
+**Snapmaker 开源了 U1 的 Fluidd 定制版**：https://github.com/Snapmaker/u1-fluidd
+- 这是 Fluidd 的 fork，基于 Vue.js + TypeScript（GPL-3.0 协议）
+- Snapmaker 只有 1 个自己的 commit（"Release firmware version 1.2.0"），其余 2734 个 commit 都是上游 Fluidd 的
+- 定制内容极少，主要是固件版本发布相关的配置
+- U1 内置的 Fluidd 就是这个 fork 的编译产物
+
+**BambuStudio 的设备页面架构**：
+
+BambuStudio 的方案更简单——直接加载打印机的 Web 前端：
+1. 选择非 BBL 打印机后，`show_device(false)` 将 Device 标签切换为 `PrinterWebView`（嵌入式浏览器）
+2. `Plater.cpp:3370-3385` 读取 `print_host_webui`（或 `print_host`）URL，调用 `load_printer_url(url)`
+3. `EVT_LOAD_PRINTER_URL` 事件触发 `m_printer_view->load_url(url)` → WebView 加载 `http://<U1-IP>`
+4. U1 的 Moonraker 内置 Fluidd 前端在 WebView 中渲染
+
+**API Key 认证问题与解决方案**：
+
+BambuStudio 原始代码**不会自动注入 API Key**（Snapmaker Orca 有 `SendAPIKey()` 方法自动注入 `X-API-Key` 请求头，BambuStudio 没有）。解决方案是通过 Moonraker 配置信任局域网请求：
+
+```ini
+# moonraker.conf
+[authorization]
+trusted_clients:
+    192.168.0.0/16
+    127.0.0.0/8
+cors_domains:
+    *.local
+    *://localhost
+```
+
+配置后，来自局域网的请求无需 API Key 即可操作 Fluidd。
+
+**BambuStudio vs Snapmaker Orca PrinterWebView 对比**：
+
+| 功能 | Snapmaker Orca | BambuStudio 原始 | 影响 |
+|------|---------------|-----------------|------|
+| 设备页面 | 闭源 Flutter Web（本地服务器） | 直接加载打印机 Fluidd | 体验不同 |
+| WebView 加载 URL | ✅ | ✅ | 无 |
+| API Key 自动注入 | ✅ `SendAPIKey()` | ❌ | 需配置 Moonraker trusted_clients |
+| OnLoaded 事件绑定 | ✅ | ❌ | 页面加载后无处理 |
+| OnNewWindow 拦截 | ✅ 外部链接用系统浏览器 | ❌ | 外部链接在 WebView 内打开 |
+| Linux WebKitGTK 兼容 | ✅ `inject_vue_resize_workaround()` | ❌ | Linux 上 Fluidd 可能崩溃 |
+| 文件上传 IPC | ✅ `PrinterWebViewHandler` | ❌ | 无法从 WebView 内触发切片器上传 |
+| 摄像头监控 | ✅ Flutter Web 内置 | ✅ Fluidd 内置 | 都支持 |
+
+**纯配置方案（不改源码）**：
+1. 在 U1 的 `moonraker.conf` 中添加 `[authorization]` 段，信任局域网
+2. 在 BambuStudio 物理打印机设置中填写 U1 的 IP 地址
+3. 切换到 Device 标签 → 自动加载 Fluidd 控制面板（含摄像头监控）
+
+**源码修改方案（完整体验）**：
+如需 Snapmaker Orca 级别的原生体验，需修改 BambuStudio 源码：
+1. `PrinterWebView.hpp/cpp`：添加 `SendAPIKey()`、`OnLoaded`/`OnNewWindow` 事件、Linux 兼容
+2. `MainFrame.cpp`：修改 `load_printer_url` 调用链传递 API Key
+3. `Plater.cpp`：修改 `load_printer_url` 调用传递 API Key
+4. 需要重新编译 BambuStudio
+
+**无法复刻 Flutter Web 方案的原因**：
+Snapmaker 的 Flutter Web 应用是闭源的商业软件，源码不在开源 OrcaSlicer 仓库中。该应用通过本地 HTTP 服务器（端口 13619）提供，内嵌在安装版 OrcaSlicer 中，与 U1 通过 Moonraker API 通信。BambuStudio 兼容包无法包含此闭源组件。
+
+### 开源桥接插件方案（v3.16 新增）
+
+**核心思路**：不改 BambuStudio 源码，通过本地 HTTP 服务器提供增强的设备控制体验。
+
+**原理**：BambuStudio 的 `print_host_webui` 配置字段支持指向任意 URL，包括 localhost。将 `print_host_webui` 设为 `http://localhost:PORT`，本地桥接服务器提供定制版 Fluidd 前端 + API Key 自动注入 + WebSocket 代理。
+
+**架构**：
+```
+BambuStudio (PrinterWebView)
+  → http://localhost:PORT/?host=<打印机IP>&apikey=<API Key>
+  → 开源桥接服务器
+    → 提供定制 Fluidd 前端（基于 Snapmaker/u1-fluidd）
+    → 代理 Moonraker HTTP API（自动注入 API Key）
+    → 代理 WebSocket（实时状态推送）
+    → 代理摄像头流（MJPEG/HLS）
+  → U1 / 任何 Klipper 打印机（Moonraker）
+```
+
+**可行性依据**：
+1. BambuStudio 已支持 `print_host_webui`，无需改源码
+2. Snapmaker 闭源 Flutter Web 就是这个架构（`127.0.0.1:13619`）
+3. BambuStudio 自己的耗材管理器也是这个架构（`localhost:13628`，见 `DeviceWebPage`）
+4. Snapmaker 开源了 U1 的 Fluidd 定制版：https://github.com/Snapmaker/u1-fluidd
+
+**BambuStudio 插件机制分析**：
+- BambuStudio 的网络插件（`bambu_network_plugin.dll`）通过 `LoadLibrary`/`dlopen` 动态加载
+- 加载时有 `IsSamePublisher` 代码签名验证，无法注入自定义 DLL
+- 但 `print_host_webui` 是纯配置方案，不涉及插件加载，完全可以利用
+
+**功能清单**：
+
+| 功能 | 实现方式 | 优先级 |
+|------|---------|--------|
+| 提供定制 Fluidd 前端 | 静态文件服务 | P0 |
+| API Key 自动注入 | HTTP 代理 + 请求头注入 | P0 |
+| WebSocket 代理 | ws 透传 | P0 |
+| 摄像头流代理 | MJPEG/HLS 透传 | P0 |
+| 自动读取 BambuStudio 配置 | 解析 BambuStudio 配置文件 | P1 |
+| 打印机自动发现 | mDNS/SSDP 扫描 | P1 |
+| 文件上传桥接 | 接收 G-code → 调 Moonraker API | P2 |
+| 多打印机管理 | 前端路由 | P2 |
+| 系统托盘 + 自动启动 | 桌面集成 | P2 |
+
+**技术选型**：Python (FastAPI) + 嵌入式 Python 3.12.9 + uvicorn + httpx + websockets
+
+**已实现功能**（bridge/ 目录）：
+
+| 功能 | 实现方式 | 状态 |
+|------|---------|------|
+| 提供定制 Fluidd 前端 | 静态文件挂载到 /fluidd/ | ✅ |
+| API Key 自动注入 | HTTP 代理 + X-API-Key 请求头注入 | ✅ |
+| WebSocket 代理 | /websocket 路径透传 | ✅ |
+| 摄像头流代理 | /webcam/ 路径透传 | ✅ |
+| WebUI 模式 | 单页面 4 模块（Camera/Print Job/Control/Filament） | ✅ |
+| Fluidd 模式 | iframe wrapper + hosted 模式 | ✅ |
+| 模式切换 | 顶部工具栏 WebUI/Fluidd 按钮 | ✅ |
+| 预设安装 | Python installer（install 子命令） | ✅ |
+| 嵌入式 Python | 绿色便携 Python 3.12.9 | ✅ |
+| 自动读取 BambuStudio 配置 | 解析 BambuStudio 配置文件 | 待实现 |
+| 打印机自动发现 | mDNS/SSDP 扫描 | 待实现 |
+| 文件上传桥接 | 接收 G-code → 调 Moonraker API | 待实现 |
+| 多打印机管理 | 前端路由 | 待实现 |
+| 系统托盘 + 自动启动 | 桌面集成 | 待实现 |
 
 ### 为什么之前不能"连接"U1？
 BambuStudio 的 BambuLab 品牌打印机使用专有的 MQTT/FTP 协议，与 U1 不兼容。但 BambuStudio 同时支持多种局域网主机类型（OctoPrint、Duet、FlashAir 等），其中 OctoPrint 与 Moonraker 完美兼容。
@@ -161,6 +815,69 @@ BambuStudio-SnapmakerU1-Compat/
 ---
 
 ## 六、已知问题与修复记录
+
+### v3.17 新增（Bridge 服务器合并入 Compat 仓库）
+
+**架构变更**：将 bambustudio-bridge 项目合并到 BambuStudio-SnapmakerU1-Compat 仓库的 `bridge/` 子目录下，统一项目管理。
+
+**目录结构**：
+```
+BambuStudio-SnapmakerU1-Compat/
+├── Snapmaker/                    # 预设文件（保持原位）
+├── Snapmaker.json                # 品牌配置
+├── bridge/                       # 桥接服务器
+│   ├── server/main.py            # FastAPI 服务器 v0.4.0
+│   ├── server/installer.py       # Python 预设安装器
+│   ├── server/requirements.txt   # Python 依赖
+│   ├── web/webui.html            # WebUI 界面
+│   ├── web/dist/                 # Fluidd 前端（.gitignore）
+│   ├── python/                   # 嵌入式 Python（.gitignore）
+│   ├── start.bat                 # 启动脚本
+│   └── setup.bat                 # 首次安装脚本
+├── install.bat/ps1               # 预设安装脚本
+├── uninstall.bat/ps1
+├── process.md
+└── traps.md
+```
+
+**路径更新**：
+- `main.py`：`PRESETS_DIR` 从 `parent.parent / "presets"` 改为 `parent.parent.parent / "Snapmaker"`
+- `installer.py`：`PRESETS_DIR` 从 `parent.parent / "presets"` 改为 `parent.parent.parent / "Snapmaker"`
+- `CONFIG_FILE` 放在 `bridge/` 目录下
+
+**WebUI v0.4.0 改进**：
+- 参考 Snapmaker WebUI 布局重设计：浅色主题 + 2x2 网格（Camera/Print Job/Control/Filament）
+- Camera 模块：ON/OFF 开关控制视频流
+- Control 模块：4 热端温度 + 热床温度 + 2 风扇功率 + 速度百分比
+- Print Job 模块：双标签（当前任务进度 + G-code 文件列表）
+- Filament 模块：4 挤出机耗材装载状态 + 材料类型 + 颜色
+- 模式切换按钮统一到顶部工具栏右侧（WebUI/Fluidd 位置一致）
+
+### v3.15 新增（Fluidd 网页控制方案研究）
+
+**需求**：在 BambuStudio 的 Device 标签中嵌入 Fluidd 控制面板，实现类似 OrcaSlicer 的原生体验。
+
+**源码分析结论**：
+- BambuStudio 已有 `PrinterWebView`（嵌入式 wxWebView），选择非 BBL 打印机时自动切换 Device 标签为 WebView
+- `Plater.cpp:3370-3385` 读取 `print_host_webui`/`print_host` 并调用 `load_printer_url(url)` → WebView 加载该 URL
+- `MainFrame.cpp:1438-1463` `show_device(false)` 将 MonitorPanel 替换为 PrinterWebView
+- 原始代码**不会自动注入 API Key**，也没有 `OnLoaded`/`OnNewWindow` 事件处理
+
+**OrcaSlicer 对比**：
+- OrcaSlicer 的 `PrinterWebView` 有 `SendAPIKey()` 方法，在页面加载后注入 JavaScript 拦截 `window.fetch`，自动添加 `X-API-Key` 请求头
+- OrcaSlicer 有 `PrinterWebViewHandler` 工厂模式，为不同品牌打印机创建不同的 IPC Handler（目前只有 Elegoo）
+- OrcaSlicer 有 Linux WebKitGTK 的 `inject_vue_resize_workaround()` 修复 Fluidd/Mainsail 崩溃问题
+- OrcaSlicer 的 `OnNewWindow` 事件拦截外部链接，用系统浏览器打开
+
+**纯配置方案（不改源码）**：
+- 在 U1 的 `moonraker.conf` 中添加 `[authorization]` 段，配置 `trusted_clients: 192.168.0.0/16` 信任局域网
+- 这样 Fluidd 在 BambuStudio WebView 中加载时无需 API Key 即可正常操作
+- 用户体验：切换到 Device 标签 → 自动显示 Fluidd 控制面板 → 可直接控制温度/速度/打印任务等
+
+**源码修改方案（完整体验，需重编译）**：
+- 修改 `PrinterWebView.hpp/cpp`：添加 `SendAPIKey()`、`OnLoaded`/`OnNewWindow` 事件、Linux 兼容
+- 修改 `MainFrame.cpp`：`load_printer_url` 调用链传递 API Key
+- 修改 `Plater.cpp`：`load_printer_url` 调用传递 API Key
 
 ### v3.14 修复（热床 3D 模型和纹理加载）
 

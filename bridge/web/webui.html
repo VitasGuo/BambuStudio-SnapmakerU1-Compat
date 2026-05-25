@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>BambuStudio Bridge</title>
+<style>
+:root{--bg:#f0f2f5;--panel:#fff;--panel2:#f5f5f5;--border:#e0e0e0;--primary:#2196f3;--primary-light:#64b5f6;--danger:#f44336;--success:#4caf50;--warn:#ff9800;--text:#333;--text2:#666;--text3:#999;--radius:10px}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;font-size:18px;color:var(--text);background:var(--bg)}
+.app{display:flex;height:100%}
+
+.sidebar{width:76px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;flex-shrink:0}
+.sidebar-top{padding:16px 0}
+.sidebar-top .logo{width:44px;height:44px;border-radius:10px;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.sidebar-top .logo img{width:100%;height:100%;object-fit:contain}
+.sidebar-nav{flex:1;display:flex;flex-direction:column;align-items:center;padding-top:28px;gap:6px}
+.nav-item{width:54px;height:54px;border-radius:10px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text3);transition:all .15s}
+.nav-item:hover{background:var(--bg);color:var(--text)}
+.nav-item.active{background:rgba(33,150,243,.1);color:var(--primary)}
+.nav-item svg{width:28px;height:28px}
+
+.main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.topbar{height:56px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 22px;gap:14px;flex-shrink:0}
+.topbar .dev-name{font-size:20px;font-weight:600}
+.topbar .dev-status{font-size:15px;color:var(--success);display:flex;align-items:center;gap:6px}
+.topbar .dev-status::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--success)}
+.topbar .spacer{flex:1}
+.topbar .wifi-icon{color:var(--success)}
+.topbar-refresh{background:none;border:1px solid var(--border);border-radius:6px;padding:4px 8px;cursor:pointer;color:var(--text2);display:flex;align-items:center;transition:all .15s;margin-left:8px}
+.topbar-refresh:hover{border-color:var(--primary);color:var(--primary);background:rgba(33,150,243,.05)}
+.lang-btn{background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;cursor:pointer;color:var(--text2);font-size:13px;font-weight:600;transition:all .15s;margin-left:8px}
+.lang-btn:hover{border-color:var(--primary);color:var(--primary);background:rgba(33,150,243,.05)}
+.mode-toggle{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden}
+.mode-toggle button{padding:6px 16px;min-width:70px;border:none;font-size:14px;font-weight:600;cursor:pointer;background:var(--panel);color:var(--text3);transition:all .15s;-webkit-user-select:none;user-select:none}
+.mode-toggle button.active{background:var(--primary);color:#fff;border-color:var(--primary)}
+.mode-toggle button:hover:not(.active){color:var(--primary)}
+
+.content{flex:1;overflow-y:auto;padding:16px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;max-width:1600px;margin:0 auto}
+
+.panel{background:var(--panel);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;display:flex;flex-direction:column}
+.panel-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;font-size:15px;font-weight:600;color:var(--text2)}
+.panel-header .spacer{flex:1}
+.panel-header .icon-btn{width:34px;height:34px;border-radius:7px;border:none;background:transparent;color:var(--text3);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.panel-header .icon-btn:hover{background:var(--bg);color:var(--primary)}
+.panel-header .icon-btn svg{width:20px;height:20px}
+.panel-body{flex:1;padding:12px;overflow-y:auto}
+
+.cam-area{position:relative;background:#1a1a2e;aspect-ratio:16/9;max-height:440px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.cam-area img{width:100%;height:100%;object-fit:contain}
+.cam-play{width:84px;height:84px;border-radius:50%;background:rgba(255,255,255,.15);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;border:2px solid rgba(255,255,255,.3)}
+.cam-play:hover{background:rgba(255,255,255,.25);transform:scale(1.05)}
+.cam-play svg{width:34px;height:34px;color:#fff;margin-left:4px}
+.cam-off-text{position:absolute;bottom:28px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.6);font-size:16px}
+.cam-err{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;color:rgba(255,255,255,.5)}
+.cam-err svg{width:48px;height:48px;margin-bottom:8px;opacity:.4}
+.cam-err p{font-size:14px;margin:4px 0}
+.cam-err .hint{font-size:12px;color:rgba(255,255,255,.3)}
+
+.ctrl-layout{display:flex;gap:12px;height:100%}
+.ctrl-left{flex:1;min-width:0}
+.ctrl-right{flex:0 0 auto;min-width:200px;display:flex;flex-direction:column;align-items:center}
+.temp-list{display:flex;flex-direction:column;gap:2px}
+.temp-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:8px;cursor:pointer;transition:all .1s}
+.temp-item:hover{background:var(--bg)}
+.temp-item.active{background:rgba(33,150,243,.08)}
+.temp-item .t-icon{width:28px;height:28px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;border-radius:6px;flex-shrink:0}
+.temp-item .t-icon.h{background:rgba(244,67,54,.1);color:var(--danger)}
+.temp-item .t-icon.b{background:rgba(33,150,243,.1);color:var(--primary)}
+.temp-item .t-info{flex:1;min-width:0}
+.temp-item .t-info .t-name{font-size:13px;color:var(--text2)}
+.temp-item .t-info .t-val{font-size:16px;font-weight:600;white-space:nowrap}
+.temp-item .t-set{width:64px;height:30px;border:1px solid var(--border);border-radius:6px;text-align:center;font-size:14px;color:var(--text);background:var(--panel)}
+.temp-item .t-set:focus{outline:none;border-color:var(--primary)}
+
+.tool-tabs{display:flex;gap:5px;margin-bottom:8px}
+.tool-tab{padding:4px 12px;border-radius:14px;border:1px solid var(--border);background:var(--panel);font-size:13px;cursor:pointer;transition:all .15s;color:var(--text2)}
+.tool-tab.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.tool-tab:hover:not(.active){border-color:var(--primary);color:var(--primary)}
+
+.step-tabs{display:flex;gap:5px;margin-bottom:8px}
+.step-tab{padding:3px 10px;border-radius:12px;border:1px solid var(--border);background:var(--panel);font-size:12px;cursor:pointer;transition:all .15s;color:var(--text2)}
+.step-tab.active{background:var(--primary);border-color:var(--primary);color:#fff}
+
+.dpad{position:relative;width:168px;height:168px;margin:0 auto}
+.dpad-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:50px;height:50px;border-radius:50%;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--text2)}
+.dpad-btn{position:absolute;width:44px;height:44px;border-radius:50%;border:1px solid var(--border);background:var(--panel);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .1s;color:var(--text2);font-size:20px}
+.dpad-btn:hover{background:var(--primary);border-color:var(--primary);color:#fff}
+.dpad-btn.up{top:0;left:50%;transform:translateX(-50%)}
+.dpad-btn.down{bottom:0;left:50%;transform:translateX(-50%)}
+.dpad-btn.left{left:0;top:50%;transform:translateY(-50%)}
+.dpad-btn.right{right:0;top:50%;transform:translateY(-50%)}
+
+.z-control{display:flex;flex-direction:column;gap:5px;margin-top:6px;align-items:center}
+.z-btn{width:100px;height:34px;border-radius:7px;border:1px solid var(--border);background:var(--panel);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--text2);transition:all .1s}
+.z-btn:hover{background:var(--primary);border-color:var(--primary);color:#fff}
+
+.ctrl-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+.ctrl-actions button{padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--panel);font-size:14px;cursor:pointer;color:var(--text2);transition:all .15s}
+.ctrl-actions button:hover{border-color:var(--primary);color:var(--primary)}
+
+.job-layout{display:flex;gap:16px;align-items:flex-start}
+.job-preview{width:168px;height:168px;background:var(--panel2);border-radius:10px;display:flex;align-items:center;justify-content:center;border:1px solid var(--border)}
+.job-preview svg{width:67px;height:67px;color:var(--border)}
+.job-info{flex:1}
+.job-info .job-name{font-size:20px;font-weight:600;margin-bottom:6px}
+.job-info .job-pct{font-size:50px;font-weight:300;color:var(--text3);line-height:1}
+.job-info .job-detail{font-size:15px;color:var(--text3);margin-top:6px}
+.job-progress{height:6px;background:var(--border);border-radius:3px;margin:14px 0;overflow:hidden}
+.job-progress .fill{height:100%;background:var(--primary);border-radius:3px;transition:width .5s}
+.job-actions{display:flex;gap:8px}
+.job-actions button{flex:1;padding:11px;border-radius:8px;border:1px solid var(--border);background:var(--panel);font-size:15px;font-weight:600;cursor:pointer;transition:all .15s;color:var(--text)}
+.job-actions button:hover{border-color:var(--primary);color:var(--primary)}
+.job-actions button.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+.job-actions button.primary:hover{background:var(--primary-light)}
+.job-actions button.danger:hover{border-color:var(--danger);color:var(--danger)}
+
+.file-list{max-height:280px;overflow-y:auto}
+.file-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:7px;cursor:pointer;font-size:15px;color:var(--text2);transition:all .1s}
+.file-item:hover{background:var(--bg);color:var(--text)}
+.file-item svg{width:20px;height:20px;flex-shrink:0;color:var(--primary)}
+.file-item .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.fil-list{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.fil-slot{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 8px;border-radius:10px;border:1px solid var(--border);background:var(--panel2);min-width:88px;cursor:pointer;transition:all .15s}
+.fil-slot:hover{border-color:var(--primary)}
+.fil-slot.active{border-color:var(--primary);background:rgba(33,150,243,.05)}
+.fil-slot .fil-num{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff}
+.fil-slot .fil-type{font-size:12px;padding:2px 7px;border-radius:10px;background:var(--panel);color:var(--text2);font-weight:600;white-space:nowrap}
+.fil-slot .fil-icon{width:28px;height:28px;color:var(--text3)}
+.fil-slot .fil-det{font-size:12px;color:var(--text3);line-height:1.3}
+.fil-slot .fil-cal-btn{width:100%;padding:3px 0;border-radius:5px;border:1px solid var(--border);background:var(--panel);font-size:11px;cursor:pointer;color:var(--text2);transition:all .15s;margin-top:2px}
+.fil-slot .fil-cal-btn:hover{border-color:var(--primary);color:var(--primary);background:rgba(33,150,243,.05)}
+.fil-slot .fil-cal-btn:disabled{opacity:.4;cursor:not-allowed}
+
+.tbtn{padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:var(--panel);font-size:12px;cursor:pointer;color:var(--text2);transition:all .15s;white-space:nowrap}
+.tbtn:hover{border-color:var(--primary);color:var(--primary)}
+.tbtn.off{color:var(--text3)}
+.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.55);z-index:1000;display:flex;justify-content:center;align-items:center}
+.modal{background:#fff;border-radius:14px;width:460px;max-width:92vw;max-height:85vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,.25);color:#333}
+.modal-dark{background:#1e1e2e;color:#e0e0e0}
+.modal h2{margin:0;padding:18px 22px 12px;font-size:18px;font-weight:700;border-bottom:1px solid #eee}
+.modal-dark h2{border-bottom-color:#333}
+.modal-body{padding:16px 22px}
+.modal-section{margin-bottom:16px}
+.modal-section h3{font-size:14px;font-weight:600;margin:0 0 8px;color:#666}
+.modal-dark .modal-section h3{color:#aaa}
+.modal-fil-list{display:flex;flex-direction:column;gap:6px}
+.modal-fil-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;border:2px solid #e0e0e0;cursor:pointer;transition:all .15s}
+.modal-dark .modal-fil-item{border-color:#444}
+.modal-fil-item.selected{border-color:#2196f3;background:rgba(33,150,243,.08)}
+.modal-fil-dot{width:22px;height:22px;border-radius:50%;flex-shrink:0}
+.modal-fil-info{flex:1}
+.modal-fil-type{font-size:14px;font-weight:600}
+.modal-fil-sub{font-size:12px;color:#999}
+.modal-opt-item{display:flex;align-items:center;gap:10px;padding:8px 0}
+.modal-opt-item label{flex:1;font-size:14px;cursor:pointer}
+.modal-opt-item input[type=checkbox]{width:18px;height:18px;accent-color:#2196f3;cursor:pointer}
+.modal-actions{display:flex;gap:10px;padding:14px 22px;border-top:1px solid #eee;justify-content:flex-end}
+.modal-dark .modal-actions{border-top-color:#333}
+.modal-btn{padding:8px 20px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
+.modal-btn-cancel{background:#f5f5f5;color:#666}
+.modal-dark .modal-btn-cancel{background:#333;color:#aaa}
+.modal-btn-cancel:hover{background:#e0e0e0}
+.modal-btn-print{background:#2196f3;color:#fff}
+.modal-btn-print:hover{background:#1976d2}
+.modal-btn-print:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:900px){.grid{grid-template-columns:1fr}.sidebar{width:66px}.sidebar-top .logo{width:38px;height:38px}}
+</style>
+</head>
+<body>
+<div class="app">
+
+<div class="sidebar">
+<div class="sidebar-top"><div class="logo"><img src="/snapmaker.png" alt="Snapmaker"></div></div>
+<div class="sidebar-nav">
+<div class="nav-item active" data-tab="device" onclick="switchTab('device')" title="Device" data-i18n="device"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+<div class="nav-item" data-tab="fluidd" onclick="switchTab('fluidd')" title="Fluidd Console" data-i18n="fluidd_console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="16,9 11,14 16,19"/><line x1="8" y1="18" x2="8" y2="18"/></svg></div>
+<div class="nav-item" data-tab="debug" onclick="switchTab('debug')" title="Debug Logs" data-i18n="debug_logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></div>
+</div>
+</div>
+
+<div class="main">
+<div class="topbar">
+<span class="dev-name">U1</span>
+<span class="dev-status" id="connStatus">Loading...</span>
+<span class="spacer"></span>
+<svg class="wifi-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
+<button class="topbar-refresh" onclick="location.reload()" title="Refresh Page"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button>
+<button class="lang-btn" id="langBtn" onclick="toggleLang()">中/EN</button>
+</div>
+
+<div class="content">
+<div id="device-content" class="grid">
+
+<!-- Camera -->
+<div class="panel">
+<div class="panel-header">
+<span data-i18n="camera">Camera</span>
+<span class="spacer"></span>
+<button class="icon-btn" onclick="toggleCam()" id="camBtn" title="Toggle camera"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg></button>
+</div>
+<div class="cam-area" id="camArea">
+<img id="camImg" style="display:none">
+<div class="cam-play" id="camPlay" onclick="toggleCam()"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></div>
+<div class="cam-off-text" id="camOffText"></div>
+<div class="cam-err" id="camErr" style="display:none">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+<p id="camErrMsg">Camera unavailable</p>
+<p class="hint" id="camErrHint">Check webcam service on printer</p>
+</div>
+</div>
+</div>
+
+<!-- Control -->
+<div class="panel">
+<div class="panel-header">
+<span data-i18n="control">Control</span>
+<span class="spacer"></span>
+<button class="icon-btn" onclick="refreshCtrl()" title="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button>
+</div>
+<div class="panel-body">
+<div class="ctrl-layout">
+<div class="ctrl-left">
+<div class="tool-tabs">
+<div class="tool-tab active" onclick="selTool(0,this)" data-i18n="tool1">Tool1</div>
+<div class="tool-tab" onclick="selTool(1,this)" data-i18n="tool2">Tool2</div>
+<div class="tool-tab" onclick="selTool(2,this)" data-i18n="tool3">Tool3</div>
+<div class="tool-tab" onclick="selTool(3,this)" data-i18n="tool4">Tool4</div>
+</div>
+<div class="temp-list">
+<div class="temp-item active" id="tItem0">
+<div class="t-icon h">1</div>
+<div class="t-info"><div class="t-name" data-i18n="hotend1">Hotend 1</div><div class="t-val" id="t0Val">--°C</div></div>
+<input class="t-set" id="t0Set" data-i18n-ph="target" placeholder="Target" type="number" onkeydown="if(event.key==='Enter')setToolTemp(0)">
+</div>
+<div class="temp-item" id="tItem1">
+<div class="t-icon h">2</div>
+<div class="t-info"><div class="t-name" data-i18n="hotend2">Hotend 2</div><div class="t-val" id="t1Val">--°C</div></div>
+<input class="t-set" id="t1Set" data-i18n-ph="target" placeholder="Target" type="number" onkeydown="if(event.key==='Enter')setToolTemp(1)">
+</div>
+<div class="temp-item" id="tItem2">
+<div class="t-icon h">3</div>
+<div class="t-info"><div class="t-name" data-i18n="hotend3">Hotend 3</div><div class="t-val" id="t2Val">--°C</div></div>
+<input class="t-set" id="t2Set" data-i18n-ph="target" placeholder="Target" type="number" onkeydown="if(event.key==='Enter')setToolTemp(2)">
+</div>
+<div class="temp-item" id="tItem3">
+<div class="t-icon h">4</div>
+<div class="t-info"><div class="t-name" data-i18n="hotend4">Hotend 4</div><div class="t-val" id="t3Val">--°C</div></div>
+<input class="t-set" id="t3Set" data-i18n-ph="target" placeholder="Target" type="number" onkeydown="if(event.key==='Enter')setToolTemp(3)">
+</div>
+<div class="temp-item">
+<div class="t-icon b">B</div>
+<div class="t-info"><div class="t-name" data-i18n="heatbed">Heatbed</div><div class="t-val" id="bedVal">--°C</div></div>
+<input class="t-set" id="bedSet" data-i18n-ph="target" placeholder="Target" type="number" onkeydown="if(event.key==='Enter')setBedTemp()">
+</div>
+</div>
+<div style="margin-top:6px;display:flex;align-items:center;gap:6px;padding:4px 6px;flex-wrap:wrap">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--warn);flex-shrink:0"><path d="M9 18h6M10 22h4M12 2v2M12 8v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 6.34L4.93 4.93M19.07 19.07l-1.41-1.41"/></svg>
+<span style="font-size:13px;color:var(--text2);white-space:nowrap" data-i18n="light">Light</span>
+<span class="spacer"></span>
+<button class="tbtn" onclick="setLight(true)" data-i18n="on">On</button>
+<button class="tbtn off" onclick="setLight(false)" data-i18n="off">Off</button>
+</div>
+<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;flex-wrap:wrap">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary);flex-shrink:0"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 6v6l4 2"/></svg>
+<span style="font-size:13px;color:var(--text2);white-space:nowrap" data-i18n="model_fan">Model Fan</span>
+<span style="font-size:13px;font-weight:600;color:var(--primary)" id="fan1Val">0%</span>
+<span class="spacer"></span>
+<button class="tbtn off" onclick="setFan('fan',0)" data-i18n="off">Off</button>
+<button class="tbtn" onclick="setFan('fan',50)">50%</button>
+<button class="tbtn" onclick="setFan('fan',100)">100%</button>
+</div>
+<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;flex-wrap:wrap">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary);flex-shrink:0"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/><path d="M12 6v6l4 2"/></svg>
+<span style="font-size:13px;color:var(--text2);white-space:nowrap" data-i18n="cavity_fan">Cavity Fan</span>
+<span style="font-size:13px;font-weight:600;color:var(--primary)" id="fan2Val">0%</span>
+<span class="spacer"></span>
+<button class="tbtn off" onclick="setFan('fan_generic cavity_fan',0)" data-i18n="off">Off</button>
+<button class="tbtn" onclick="setFan('fan_generic cavity_fan',50)">50%</button>
+<button class="tbtn" onclick="setFan('fan_generic cavity_fan',100)">100%</button>
+</div>
+<div style="display:flex;align-items:center;gap:6px;padding:4px 6px;flex-wrap:wrap">
+<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--success);flex-shrink:0"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+<span style="font-size:13px;color:var(--text2);white-space:nowrap" data-i18n="speed">Speed</span>
+<span style="font-size:13px;font-weight:600;color:var(--primary)" id="speedVal">100%</span>
+<span class="spacer"></span>
+<button class="tbtn" onclick="setSpeed(50)">50%</button>
+<button class="tbtn" onclick="setSpeed(80)">80%</button>
+<button class="tbtn" onclick="setSpeed(100)">100%</button>
+<button class="tbtn" onclick="setSpeed(120)">120%</button>
+<button class="tbtn" onclick="setSpeed(150)">150%</button>
+</div>
+</div>
+<div class="ctrl-right">
+<div class="step-tabs">
+<div class="step-tab active" onclick="setStep(10,this)">10mm</div>
+<div class="step-tab" onclick="setStep(1,this)">1mm</div>
+<div class="step-tab" onclick="setStep(0.1,this)">0.1mm</div>
+</div>
+<div class="dpad">
+<div class="dpad-center">XY</div>
+<button class="dpad-btn up" onclick="move('Y',1)">&#9650;</button>
+<button class="dpad-btn down" onclick="move('Y',-1)">&#9660;</button>
+<button class="dpad-btn left" onclick="move('X',-1)">&#9664;</button>
+<button class="dpad-btn right" onclick="move('X',1)">&#9654;</button>
+</div>
+<div style="font-size:12px;color:var(--text3);margin-top:4px" data-i18n="extruder">Extruder</div>
+<div class="z-control">
+<button class="z-btn" onclick="move('Z',1)">&#9650; Z</button>
+<button class="z-btn" onclick="homeAll()" style="background:var(--primary);color:#fff;border-color:var(--primary)" data-i18n="home">&#8962; Home</button>
+<button class="z-btn" onclick="move('Z',-1)">&#9660; Z</button>
+</div>
+<div style="font-size:12px;color:var(--text3);margin-top:4px" data-i18n="heatbed_label">Heatbed</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Print Job -->
+<div class="panel">
+<div class="panel-header">
+<span data-i18n="print_job">Print Job</span>
+<span class="spacer"></span>
+<button class="icon-btn" onclick="switchJobTab(0)" id="jobTabBtn0" title="Status"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></button>
+<button class="icon-btn" onclick="switchJobTab(1)" id="jobTabBtn1" title="Files"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></button>
+</div>
+<div class="panel-body">
+<div id="jobStatus">
+<div class="job-layout">
+<div class="job-preview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></div>
+<div class="job-info">
+<div class="job-name" id="jobName">--</div>
+<div class="job-pct" id="jobPct">0%</div>
+<div class="job-detail"><span id="jobLayer">0/0</span> <span data-i18n="layers">layers</span> &nbsp;|&nbsp; <span id="jobTime">0h 0m</span></div>
+</div>
+</div>
+<div class="job-progress"><div class="fill" id="jobBar" style="width:0"></div></div>
+<div class="job-actions">
+<button class="primary" id="btnStart" onclick="startPrint()" style="display:none" data-i18n="start">&#9654; Start</button>
+<button id="btnPause" onclick="pausePrint()" style="display:none" data-i18n="pause">&#10074;&#10074; Pause</button>
+<button class="primary" id="btnResume" onclick="resumePrint()" style="display:none" data-i18n="resume">&#9654; Resume</button>
+<button class="danger" id="btnCancel" onclick="cancelPrint()" style="display:none" data-i18n="stop">&#9632; Stop</button>
+</div>
+</div>
+<div id="jobFiles" style="display:none">
+<div class="file-list" id="fileList"><div style="color:var(--text3);font-size:15px;padding:20px;text-align:center">Loading files...</div></div>
+</div>
+</div>
+</div>
+
+<!-- Filament -->
+<div class="panel">
+<div class="panel-header">
+<span data-i18n="filament">Filament</span>
+<span class="spacer"></span>
+<button class="icon-btn" onclick="refreshFil()" title="Refresh"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button>
+</div>
+<div class="panel-body">
+<div class="fil-list" id="filList">
+<div class="fil-slot" id="fil0" onclick="selFil(0)">
+<div class="fil-num" style="background:#ff5722">1</div>
+<div class="fil-type" id="fil0type">--</div>
+<div class="fil-det" id="fil0det">--</div>
+<div class="fil-det" id="fil0state">--</div>
+<button class="fil-cal-btn" id="fil0cal" onclick="event.stopPropagation();calibrateFlow(0)" data-i18n="flow_cal">Flow Cal</button>
+</div>
+<div class="fil-slot" id="fil1" onclick="selFil(1)">
+<div class="fil-num" style="background:#333">2</div>
+<div class="fil-type" id="fil1type">--</div>
+<div class="fil-det" id="fil1det">--</div>
+<div class="fil-det" id="fil1state">--</div>
+<button class="fil-cal-btn" id="fil1cal" onclick="event.stopPropagation();calibrateFlow(1)" data-i18n="flow_cal">Flow Cal</button>
+</div>
+<div class="fil-slot" id="fil2" onclick="selFil(2)">
+<div class="fil-num" style="background:#8d6e63">3</div>
+<div class="fil-type" id="fil2type">--</div>
+<div class="fil-det" id="fil2det">--</div>
+<div class="fil-det" id="fil2state">--</div>
+<button class="fil-cal-btn" id="fil2cal" onclick="event.stopPropagation();calibrateFlow(2)" data-i18n="flow_cal">Flow Cal</button>
+</div>
+<div class="fil-slot" id="fil3" onclick="selFil(3)">
+<div class="fil-num" style="background:#607d8b">4</div>
+<div class="fil-type" id="fil3type">--</div>
+<div class="fil-det" id="fil3det">--</div>
+<div class="fil-det" id="fil3state">--</div>
+<button class="fil-cal-btn" id="fil3cal" onclick="event.stopPropagation();calibrateFlow(3)" data-i18n="flow_cal">Flow Cal</button>
+</div>
+</div>
+<div style="margin-top:12px;padding:10px 12px;background:var(--panel2);border-radius:8px">
+<div style="font-size:13px;color:var(--text3);margin-bottom:4px" data-i18n="feed_status">Feed Status</div>
+<div style="display:flex;gap:20px">
+<div style="font-size:14px"><span style="color:var(--text3)" data-i18n="left">Left</span> <span id="feedL" style="font-weight:600">--</span></div>
+<div style="font-size:14px"><span style="color:var(--text3)" data-i18n="right">Right</span> <span id="feedR" style="font-weight:600">--</span></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Fluidd Content -->
+<div id="fluidd-content" style="display:none; width:100%; height:100%;">
+  <iframe src="/fluidd/" style="width:100%; height:100%; border:none;"></iframe>
+</div>
+<div id="debug-content" style="display:none; width:100%; height:100%; overflow:hidden;">
+  <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#1a1a2e;border-bottom:1px solid #2a2a3e;">
+    <span style="color:#0f8bff;font-weight:600;font-size:13px;" data-i18n="debug_logs">Debug Logs</span>
+    <span style="color:#888;font-size:11px;" id="dbgCount"></span>
+    <span style="flex:1"></span>
+    <select id="dbgLevel" onchange="loadDebugLogs()" style="background:#16213e;color:#e0e0e0;border:1px solid #2a2a3e;border-radius:4px;padding:2px 6px;font-size:11px;">
+      <option value="">All</option><option value="ERROR">ERROR</option><option value="WARN">WARN</option><option value="INFO">INFO</option><option value="DEBUG">DEBUG</option>
+    </select>
+    <button onclick="loadDebugLogs()" style="background:#16213e;color:#e0e0e0;border:1px solid #2a2a3e;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;" data-i18n="refresh">Refresh</button>
+    <button onclick="toggleDebugAuto()" id="dbgAutoBtn" style="background:#16213e;color:#0f8bff;border:1px solid #0f8bff;border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;">Auto: OFF</button>
+    <a href="/api/bridge/debug/export" download style="background:#16213e;color:#4caf50;border:1px solid #4caf50;border-radius:4px;padding:2px 8px;font-size:11px;text-decoration:none;" data-i18n="export">Export</a>
+  </div>
+  <pre id="dbgLog" style="margin:0;padding:8px 12px;font-size:11px;font-family:'Cascadia Code',Consolas,monospace;color:#c0c0c0;background:#0d0d1a;height:calc(100% - 45px);overflow-y:auto;white-space:pre-wrap;word-break:break-all;"></pre>
+</div>
+</div>
+</div>
+
+<script>
+var ws=null,rt=null,camOn=false,camAvail=false,camProbing=true,camPollId=null,camErrCount=0,step=10,selToolIdx=0;
+var swReady=(function(){
+if(!('serviceWorker' in navigator))return Promise.resolve();
+return navigator.serviceWorker.getRegistrations().then(function(regs){
+var unregPromises=regs.map(function(reg){return reg.unregister();});
+return Promise.all(unregPromises).then(function(){
+if(regs.length>0)console.log('[Bridge] Unregistered '+regs.length+' Service Worker(s)');
+});
+}).catch(function(e){console.warn('[Bridge] SW cleanup error:',e);});
+})();
+var INIT_DATA=null;
+function onInitData(d){
+INIT_DATA=d;
+for(var k in d.result.status){if(D[k])Object.assign(D[k],d.result.status[k]);}
+loadFilamentInfo();
+upd({});
+$('connStatus').textContent='Online';
+}
+var _jscb=0;
+function loadJS(url,cb){
+var cbName='_jscb'+(_jscb++);
+window[cbName]=function(d){delete window[cbName];cb(d);};
+var s=document.createElement('script');
+s.src=url+(url.indexOf('?')>=0?'&':'?')+'cb='+cbName;
+s.onerror=function(){delete window[cbName];cb(null);};
+document.head.appendChild(s);
+}
+function bridgeGET(path,cb){
+if(path.indexOf('/api/bridge/')===0){
+loadJS(path+'.js',cb);
+}else{
+loadJS('/api/bridge/proxy.js?path='+encodeURIComponent(path),cb);
+}
+}
+function bridgePOST(path,body,cb){
+var qs='';
+if(body){
+var parts=[];
+for(var k in body){
+var v=body[k];
+parts.push(encodeURIComponent(k)+'='+(typeof v==='boolean'?(v?'1':'0'):encodeURIComponent(String(v))));
+}
+qs=parts.join('&');
+}
+var url=path+'.js'+(qs?'?'+qs:'');
+loadJS(url,cb||function(){});
+}
+var D={extruder:{},extruder1:{},extruder2:{},extruder3:{},heater_bed:{},toolhead:{},print_stats:{},system_stats:{},display_status:{},fan:{},'fan_generic cavity_fan':{},'filament_feed left':{},'filament_feed right':{},filament_parameters:{},gcode_move:{},'led cavity_led':{}};
+var toolNames=['extruder','extruder1','extruder2','extruder3'];
+var curLang=(function(){try{var s=localStorage.getItem('bridge_lang');if(s)return s;}catch(e){}return'zh';})();
+var I18N={
+en:{
+camera:'Camera',control:'Control',print_job:'Print Job',filament:'Filament',
+tool1:'Tool1',tool2:'Tool2',tool3:'Tool3',tool4:'Tool4',
+hotend1:'Hotend 1',hotend2:'Hotend 2',hotend3:'Hotend 3',hotend4:'Hotend 4',
+heatbed:'Heatbed',target:'Target',
+light:'Light',on:'On',off:'Off',model_fan:'Model Fan',cavity_fan:'Cavity Fan',speed:'Speed',
+extruder:'Extruder',home:'\u2302 Home',heatbed_label:'Heatbed',
+feed_status:'Feed Status',left:'Left',right:'Right',
+device:'Device',fluidd_console:'Fluidd Console',debug_logs:'Debug Logs',
+refresh:'Refresh',export:'Export',
+flow_cal:'Flow Cal',
+loading:'Loading...',no_files:'No files',failed_files:'Failed to load files',
+detecting:'Detecting...',cam_off:'Camera off',cam_unavail:'Camera unavailable',
+confirm_print:'Confirm Print',filament_sel:'Filament Selection',print_options:'Print Options',
+auto_level:'Auto Bed Leveling',flow_calibrate:'Flow Calibration',timelapse:'Timelapse',
+cancel:'Cancel',start_print:'\u25B6 Start Print',
+loaded:'Loaded',empty:'Empty',extruder_n:'Extruder',
+start:'Start',pause:'Pause',resume:'Resume',stop:'Stop',
+idle:'Idle',printing:'Printing',paused:'Paused',complete:'Complete',cancelled:'Cancelled',error:'Error',
+layers:'layers',online:'Online',reconnecting:'Reconnecting...',ws_error:'WS Error',
+file_name:'File',progress:'Progress',elapsed:'Elapsed',remaining:'Remaining',
+calibrating:'Calibrating...',printer_busy:'Printer is busy',
+no_pending:'No pending print',print_started:'Print started',print_failed:'Print failed',
+ws_not_connected:'WebSocket not connected. Please wait and try again.'
+},
+zh:{
+camera:'监控',control:'控制',print_job:'打印任务',filament:'耗材',
+tool1:'喷头1',tool2:'喷头2',tool3:'喷头3',tool4:'喷头4',
+hotend1:'喷头 1',hotend2:'喷头 2',hotend3:'喷头 3',hotend4:'喷头 4',
+heatbed:'热床',target:'设定温度',
+light:'照明',on:'开',off:'关',model_fan:'冷却风扇',cavity_fan:'腔体风扇',speed:'速度倍率',
+extruder:'挤出机',home:'\u2302 回原点',heatbed_label:'热床',
+feed_status:'进料检测',left:'左',right:'右',
+device:'设备',fluidd_console:'Fluidd 控制台',debug_logs:'调试日志',
+refresh:'刷新',export:'导出',
+flow_cal:'流量校准',
+loading:'加载中...',no_files:'无文件',failed_files:'加载文件失败',
+detecting:'检测中...',cam_off:'监控关闭',cam_unavail:'监控不可用',
+confirm_print:'确认打印',filament_sel:'耗材选择',print_options:'打印选项',
+auto_level:'自动调平',flow_calibrate:'流量校准',timelapse:'延时摄影',
+cancel:'取消',start_print:'\u25B6 开始打印',
+loaded:'已装入',empty:'未装入',extruder_n:'喷头',
+start:'开始',pause:'暂停',resume:'恢复',stop:'停止',
+idle:'待机',printing:'打印中',paused:'已暂停',complete:'已完成',cancelled:'已取消',error:'错误',
+layers:'层',online:'已连接',reconnecting:'重连中...',ws_error:'连接错误',
+file_name:'文件',progress:'进度',elapsed:'已用时间',remaining:'剩余时间',
+calibrating:'校准中...',printer_busy:'打印机工作中',
+no_pending:'无待打印任务',print_started:'打印已开始',print_failed:'打印失败',
+ws_not_connected:'WebSocket 未连接，请稍后重试。'
+}
+};
+function t(k){return(I18N[curLang]||I18N.en)[k]||I18N.en[k]||k;}
+function setLang(lang){
+curLang=lang;
+try{localStorage.setItem('bridge_lang',lang);}catch(e){}
+document.querySelectorAll('[data-i18n]').forEach(function(el){
+var k=el.getAttribute('data-i18n');
+if(I18N[lang]&&I18N[lang][k])el.textContent=I18N[lang][k];
+});
+document.querySelectorAll('[data-i18n-ph]').forEach(function(el){
+var k=el.getAttribute('data-i18n-ph');
+if(I18N[lang]&&I18N[lang][k])el.placeholder=I18N[lang][k];
+});
+$('langBtn').textContent=lang==='zh'?'EN/中':'中/EN';
+}
+function toggleLang(){setLang(curLang==='zh'?'en':'zh');}
+function $(id){return document.getElementById(id)}
+
+function switchTab(tab){
+  // 更新侧边栏导航状态
+  document.querySelectorAll('.nav-item').forEach(function(el){
+    el.classList.remove('active');
+    if(el.dataset.tab===tab) el.classList.add('active');
+  });
+  
+  // 切换内容显示
+  $('device-content').style.display=tab==='device'?'grid':'none';
+  $('fluidd-content').style.display=tab==='fluidd'?'block':'none';
+  $('debug-content').style.display=tab==='debug'?'flex':'none';
+  if(tab==='debug') loadDebugLogs();
+}
+
+function toggleCam(){
+camOn=!camOn;
+if(camOn){
+if(camProbing){camOn=false;showCamErr(t('detecting'),'');return;}
+if(!camAvail){camOn=false;showCamErr(t('cam_unavail'),'');return;}
+$('camPlay').style.display='none';$('camOffText').style.display='none';$('camErr').style.display='none';
+camErrCount=0;pollCam();
+camPollId=setInterval(pollCam,500);
+}else{
+if(camPollId){clearInterval(camPollId);camPollId=null;}
+$('camImg').src='';$('camImg').style.display='none';$('camPlay').style.display='flex';$('camOffText').style.display='block';$('camOffText').textContent=camAvail?t('cam_off'):t('cam_unavail');$('camErr').style.display='none';
+}
+}
+var camBlobUrl=null;
+function pollCam(){
+var img=new Image();
+img.onload=function(){
+if(camBlobUrl)URL.revokeObjectURL(camBlobUrl);
+camBlobUrl=img.src;
+$('camImg').src=img.src;
+$('camImg').style.display='block';
+camFrameOk();
+};
+img.onerror=function(){camFrameErr();};
+img.src='/server/files/camera/monitor.jpg?_t='+Date.now();
+}
+function camFrameOk(){camErrCount=0;}
+function camFrameErr(){camErrCount++;if(camErrCount>=5){if(camPollId){clearInterval(camPollId);camPollId=null;}camOn=false;showCamErr(t('cam_unavail'),'');}}
+function showCamErr(msg,hint){$('camPlay').style.display='none';$('camOffText').style.display='none';$('camErr').style.display='block';$('camErrMsg').textContent=msg;$('camErrHint').textContent=hint;}
+
+function selTool(i,el){selToolIdx=i;document.querySelectorAll('.temp-item').forEach(function(t){t.classList.remove('active')});$('tItem'+i).classList.add('active');if(el){el.parentElement.querySelectorAll('.tool-tab').forEach(function(t){t.classList.remove('active')});el.classList.add('active');}}
+function setStep(v,el){step=v;if(el){el.parentElement.querySelectorAll('.step-tab').forEach(function(t){t.classList.remove('active')});el.classList.add('active');}}
+function move(a,d){gcode('G91\nG1 '+a+(step*d).toFixed(1)+' F6000\nG90');}
+function homeAll(){gcode('G28');}
+function setToolTemp(i){var v=parseInt($('t'+i+'Set').value);if(isNaN(v))return;gcode('SET_HEATER_TEMPERATURE HEATER='+toolNames[i]+' TARGET='+v);}
+function setBedTemp(){var v=parseInt($('bedSet').value);if(isNaN(v))return;gcode('SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET='+v);}
+function setLight(on){gcode('SET_LED LED=cavity_led '+((on?'RED=1 GREEN=1 BLUE=1 WHITE=1':'RED=0 GREEN=0 BLUE=0 WHITE=0')));}
+function setFan(name,pct){var s=Math.round(pct*2.55);if(name==='fan'){gcode('M106 S'+s);}else{gcode('SET_FAN_SPEED FAN='+name.replace('fan_generic ','')+' SPEED='+(pct/100));}}
+function setSpeed(pct){gcode('M220 S'+pct);$('speedVal').textContent=pct+'%';}
+function pausePrint(){gcode('PAUSE');}
+function resumePrint(){gcode('RESUME');}
+function cancelPrint(){if(confirm('Stop print?'))gcode('CANCEL_PRINT');}
+function startPrint(){switchJobTab(1);}
+function gcode(c){if(ws&&ws.readyState===1){ws.send(JSON.stringify({jsonrpc:"2.0",method:"printer.gcode.script",params:{script:c},id:Date.now()}));}}
+
+function switchJobTab(i){
+$('jobStatus').style.display=i===0?'block':'none';
+$('jobFiles').style.display=i===1?'block':'none';
+$('jobTabBtn0').style.color=i===0?'var(--primary)':'var(--text3)';
+$('jobTabBtn1').style.color=i===1?'var(--primary)':'var(--text3)';
+if(i===1)loadFiles();
+}
+
+function loadFiles(){
+$('fileList').innerHTML='<div style="color:var(--text3);font-size:15px;padding:28px;text-align:center">'+t('loading')+'</div>';
+bridgeGET('/server/files/list?root=gcodes',function(d){
+if(!d||!d.result){$('fileList').innerHTML='<div style="color:var(--danger);font-size:15px;padding:28px;text-align:center">'+t('failed_files')+'</div>';return;}
+var files=d.result||[];
+files.sort(function(a,b){return(b.modified||0)-(a.modified||0)});
+var html='';
+files.slice(0,50).forEach(function(f){
+var name=f.path.replace('gcodes/','');
+var sz=f.size?(f.size/1048576).toFixed(1)+'MB':'';
+html+='<div class="file-item" onclick="printFile(\''+f.path.replace(/'/g,"\\'")+'\')">';
+html+='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+html+='<span class="fname">'+name+'</span><span style="font-size:13px;color:var(--text3);margin-left:6px">'+sz+'</span></div>';
+});
+$('fileList').innerHTML=html||'<div style="color:var(--text3);font-size:15px;padding:28px;text-align:center">'+t('no_files')+'</div>';
+});
+}
+
+var pendingFilePath='';
+var printTaskData=null;
+var selectedExtruders=[0,1,2,3];
+
+function onPendingPrint(filename){
+pendingFilePath=filename;
+var name=filename.replace('gcodes/','');
+bridgeGET('/server/files/config/snapmaker/print_task.json',function(d){
+printTaskData=d||{};
+showPrintDialog(name,d||{});
+});
+}
+
+function printFile(path){
+pendingFilePath=path;
+var name=path.replace('gcodes/','');
+bridgeGET('/server/files/config/snapmaker/print_task.json',function(d){
+printTaskData=d||{};
+if(d){showPrintDialog(name,d);}
+else{doPrintSimple(path);}
+});
+}
+
+function showPrintDialog(name,task){
+var filTypes=task.filament_type||[];
+var filColors=task.filament_color_rgba||[];
+var filSub=task.filament_sub_type||[];
+var filExist=task.filament_exist||[];
+var html='<div class="modal-overlay" id="printModal" onclick="if(event.target===this)closePrintModal(true)">';
+html+='<div class="modal modal-dark">';
+html+='<h2>'+t('confirm_print')+'</h2>';
+html+='<div class="modal-body">';
+html+='<div style="font-size:14px;color:#aaa;margin-bottom:14px;word-break:break-all">'+name+'</div>';
+html+='<div class="modal-section"><h3>'+t('filament_sel')+'</h3><div class="modal-fil-list">';
+for(var i=0;i<4;i++){
+var type=filTypes[i]||'--';
+var sub=filSub[i]||'';
+var color=filColors[i]||'FFFFFFFF';
+var exist=filExist[i];
+var hex='#'+color.substring(0,6);
+var label=type+(sub?' ('+sub+')':'');
+html+='<div class="modal-fil-item'+(exist?' selected':'')+'" data-idx="'+i+'" onclick="toggleFilSelect(this,'+i+')">';
+html+='<div class="fil-dot" style="background:'+hex+';width:22px;height:22px;border-radius:50%;flex-shrink:0"></div>';
+html+='<div class="modal-fil-info"><div class="modal-fil-type">'+t('extruder_n')+' '+(i+1)+': '+label+'</div>';
+html+='<div class="modal-fil-sub">'+(exist?t('loaded'):t('empty'))+'</div></div></div>';
+}
+html+='</div></div>';
+html+='<div class="modal-section"><h3>'+t('print_options')+'</h3>';
+html+='<div class="modal-opt-item"><input type="checkbox" id="optLevel" '+(task.auto_bed_leveling?'checked':'')+'><label for="optLevel">'+t('auto_level')+'</label></div>';
+html+='<div class="modal-opt-item"><input type="checkbox" id="optFlow" '+(task.flow_calibrate?'checked':'')+'><label for="optFlow">'+t('flow_calibrate')+'</label></div>';
+html+='<div class="modal-opt-item"><input type="checkbox" id="optTimelapse" '+(task.time_lapse_camera?'checked':'')+'><label for="optTimelapse">'+t('timelapse')+'</label></div>';
+html+='</div></div>';
+html+='<div class="modal-actions">';
+html+='<button class="modal-btn modal-btn-cancel" onclick="closePrintModal(true)">'+t('cancel')+'</button>';
+html+='<button class="modal-btn modal-btn-print" id="btnDoPrint" onclick="doPrint()">'+t('start_print')+'</button>';
+html+='</div></div></div>';
+var old=document.getElementById('printModal');
+if(old)old.remove();
+document.body.insertAdjacentHTML('beforeend',html);
+selectedExtruders=[0,1,2,3];
+}
+
+function toggleFilSelect(el,idx){
+el.classList.toggle('selected');
+var items=document.querySelectorAll('.modal-fil-item');
+selectedExtruders=[];
+items.forEach(function(it){if(it.classList.contains('selected'))selectedExtruders.push(parseInt(it.dataset.idx));});
+}
+
+function closePrintModal(cancel){
+var m=document.getElementById('printModal');
+if(m)m.remove();
+if(cancel&&pendingFilePath)bridgePOST('/api/bridge/cancel_pending',null);
+pendingFilePath='';
+}
+
+function doPrint(){
+var btn=document.getElementById('btnDoPrint');
+var ps=D.print_stats||{};
+if(ps.state==='printing'||ps.state==='paused'){
+alert(t('printer_busy')+' ('+ps.state+')');return;
+}
+btn.disabled=true;btn.textContent=t('calibrating');
+var opts={
+auto_bed_leveling:document.getElementById('optLevel').checked,
+flow_calibrate:document.getElementById('optFlow').checked,
+time_lapse_camera:document.getElementById('optTimelapse').checked
+};
+bridgeGET('/api/bridge/pending_print',function(d){
+if(d&&d.filename){
+bridgePOST('/api/bridge/confirm_print',opts,function(r){
+if(r&&r.error){alert(t('print_failed')+': '+r.error);btn.disabled=false;btn.textContent=t('start_print');}
+else{closePrintModal();switchJobTab(0);}
+});
+}else{
+var script='SDCARD_PRINT_FILE_WITH_PARAMETERS FILENAME="'+pendingFilePath+'"';
+for(var k in opts){script+=' '+k.toUpperCase()+'='+(opts[k]?'1':'0');}
+if(ws&&ws.readyState===1){
+ws.send(JSON.stringify({jsonrpc:"2.0",method:"printer.gcode.script",params:{script:script},id:Date.now()}));
+bridgePOST('/api/bridge/cancel_pending',null);
+closePrintModal();switchJobTab(0);
+}else{
+alert(t('ws_not_connected'));btn.disabled=false;btn.textContent=t('start_print');
+}
+}
+});
+}
+
+function doPrintSimple(path){
+var ps=D.print_stats||{};
+if(ps.state==='printing'||ps.state==='paused'){alert('Printer is busy ('+ps.state+'). Cannot start a new print.');return;}
+var script='SDCARD_PRINT_FILE FILENAME="'+path+'"';
+if(ws&&ws.readyState===1){ws.send(JSON.stringify({jsonrpc:"2.0",method:"printer.gcode.script",params:{script:script},id:Date.now()}));switchJobTab(0);}
+}
+
+function selFil(i){}
+function calibrateFlow(idx){
+var ps=D.print_stats||{};
+if(ps.state==='printing'||ps.state==='paused'){
+alert(t('printer_busy')+' ('+ps.state+')');return;
+}
+var btn=$('fil'+idx+'cal');
+if(btn)btn.disabled=true;
+gcode('SM_PRINT_FLOW_CALIBRATE INDEX='+idx);
+setTimeout(function(){if(btn)btn.disabled=false;},5000);
+}
+function refreshCtrl(){}
+function refreshFil(){loadFilamentInfo();}
+
+function connect(){
+if(ws&&ws.readyState<=1)return;
+try{
+ws=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+'/websocket');
+ws.onopen=function(){console.log('[Bridge] WS connected');$('connStatus').textContent=t('online');ws.send(JSON.stringify({jsonrpc:"2.0",method:"printer.objects.subscribe",params:{objects:{toolhead:null,extruder:null,extruder1:null,extruder2:null,extruder3:null,heater_bed:null,print_stats:null,system_stats:null,display_status:null,fan:null,"fan_generic cavity_fan":null,"filament_feed left":null,"filament_feed right":null,filament_parameters:null,gcode_move:null,"led cavity_led":null}},id:1}));bridgeGET('/api/bridge/pending_print',function(d){if(d&&d.filename)onPendingPrint(d.filename);});};
+ws.onmessage=function(e){var m=JSON.parse(e.data);if(m.method==='notify_status_update')upd(m.params[0]);if(m.method==='notify_proc_stat_update')updSys(m.params[0]);if(m.method==='notify_bridge_event'){var evt=m.params[0],data=m.params[1]||{};if(evt==='pending_print'&&data.filename)onPendingPrint(data.filename);}if(m.result&&m.result.status)upd(m.result.status);};
+ws.onclose=function(){console.warn('[Bridge] WS closed, reconnecting in 3s');$('connStatus').textContent=t('reconnecting');rt=setTimeout(connect,3000);};
+ws.onerror=function(e){console.error('[Bridge] WS error:',e);$('connStatus').textContent=t('ws_error');};
+}catch(e){rt=setTimeout(connect,3000);}
+}
+
+function upd(d){
+for(var k in d){
+if(D[k])Object.assign(D[k],d[k]);
+else{var base=k.split(' ')[0];if(D[base])Object.assign(D[base],d[k]);}
+}
+var exts=[D.extruder,D.extruder1,D.extruder2,D.extruder3];
+var ps=D.print_stats,ds=D.display_status;
+
+for(var i=0;i<4;i++){
+var e=exts[i];
+if(e&&e.temperature!=null){$('t'+i+'Val').textContent=e.temperature.toFixed(0)+'/'+(e.target||0)+'°C';}
+}
+$('bedVal').textContent=(D.heater_bed.temperature!=null?D.heater_bed.temperature.toFixed(0):'--')+'/'+(D.heater_bed.target||0)+'°C';
+
+if(D.fan.speed!=null){$('fan1Val').textContent=Math.round(D.fan.speed*100)+'%';}
+if(D['fan_generic cavity_fan']&&D['fan_generic cavity_fan'].speed!=null){$('fan2Val').textContent=Math.round(D['fan_generic cavity_fan'].speed*100)+'%';}
+
+if(D.gcode_move&&D.gcode_move.speed_factor!=null){$('speedVal').textContent=Math.round(D.gcode_move.speed_factor*100)+'%';}
+
+if(ps.state){
+var s=ps.state;
+$('jobName').textContent=ps.filename||t('idle');
+if(s==='printing'){
+var p=ds&&ds.progress!=null?(ds.progress*100).toFixed(0):'0';
+$('jobPct').textContent=p+'%';$('jobBar').style.width=p+'%';
+$('btnPause').style.display='inline-block';$('btnResume').style.display='none';$('btnCancel').style.display='inline-block';$('btnStart').style.display='none';
+}else if(s==='paused'){
+$('jobPct').textContent=t('paused');$('jobBar').style.width=(ds&&ds.progress?ds.progress*100:0)+'%';
+$('btnPause').style.display='none';$('btnResume').style.display='inline-block';$('btnCancel').style.display='inline-block';$('btnStart').style.display='none';
+}else{
+var label=s==='complete'?t('complete'):s==='cancelled'?t('cancelled'):s==='error'?t('error'):t('idle');
+$('jobPct').textContent=label;$('jobBar').style.width=s==='complete'?'100%':'0';
+$('btnPause').style.display='none';$('btnResume').style.display='none';$('btnCancel').style.display='none';$('btnStart').style.display='inline-block';
+}
+if(ps.total_duration){var h=Math.floor(ps.total_duration/3600),m=Math.floor((ps.total_duration%3600)/60);$('jobTime').textContent=h+'h '+m+'m';}
+if(ps.info&&ps.info.current_layer!=null){$('jobLayer').textContent=ps.info.current_layer+'/'+ps.info.total_layer;}
+}
+updFil();
+}
+
+var filTypes=[],filColors=[],filSubTypes=[];
+function loadFilamentInfo(){
+bridgeGET('/server/files/config/snapmaker/print_task.json',function(d){
+if(!d)return;
+filTypes=d.filament_type||[];
+filColors=d.filament_color_rgba||[];
+filSubTypes=d.filament_sub_type||[];
+updFil();
+});
+}
+function updFil(){
+var fl=D['filament_feed left'],fr=D['filament_feed right'];
+var feeds={};
+if(fl){if(fl.extruder0)feeds[0]=fl.extruder0;if(fl.extruder1)feeds[1]=fl.extruder1;}
+if(fr){if(fr.extruder2)feeds[2]=fr.extruder2;if(fr.extruder3)feeds[3]=fr.extruder3;}
+
+var feedLText='--',feedRText='--';
+if(fl&&fl.extruder0)feedLText=fl.extruder0.filament_detected?t('loaded'):t('empty');
+if(fr&&fr.extruder2)feedRText=fr.extruder2.filament_detected?t('loaded'):t('empty');
+$('feedL').textContent=feedLText;
+$('feedR').textContent=feedRText;
+
+for(var i=0;i<4;i++){
+var feed=feeds[i];
+var detText='--',stateText='--',ftype='--';
+if(feed){
+detText=feed.filament_detected?t('loaded'):t('empty');
+stateText=(feed.channel_state||'--').replace(/_/g,' ');
+}
+if(filTypes[i])ftype=filTypes[i]+(filSubTypes[i]?' '+filSubTypes[i]:'');
+$('fil'+i+'type').textContent=ftype;
+$('fil'+i+'det').textContent=detText;
+$('fil'+i+'state').textContent=stateText;
+if(filColors[i]){
+var c=filColors[i];
+var hex=c.length>=6?'#'+c.substring(0,6):'';
+if(hex)$('fil'+i).querySelector('.fil-num').style.background=hex;
+}else if(feed&&feed.filament_detected){
+var colors=['#ff5722','#333','#8d6e63','#607d8b'];
+try{$('fil'+i).querySelector('.fil-num').style.background=colors[i];}catch(e){}
+}
+}
+}
+
+function updSys(d){}
+
+(function(){var img=new Image();img.onload=function(){camAvail=true;camProbing=false;$('camOffText').textContent=t('cam_off');};img.onerror=function(){camAvail=false;camProbing=false;$('camOffText').textContent=t('cam_unavail');};img.src='/server/files/camera/monitor.jpg?_probe='+Date.now();})();
+
+(function(){
+$('connStatus').textContent=t('detecting');
+var s=document.createElement('script');
+s.src='/api/bridge/init-data.js';
+s.onerror=function(){$('connStatus').textContent='Script load failed from '+location.origin;};
+document.head.appendChild(s);
+})();
+
+setLang(curLang);
+connect();
+
+var dbgAutoInterval=null;
+function loadDebugLogs(){
+  var level=$('dbgLevel').value;
+  var url='/api/bridge/debug/logs.js?lines=300';
+  if(level) url+='&level='+level;
+  loadJS(url,function(d){
+    if(!d){$('dbgLog').textContent='Error: no response';return;}
+    $('dbgCount').textContent=d.total+' total, showing '+d.logs.length;
+    var el=$('dbgLog');
+    el.textContent=d.logs.join('\n');
+    el.scrollTop=el.scrollHeight;
+  });
+}
+function toggleDebugAuto(){
+  if(dbgAutoInterval){clearInterval(dbgAutoInterval);dbgAutoInterval=null;$('dbgAutoBtn').textContent='Auto: OFF';$('dbgAutoBtn').style.color='#0f8bff';}
+  else{dbgAutoInterval=setInterval(loadDebugLogs,2000);$('dbgAutoBtn').textContent='Auto: ON';$('dbgAutoBtn').style.color='#4caf50';loadDebugLogs();}
+}
+</script>
+</body>
+</html>

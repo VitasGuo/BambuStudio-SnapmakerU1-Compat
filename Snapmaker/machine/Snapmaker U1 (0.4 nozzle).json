@@ -39,5 +39,8 @@
         "0x0",
         "0x0",
         "0x0"
-    ]
+    ],
+    "print_host_webui": "http://127.0.0.1:13628",
+    "print_host": "http://127.0.0.1:13628",
+    "host_type": "octoprint"
 }

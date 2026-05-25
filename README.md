@@ -1,16 +1,15 @@
-# Snapmaker U1 BambuStudio 兼容包 v3.14
+# Snapmaker U1 BambuStudio 兼容包 v5.7.1
 
-让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**局域网直连打印**。
+让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
 ---
 
 ## 前置条件
 
-- **操作系统**：**Windows**（提供自动安装脚本）或 **Linux**（手动安装）
+- **操作系统**：Windows 或 Linux
 - 已安装 **BambuStudio**（[官方下载](https://bambulab.com/en/download/bambu-studio)）
+- 已安装 **Node.js** 18+（[官方下载](https://nodejs.org)）
 - Snapmaker U1 打印机与电脑处于**同一局域网**
-
-> **macOS**：BambuStudio 官方未提供 macOS 版本，如通过第三方方式运行，安装方法与 Linux 类似。
 
 ---
 
@@ -25,55 +24,13 @@
    - 检测 BambuStudio 安装路径
    - 清除旧的配置缓存和耗材缓存
    - 复制 Snapmaker 配置文件到 BambuStudio
-   - 验证安装结果
-3. 如果未检测到 BambuStudio，手动输入安装路径（如 `C:\Program Files\Bambu Studio`）
-4. 输入 `Y` 确认安装
-5. 看到 "Installation Successful!" 表示安装完成
+   - 安装 Bridge 服务器到 BambuStudio 目录
+   - 自动修补 `print_host` 指向 Bridge
+   - 创建开机自启快捷方式
+   - 自动启动 Bridge
+3. 如果未检测到 BambuStudio，手动输入安装路径
 
-#### Linux（手动安装）
-
-1. **确定 BambuStudio 资源目录**：
-   - FHS 安装（deb/rpm）：`/usr/share/BambuStudio/resources/profiles/`
-   - AppImage / tarball：`<BambuStudio安装目录>/resources/profiles/`
-   - 可通过运行 `bambustudio --help` 或查找 `resources/profiles/BBL` 来确认
-
-2. **关闭 BambuStudio**
-
-3. **清除旧缓存**：
-   ```bash
-   rm -rf ~/.config/BambuStudioBeta/system/Snapmaker
-   rm -f  ~/.config/BambuStudioBeta/system/Snapmaker.json
-   ```
-
-4. **清除用户预设残留**：
-   ```bash
-   find ~/.config/BambuStudioBeta/user/default/ -name "*Snapmaker*" -o -name "*@U1*" | xargs rm -f
-   ```
-
-5. **复制配置文件**（需要 sudo）：
-   ```bash
-   # 将 <profiles_dir> 替换为第一步确定的路径
-   sudo cp Snapmaker.json <profiles_dir>/Snapmaker.json
-   sudo rm -rf <profiles_dir>/Snapmaker
-   sudo cp -r Snapmaker    <profiles_dir>/Snapmaker
-   ```
-
-6. **清理 BambuStudio.conf 中的耗材缓存**（重要！否则只显示 2 个耗材）：
-   ```bash
-   # 需要 jq 工具：sudo apt install jq / sudo dnf install jq
-   CONF=~/.config/BambuStudioBeta/BambuStudio.conf
-   if [ -f "$CONF" ]; then
-       cp "$CONF" "$CONF.bak"
-       jq 'if .filaments then .filaments |= [.[] | select(test("@U1|Snapmaker ") | not)] else . end' "$CONF" > "$CONF.tmp" && mv "$CONF.tmp" "$CONF"
-   fi
-   ```
-
-7. **验证**：确认以下文件存在：
-   ```bash
-   ls <profiles_dir>/Snapmaker.json
-   ls <profiles_dir>/Snapmaker/machine/"Snapmaker U1.json"
-   ls <profiles_dir>/Snapmaker/filament/"Snapmaker PLA Basic @U1.json"
-   ```
+> 安装完成后，兼容包原目录可以删除，Bridge 和配置已集成到 BambuStudio 目录和 APPDATA 中。
 
 ### 第二步：在 BambuStudio 中添加打印机
 
@@ -83,66 +40,33 @@
 4. 选择喷嘴直径（推荐 0.4mm）
 5. 完成添加
 
-### 第三步：配置局域网直连（OctoPrint 协议）
+> Bridge 会在首次启动时通过 mDNS 自动检测局域网内的 Snapmaker 打印机，无需手动输入 IP 地址。
 
-U1 内置 Moonraker 服务，兼容 OctoPrint API。BambuStudio 原生支持 OctoPrint 主机类型，可直接连接。
-
-1. 在 BambuStudio 中，进入 **设置** → **物理打印机**
-2. 点击 **添加物理打印机**，选择对应的 Snapmaker U1 预设
-3. 在 **主机类型** 中选择 **OctoPrint**（默认值）
-4. 在 **主机名/IP/URL** 中输入 U1 的 IP 地址（如 `192.168.1.100`）
-5. 在 **API Key / 密码** 中输入 Moonraker 的 API Key（见下方获取方法）
-6. 点击 **测试** 按钮，显示 "Connection to OctoPrint works correctly." 即表示连接成功
-7. 保存物理打印机配置
-
-> **获取 Moonraker API Key**：在浏览器中访问 `http://<U1的IP>`，打开 Fluidd 界面，点击右上角设置图标 → API Key 即可查看。
-
-### 第四步：切片并直接发送到打印机
+### 第三步：切片并打印
 
 1. 导入 3D 模型文件（STL / 3MF / STEP 等）
-2. 选择工艺预设（如 `0.20 Standard @Snapmaker U1`）和耗材（如 `Snapmaker PLA @U1`）
+2. 选择工艺预设和耗材
 3. 点击 **切片**
-4. 切片完成后，点击 **发送到打印机**（Upload to Printer）
-5. 勾选 **上传后开始打印**（Start Print after Upload）
-6. G-code 将自动上传到 U1 并开始打印
+4. 切片完成后，点击 **打印**
+5. BambuStudio 弹出 **Upload / Print / Cancel** 对话框
+6. 选择 **Print** → Bridge 弹出 **Windows 原生打印确认对话框**：
+   - 耗材选择（4 个 extruder checkbox）
+   - 打印选项（自动调平 / 流量校准 / 延时摄影）
+7. 点击 **▶ Start Print** → 开始打印
+
+> 如果选择 **Upload**，文件仅上传到打印机但不自动开始打印。可在 Device 标签页的 WebUI 中手动开始打印。
 
 ### 卸载
 
-#### Windows
-
 1. 右键 `uninstall.bat` → **以管理员身份运行**
-2. 输入 `Y` 确认卸载
+2. 脚本将清理所有配置、Bridge 和缓存
 3. 重启 BambuStudio
-
-#### Linux
-
-```bash
-# 1. 删除配置文件（将 <profiles_dir> 替换为实际路径）
-sudo rm <profiles_dir>/Snapmaker.json
-sudo rm -rf <profiles_dir>/Snapmaker
-
-# 2. 清除缓存
-rm -rf ~/.config/BambuStudioBeta/system/Snapmaker
-rm -f  ~/.config/BambuStudioBeta/system/Snapmaker.json
-
-# 3. 清除用户预设残留
-find ~/.config/BambuStudioBeta/user/default/ -name "*Snapmaker*" -o -name "*@U1*" | xargs rm -f
-
-# 4. 清理 BambuStudio.conf 中的 Snapmaker 引用（需要 jq）
-CONF=~/.config/BambuStudioBeta/BambuStudio.conf
-if [ -f "$CONF" ]; then
-    cp "$CONF" "$CONF.bak"
-    jq 'if .filaments then .filaments |= [.[] | select(test("@U1|Snapmaker ") | not)] else . end
-        | if .models then .models |= [.[] | select(.vendor != "Snapmaker")] else . end' \
-        "$CONF" > "$CONF.tmp" && mv "$CONF.tmp" "$CONF"
-fi
-
-# 5. 重启 BambuStudio
-```
 
 ---
 
 ## 兼容包内容
+
+### 切片配置
 
 | 类别 | 内容 | 数量 |
 |------|------|------|
@@ -151,163 +75,159 @@ fi
 | 耗材预设 | Bambu Lab 全系列 + Generic 通用 + Snapmaker 官方 | 80 |
 | 热床模型 | Snapmaker U1 热床 STL + 纹理 SVG + 封面图 | 3 |
 
-### 工艺预设列表
+### Bridge 服务器（Node.js）
 
-| 预设 | 层高 | 特点 |
-|------|------|------|
-| 0.08 Extra Fine | 0.08mm | 极细层线，表面光滑 |
-| 0.08 High Quality | 0.08mm | 低速 + gyroid 填充，最高质量 |
-| 0.12 Fine | 0.12mm | 细层线，高质量 |
-| 0.12 High Quality | 0.12mm | 低速 + gyroid 填充 |
-| 0.16 Optimal | 0.16mm | 质量/速度平衡 |
-| 0.16 High Quality | 0.16mm | 低速 + gyroid 填充 |
-| 0.20 Standard | 0.20mm | 通用默认，适合大多数场景 |
-| 0.20 Strength | 0.20mm | 6 层壁 + 25% 填充，高强度 |
-| 0.24 Draft | 0.24mm | 快速草稿 |
-| 0.28 Extra Draft | 0.28mm | 极速草稿 |
+| 文件 | 说明 |
+|------|------|
+| `bridge-node/server.js` | Express HTTP/WebSocket 代理服务器 |
+| `bridge-node/dialog.js` | 跨平台原生打印确认对话框 |
+| `bridge-node/package.json` | Node.js 依赖声明 |
+| `bridge/web/webui.html` | WebUI 设备控制面板 |
 
-### 耗材预设列表
+### 目录结构
 
-| 品牌 | 包含材料 |
-|------|----------|
-| **Snapmaker** | PLA Basic, PLA Matte, PLA Silk, PLA SnapSpeed, PETG HF, TPU 90A, TPU 95A HF |
-| **Bambu Lab** | PLA Basic, PLA Matte, PLA Silk, PLA-CF, PETG Basic, PETG HF, ABS, ASA, TPU 95A, PA-CF, PC, PVA, Support 等 44 种 |
-| **Generic** | PLA, PETG, ABS, ASA, TPU, PC, PA-CF, PVA, PP, PPS-CF 等 27 种 |
+```
+BambuStudio-SnapmakerU1-Compat/
+├── install.bat / install.ps1       # 安装脚本
+├── reinstall.bat / reinstall.ps1   # 重装脚本
+├── uninstall.bat / uninstall.ps1   # 卸载脚本
+├── Snapmaker.json                  # 品牌配置入口
+├── Snapmaker/                      # 切片配置目录
+│   ├── machine/                    # 打印机配置
+│   ├── process/                    # 工艺预设
+│   └── filament/                   # 耗材预设
+├── bridge-node/                    # Bridge 服务器（Node.js）
+│   ├── server.js                   # 核心服务器
+│   ├── dialog.js                   # 原生对话框
+│   └── package.json                # 依赖声明
+└── bridge/                         # WebUI 资源
+    └── web/
+        ├── webui.html              # 设备控制面板
+        └── dist/                   # Fluidd 前端（可选）
+```
+
+安装后：
+- Bridge 目录复制到：`C:\Program Files\Bambu Studio\bridge\`
+- 配置文件保存在：`%APPDATA%\BambuStudio-Bridge\`
+- 日志文件：`%APPDATA%\BambuStudio-Bridge\bridge.log`
 
 ---
 
 ## 工作流程
 
+### Bridge 架构
+
 ```
-┌──────────────┐   切片+发送   ┌──────────┐
-│  BambuStudio │ ────────────→ │  U1 打印机 │
-│  (切片+发送)  │  OctoPrint   │ (Moonraker)│
-└──────────────┘   局域网直连   └──────────┘
+BambuStudio
+  │
+  │ 1. 切片 → 点击 Print
+  │    BambuStudio 弹出 Upload/Print/Cancel
+  │
+  │ 2. 选 Print → POST /api/files/local (print=true)
+  │    ┌──────────────────────────────────────────┐
+  │    │  Bridge (localhost:13628)                 │
+  │    │  3. 上传文件到 Moonraker (不带 print)     │
+  │    │  4. 弹出原生打印确认对话框                 │
+  │    │     - 耗材选择 (4 extruder)               │
+  │    │     - 自动调平 / 流量校准 / 延时摄影       │
+  │    │  5. 确认后发送 SDCARD_PRINT_FILE_WITH_    │
+  │    │     PARAMETERS (WebSocket)                │
+  │    └──────────────────────────────────────────┘
+  │
+  │ 6. Device 标签页 → WebUI / Fluidd
+  │    实时监控、温度控制、灯光、风扇等
+  │
+  ▼
+Snapmaker U1 (Moonraker + Klipper)
 ```
 
----
+### 设备控制功能
 
-## 局域网直连功能范围
-
-| 功能 | 支持状态 | 说明 |
-|------|----------|------|
-| G-code 上传 | ✅ | 通过 HTTP multipart 上传到 U1 |
-| 上传后自动打印 | ✅ | 上传时勾选 "Start Print after Upload" |
-| 连接测试 | ✅ | 验证 IP 和 API Key 是否正确 |
-| 打印温度控制 | ✅ | 由切片参数写入 G-code |
-| 获取打印机耗材信息 | ❌ | OctoPrint 协议无耗材管理 API |
-| 实时打印进度 | ❌ | OctoPrint 兼容层不支持状态推送 |
-| 远程暂停/取消 | ❌ | BambuStudio OctoPrint 模式不支持 |
-
-> **打印监控**：如需实时查看打印状态和进度，请在浏览器中访问 `http://<U1的IP>` 打开 U1 自带的 Fluidd 界面。
-
----
-
-## Snapmaker U1 参数
-
-| 参数 | 值 |
-|------|-----|
-| 打印尺寸 | 270 × 270 × 270 mm |
-| 结构 | CoreXY |
-| 固件 | Klipper |
-| 喷头 | 4 个独立工具头（换头式） |
-| 喷嘴直径 | 0.2 / 0.4 / 0.6 / 0.8 mm |
-| 最高喷嘴温度 | 300°C |
-| 热床温度 | 最高 110°C |
-| 最大打印速度 | 300 mm/s |
-| 最大加速度 | 20,000 mm/s² |
-| 换色时间 | < 10 秒 |
+| 功能 | WebUI 模式 | Fluidd 模式 |
+|------|------------|-------------|
+| 摄像头 | ✅ 实时预览（snapshot 轮询） | ✅ 完整监控 |
+| 打印进度 | ✅ 查看/暂停/恢复/取消 | ✅ 完整管理 |
+| 温度控制 | ✅ 热床+4喷头 | ✅ 完整温度图 |
+| 灯光 | ✅ 开关 | ❌ 不支持 |
+| 风扇 | ✅ 冷却风扇+腔体风扇 | ✅ 完整风扇图 |
+| 耗材信息 | ✅ 类型+颜色+进料检测 | ❌ 不支持 |
+| 流量校准 | ✅ 每个耗材独立校准 | ❌ 不支持 |
+| 速度调节 | ✅ 5挡（50/80/100/120/150%） | ✅ 全部控制 |
+| Z轴控制 | ✅ 上下移动+回原点 | ✅ |
+| 打印控制 | ✅ 开始/暂停/恢复/取消 | ✅ 完整 Klipper 控制 |
+| 中英文切换 | ✅ 一键切换 | ❌ |
+| 调试日志 | ✅ 内置 Debug 面板 | ❌ |
 
 ---
 
 ## 注意事项
 
-- **BambuStudio 更新后需重新安装**：更新可能覆盖配置文件，Windows 重新运行 `install.bat`，Linux 重新执行手动安装步骤即可
-- **G-code 兼容性**：U1 使用 Klipper 固件，G-code 包含 `PRINT_START`/`PRINT_END` 宏、`DEFECT_DETECTION`、`TIMELAPSE`、`SM_PRINT` 等 Snapmaker 专有命令
-- **多色打印**：BambuStudio 支持多色切片，U1 的 4 工具头换色机制与 BambuLab AMS 不同但可正常工作
+- **BambuStudio 更新后需重新安装**：更新可能覆盖配置文件，重新运行 `install.bat` 即可
+- **打印机自动检测**：Bridge 首次启动时通过 mDNS 自动检测局域网内的 Snapmaker 打印机。如果自动检测失败，可在浏览器打开 `http://127.0.0.1:13628` 手动配置
+- **G-code 兼容性**：U1 使用 Klipper 固件，G-code 包含 Snapmaker 专有命令
+- **多色打印**：BambuStudio 支持多色切片，U1 的 4 工具头换色机制可正常工作
 - **耗材选择**：在 BambuStudio 中手动选择与 U1 工具头实际装载一致的耗材预设
-- **空闲喷头温度**：由于 BambuStudio 不允许同时启用防滴（ooze_prevention）和擦料塔，空闲喷头会保持工作温度。U1 换头式设计中空闲喷头停泊在远离打印区域的位置，漏料影响较小
-- **Linux 耗材缓存**：安装后如果只看到 2 个耗材，说明 `BambuStudio.conf` 中的耗材缓存未清理，请按安装步骤第 6 步操作
 
 ---
 
 ## 常见问题
 
 **Q: 安装后 BambuStudio 中看不到 Snapmaker U1？**
-A: 请确保完全关闭并重启 BambuStudio。如果仍看不到，检查文件是否正确复制到 `resources/profiles/` 目录（Windows: `C:\Program Files\Bambu Studio\resources\profiles\`，Linux: 见安装步骤第 1 步）。
+A: 请确保完全关闭并重启 BambuStudio。如果仍看不到，检查文件是否正确复制到 `resources/profiles/` 目录。
 
-**Q: 安装后 BambuStudio 报错 "Failed loading configuration file"？**
-A: 这通常是因为旧的配置缓存未清除。Windows: 重新运行 `install.bat`；Linux: 手动删除 `~/.config/BambuStudioBeta/system/Snapmaker` 目录和 `Snapmaker.json` 文件，然后重启 BambuStudio。
+**Q: 切片后点击打印直接开始打印，没有弹出确认对话框？**
+A: 检查 Bridge 是否正在运行（任务管理器中查找 node 进程）。检查 `print_host` 是否指向 `http://127.0.0.1:13628`。查看日志 `%APPDATA%\BambuStudio-Bridge\bridge.log`。
 
-**Q: 安装后只看到 2 个耗材，其余都不见？**
-A: 这是 BambuStudio 的耗材缓存问题。Windows: 重新运行 `install.bat`（v3.3+ 已修复此问题）；Linux: 按安装步骤第 6 步清理 `BambuStudio.conf` 中的耗材缓存，重启后所有耗材会自动出现。
+**Q: 安装后只看到 2 个耗材？**
+A: 重新运行 `install.bat`，脚本会自动清理耗材缓存。
 
-**Q: 耗材品牌归类不正确（如 Bambu 耗材显示在 Snapmaker 下）？**
-A: v3.5 已修复此问题。请重新运行 `install.bat`。
+**Q: 安装脚本报错 "Failed to copy"？**
+A: 需要以管理员身份运行。右键 → 以管理员身份运行。
 
-**Q: 多色打印换色时报"温度不够"？**
-A: v3.5+ 已修复此问题。换色 G-code 现在包含 M109 等待温度 + 预热命令。请确保使用 v3.5 或更高版本。
-
-**Q: 安装脚本报错 "Failed to copy" 或权限不足？**
-A: Windows: 需要以管理员身份运行 `install.bat`。右键 → 以管理员身份运行。Linux: 复制到系统目录需要 `sudo`。
-
-**Q: 测试连接时提示 "Mismatched type of print host"？**
-A: 确认主机类型选择的是 **OctoPrint**，且 U1 的 Moonraker 服务正常运行。在浏览器中访问 `http://<U1的IP>/api/version`，应返回包含 `"text": "OctoPrint (Moonraker ...)"` 的 JSON。
-
-**Q: 如何获取 U1 的 IP 地址？**
-A: 在 U1 触摸屏上进入 **设置** → **网络**，即可看到 IP 地址。或在路由器管理界面中查找名为 `Snapmaker` 的设备。
-
-**Q: BambuStudio 更新后兼容包失效了？**
-A: Windows: 重新运行 `install.bat`；Linux: 重新执行手动安装步骤。
-
-**Q: Linux 下如何确定 BambuStudio 的资源目录？**
-A: 运行 `find / -path "*/resources/profiles/BBL" -type d 2>/dev/null` 查找。常见位置：`/usr/share/BambuStudio/resources/profiles/`（FHS 安装）或 `<解压目录>/resources/profiles/`（AppImage/tarball）。
-
----
-
-## 文件说明
-
-| 文件 | 说明 |
-|------|------|
-| `install.bat` | 安装启动器（调用 PowerShell） |
-| `install.ps1` | 安装脚本（缓存清理 + 文件复制 + 验证） |
-| `reinstall.bat` | 重装启动器（一键卸载+安装） |
-| `reinstall.ps1` | 重装脚本（先卸载再安装） |
-| `uninstall.bat` | 卸载启动器 |
-| `uninstall.ps1` | 卸载脚本（清理配置 + 缓存 + BambuStudio.conf） |
-| `Snapmaker.json` | 品牌配置入口 |
-| `Snapmaker/` | 所有打印机、工艺、耗材配置文件 |
-| `process.md` | 项目开发进度记录 |
-| `traps.md` | 开发踩坑记录（BambuStudio 第三方适配的 27 个坑） |
+**Q: BambuStudio 更新后兼容包失效？**
+A: 重新运行 `install.bat`。
 
 ---
 
 ## 版本历史
 
-- **v3.14** (2026-05-18) - 热床 3D 模型和纹理加载修复：
-  - 修复 BambuStudio 中热床显示为默认矩形形状的问题
-  - 在 `Snapmaker U1.json` 中添加 `bed_model: "Snapmaker U1_bed.stl"` 和 `bed_texture: "Snapmaker U1_texture.svg"`
-  - 之前两个字段为空，导致 U1 实际热床形状无法加载
-- **v3.13** (2026-05-17) - Linux 平台支持：
-  - 兼容包所有 JSON 配置文件 100% 跨平台通用
-  - README 新增 Linux 手动安装/卸载步骤
-  - 新增 Linux 资源目录查找 FAQ
-- **v3.12** (2026-05-16) - 全面参数对齐与优化：
-  - **Bambu 耗材对齐 BBL 官方**：修复 PPS-CF 温度（240→320）和流速；修复 ASA filament_type；补全 ABS/ABS-GF 温度和风扇参数；补全 Support for ABS 温度覆盖；修复 PA-CF 温度（280→290）和热床（110→100）；补全 PA6-CF/PA6-GF/PAHT-CF 参数；修复 PETG Basic 温度（250→245）和 temperature_vitrification（60→178）；修复 PETG HF 温度（245→240）；修复 PETG Translucent/PETG-CF 热床（80→70）；修复 TPU 全系列热床（65→45）；修复 PC/PC FR 热床（110→100）和风扇；补全 PPA-CF/PVA 完整配置；修复 Support For PLA-PETG 继承基类；修复 PET-CF 热床（80→100）和 nozzle HRC（55→40）
-  - **Generic 耗材修复**：修复 PPS-CF/PLA-CF/PETG-CF 的 nozzle HRC（55→40）；修复 PETG-CF 热床（80→70）
-  - **Snapmaker 耗材优化**：PLA Basic/Matte/Silk/SnapSpeed 关闭 PA（enable_pressure_advance=0）；PLA Matte 流速比（0.98→1）、最大流速（15→22）、温度（220→215）；PLA Silk 温度（220→230）、流速（12→10）、PA（0.02→0.015）、添加回抽和 dont_slow_down_outer_wall；PLA SnapSpeed 流速比（0.98→0.966）、密度（1.32→1.24）、温度（230→220）、添加回抽和 Z-hop；删除旧 PLA/ABS/PETG/TPU/PLA-CF，新增 PETG HF/TPU 90A/TPU 95A HF；添加 filament_retract_length_toolchange
-  - **工艺预设优化**：bridge_flow（1→0.8）、bridge_acceleration（1000→50%）、inner_wall_acceleration（5000→10000）；添加 initial_layer_print_height；jerk 参数全面调整
-  - **机器参数调整**：retraction_length（0.8→1.5）、retract_length_toolchange（2→10）、deretraction_speed（60→30）、retraction_speed（40→30）
-  - **PLA 基类调整**：cool_plate_temp/eng_plate_temp（65→60）、hot_plate_temp_initial_layer（65→70）
-  - **新增 reinstall 脚本**：支持一键卸载+重装，无需分别运行两个脚本
-  - **安装脚本更新**：版本号升级、验证路径适配新耗材名、缓存清理正则更新
-- **v3.7** (2026-05-15) - 项目审查修复：补全 Bambu PPA-CF 配置（nozzle_temperature=290、filament_type=PPA-CF 等 18 个参数）；补全 Snapmaker 基础耗材关键字段（PA、热床温度等）；修复 Snapmaker TPU 热床温度（35→65°C）；修复 Snapmaker PETG cool_plate_temp（60→0）；修复 Generic PE/PP/PCTG filament_type；修复 PETG Basic temperature_vitrification（60→178）；补全 Bambu PLA Dynamic filament_flow_ratio；为 CF/GF 材料添加 required_nozzle_HRC；统一数据类型（int→string）；清理 fdm_process_U1_0.20 冗余覆盖
-- **v3.6** (2026-05-15) - G-code 深度对比修复：启用辅助风扇（`auxiliary_fan=1`，换色时 `M106 P2 S178`）；启用预热（`enable_pre_heating=1`，换色前自动预热下一喷头）；修正 `filament_preheat_temperature_delta` 符号（-50→50）；记录 BambuStudio 防滴与擦料塔不兼容限制
-- **v3.5** (2026-05-14) - 完整工艺预设移植（10 个预设，从 Orca U1 + BBL A1 参考合并）；G-code 模板修复（TIMELAPSE/DEFECT_DETECTION/高温板 Z_OFFSET 条件分支）；filament_vendor 品牌归类修复
-- **v3.3** (2026-05-14) - 修复耗材可见性缓存问题（用 JSON 解析替代正则清理 filaments 数组）；所有 80 个耗材正确显示
-- **v3.0** (2026-05-14) - 全品牌耗材库支持（80 个耗材预设：Bambu Lab 44 种 + Generic 27 种 + Snapmaker 9 种）
+- **v5.7.1** (2026-05-25) - 排版优化 + 中文术语修正 + Snapmaker logo
+  - WebUI 排版优化：温度显示格式、风扇/速度行防溢出、耗材 slot 更紧凑
+  - 中文翻译修正为3D打印专业术语（喷头/设定温度/冷却风扇/回原点/待机等）
+  - 左上角 logo 替换为 Snapmaker 品牌图标
+- **v5.7.0** (2026-05-25) - 中英文切换 + 流量校准 + Speed 5 挡
+  - WebUI 中英文一键切换（默认中文，50+ 翻译条目）
+  - 每个耗材 slot 新增流量校准按钮（`SM_PRINT_FLOW_CALIBRATE`）
+  - Speed 从 4 挡改为 5 挡（50/80/100/120/150%），与设备对应
+- **v5.5.0** (2026-05-25) - WebUI 全面替换 fetch→JSONP
+  - 发现 BambuStudio WebView 阻止 fetch/XMLHttpRequest，但不阻止 script/img 加载
+  - 所有 fetch() 替换为 JSONP 风格的 `<script>` 标签加载
+  - 新增 4 个服务端 JSONP 端点（pending_print.js/confirm_print.js/cancel_pending.js/debug/logs.js）
+- **v5.4.0** (2026-05-25) - 代理链路完整修复
+  - 中间件顺序调整、Fluidd SPA 回退、proxyToMoonraker 完全重写
+  - WebSocket 代理改进、上传代码改用 form-data 包
+  - Fluidd Service Worker 拦截、JSONP 代理端点、初始数据端点
+- **v5.2** (2026-05-25) - WebUI + Fluidd 统一界面
+  - 将 Fluidd 集成为 WebUI 的一个模块，侧边栏一键切换，无需来回跳转
+  - 移除模式切换按钮和 mode API，简化架构
+  - 修复安装脚本缺少 `npm install` 导致部署后无法启动的问题
+- **v5.1** (2026-05-25) - mDNS 自动检测完善：
+  - Setup 页面重设计：Scan Network 为主操作，手动输入 IP 降为备选
+  - 用户安装流程简化：4 步→3 步，移除手动输入 IP 步骤
+  - 全项目审查：移除所有"手动输入 IP"的过时描述
+- **v5.0** (2026-05-24) - Node.js Bridge 重构：
+  - Bridge 从 Python 重构为 Node.js，解决 Python 嵌入式包的依赖管理问题
+  - 新增 Windows 原生打印确认对话框（耗材选择 + 打印选项）
+  - 切片后点击 Print → 自动弹出确认对话框，无需手动切换标签
+  - 跨平台支持（Windows=PowerShell+WinForms, Linux=zenity）
+  - 安全修复：Base64 编码防止 PowerShell 变量注入、随机化临时文件名
+  - 清理旧 Python Bridge 代码
+- **v4.9** (2026-05-24) - print_host 自动修补
+- **v4.0** (2026-05-24) - 完整发布版：Bridge 安装到 BambuStudio 目录 + 开机自启
+- **v3.12** (2026-05-16) - 全面参数对齐与优化
+- **v3.0** (2026-05-14) - 全品牌耗材库支持（80 个耗材预设）
 - **v2.0** (2026-05-14) - 支持局域网直连打印（OctoPrint 协议）
-- **v1.0** (2026-05-13) - 初始版本，基于 Snapmaker Orca 官方 U1 配置
+- **v1.0** (2026-05-13) - 初始版本
 
 ---
 
@@ -315,18 +235,10 @@ A: 运行 `find / -path "*/resources/profiles/BBL" -type d 2>/dev/null` 查找�
 
 本项目基于 [GNU Affero General Public License v3.0](LICENSE) 发布。
 
-### 版权声明
-
-本项目的配置文件来源于以下开源项目，并遵循其许可证：
-
+本项目的配置文件来源于以下开源项目：
 - **OrcaSlicer** — AGPL-3.0 — https://github.com/SoftFever/OrcaSlicer
 - **BambuStudio** — AGPL-3.0 — https://github.com/bambulab/BambuStudio
 
-Snapmaker U1 的打印机配置、工艺预设和耗材预设源自 OrcaSlicer 项目的 Snapmaker U1 配置文件，已移除 BambuStudio 不兼容的 OrcaSlicer 专有字段。Bambu Lab 品牌耗材参数源自 BambuStudio 官方配置。
-
-### 通信协议
-
-本项目的局域网直连功能基于 Moonraker 的 OctoPrint API 兼容层，相关项目：
-
+局域网直连功能基于 Moonraker 的 OctoPrint API 兼容层：
 - **Moonraker** — GPL-3.0 — https://github.com/Arksine/moonraker
 - **Klipper** — GPL-3.0 — https://github.com/Klipper3d/klipper

@@ -397,3 +397,413 @@ Anker M5 能显示 logo 是因为其 bed STL 文件中**直接嵌入了 logo 的
 此外，STL 格式只能存储几何体（顶点和法线），不能存储颜色或纹理信息，因此即使嵌入 logo 几何体也只能以同色浮雕形式显示。
 
 **解决方案**：将 Snapmaker logo 以 3D 浮雕几何体嵌入 `Snapmaker U1_bed_texture.stl` 中，并将 `bed_model` 指向此文件。如需彩色 logo，需修改 BambuStudio 源码恢复 `render_texture` 渲染逻辑后自行编译。
+
+---
+
+#28
+**现象**：BambuStudio 的 PrinterWebView 不会自动注入 Moonraker API Key，导致 Fluidd 显示"未授权"
+**根因**：BambuStudio 源码 `PrinterWebView.cpp` 的 `load_url()` 只接受 URL 参数，没有 API Key 参数。OrcaSlicer 有 `SendAPIKey()` 方法在页面加载后注入 JavaScript 拦截 `window.fetch`，BambuStudio 没有
+**解决方案**：桥接服务器方案——通过 HTTP 代理自动在请求头中注入 `X-API-Key`，前端无需感知 API Key
+
+---
+
+#29
+**现象**：BambuStudio 的网络插件加载有代码签名验证，无法注入自定义 DLL
+**根因**：`NetworkAgent.cpp:212-213` 使用 `IsSamePublisher()` 检查 DLL 的数字签名是否与 BambuStudio 自身相同，不同发行商的 DLL 会被拒绝加载
+**解决方案**：不使用 DLL 插件机制，改用 `print_host_webui` 配置字段指向本地桥接服务器
+
+---
+
+#30
+**现象**：v0.1.0 使用 `/moonraker/{path}` 前缀代理，Fluidd 无法正常工作
+**根因**：Fluidd 默认连接同源（localhost:13628），API 请求路径为 `/api/*`、`/server/*` 等，不会自动添加 `/moonraker/` 前缀
+**解决方案**：v0.2.0 重构为直接代理 Moonraker API 路径（`/api/`、`/server/`、`/printer/`、`/access/`、`/machine/`），Fluidd 无需任何修改即可工作
+
+---
+
+#31
+**现象**：v0.1.0 WebSocket 路径为 `/ws`，Fluidd 连接失败
+**根因**：Moonraker 的 WebSocket 路径是 `/websocket`，不是 `/ws`。Fluidd 硬编码连接同源的 `/websocket`
+**解决方案**：v0.2.0 将 WebSocket 代理路径改为 `/websocket`，匹配 Moonraker 原生路径
+
+---
+
+#32
+**现象**：系统没有安装 Python，无法运行桥接服务器
+**根因**：用户系统未安装 Python，`python`/`python3`/`py` 命令均不可用
+**解决方案**：使用 Python 3.12.9 嵌入式版本（embeddable package），下载到项目 `bridge/python/` 目录，绿色便携无需系统安装。配置 `python312._pth` 启用 `import site` 和 `Lib/site-packages`，然后安装 pip 和依赖
+
+---
+
+#33
+**现象**：Fluidd 加载后显示连接设置页面，而非自动连接
+**根因**：Fluidd 的 `config.json` 中 `hosted` 字段为 `false`，导致 Fluidd 显示连接配置界面
+**解决方案**：桥接服务器启动时自动 patch Fluidd 的 `config.json`，设置 `hosted: true`，Fluidd 将自动连接同源 Moonraker API
+
+---
+
+#34
+**现象**：无法通过 DOM 解析 Snapmaker Flutter Web UI 样本（`snapmaker-webUI-sample.html`）的界面布局，DOM 中无可读文本
+**根因**：Flutter Web 在 release 模式下默认不启用语义树（Semantics），所有内容渲染在 canvas 或 HTML 层但无 `aria-label` 等属性
+**解决方案**：通过逆向分析 `main.dart.js`（4.8MB 编译产物）提取 UI 结构信息，结合用户直接描述确认 Snapmaker WebUI 有 4 个主模块（Camera/Print Job/Control/Filament）+ 侧栏连接设备，在同一界面 2x2 网格排布
+
+---
+
+#35
+**现象**：旧 `bambustudio-bridge` 目录删除后，新位置 `bridge/python/` 的嵌入式 Python 无法运行命令（所有命令返回 exit code 1 且无输出）
+**根因**：终端的当前工作目录（CWD）指向已删除的旧目录 `c:\Users\VitasGuo\Documents\SOLO\3D-printer\bambustudio-bridge`，导致所有命令执行失败
+**解决方案**：使用新终端（`target_terminal: new`）执行命令，新终端的 CWD 会自动设为有效路径
+
+---
+
+#36
+**现象**：嵌入式 Python 无法通过 `curl` 或 PowerShell `Invoke-WebRequest` 下载 `get-pip.py`，命令返回 exit code 1 且无输出
+**根因**：Windows 环境下 `curl` 和 `Invoke-WebRequest` 的错误信息被吞掉，无法看到具体错误原因
+**解决方案**：使用 Python 内置的 `urllib.request.urlretrieve()` 下载文件，嵌入式 Python 的 SSL 模块正常工作（`_ssl.pyd`、`libssl-3.dll`、`libcrypto-3.dll` 均已包含在嵌入包中）
+
+---
+
+#37
+**现象**：U1 的 Moonraker `/server/webcams/list` API 返回空数组，WebUI 摄像头无法自动获取流地址
+**根因**：U1 的 `moonraker.conf` 没有 `[webcam]` 配置段，Moonraker 的 `webcam` 组件不会注册任何摄像头。摄像头流由 `mjpegstreamer` 服务提供，通过 `octoprint_compat` 的默认配置暴露（`stream_url = /webcam/?action=stream`）
+**解决方案**：WebUI 在 `/server/webcams/list` 返回空时，回退到 `/webcam/?action=stream` 作为摄像头流地址。这与 U1 Moonraker 的 `octoprint_compat` 默认配置一致
+
+---
+
+#38
+**现象**：WebUI 中 Light 开灯不工作（关灯正常）
+**根因**：U1 的 `cavity_led` LED 对象有 4 个通道 `[RED, GREEN, BLUE, WHITE]`，`SET_LED` 命令只设了 `RED=1 GREEN=1 BLUE=1`，缺少 `WHITE=1` 参数。U1 的 LED 需要 WHITE 通道才能亮灯（通过 `/printer/objects/query?led cavity_led` 确认 `color_data: [[1.0, 1.0, 1.0, 0.0]]`，WHITE=0 时灯不亮）
+**解决方案**：`SET_LED LED=cavity_led RED=1 GREEN=1 BLUE=1 WHITE=1` 开灯，`SET_LED LED=cavity_led RED=0 GREEN=0 BLUE=0 WHITE=0` 关灯
+
+---
+
+#39
+**现象**：WebUI 中 Camera 点击开始不能显示视频流
+**根因**：MJPEG 视频流（`/webcam/?action=stream`）是长连接，桥接代理使用 `httpx.AsyncClient.get()` 一次性获取全部响应内容，无法流式转发 MJPEG 帧。前端用 `location.origin`（`http://localhost:13628`）拼接摄像头 URL，请求经过桥接代理导致流中断
+**解决方案**：通过 `/api/bridge/config` 获取打印机 IP，摄像头流 URL 直接指向打印机地址（`http://{printer_ip}/webcam/?action=stream`），绕过桥接代理
+
+---
+
+#40
+**现象**：WebUI 中 Filament 模块不能同步耗材的具体信息（材料类型、颜色）
+**根因**：U1 的 `filament_feed` 对象只有物理状态（`filament_detected`、`channel_state`），没有 `filament_type` 字段。耗材类型和颜色信息存储在 `snapmaker/print_task.json` 配置文件中（`filament_type`、`filament_color_rgba`、`filament_sub_type` 数组），不是 Moonraker 对象模型的属性
+**解决方案**：通过 `/server/files/config/snapmaker/print_task.json` 获取耗材类型和颜色，在 `loadFilamentInfo()` 中加载后传递给 `updFil()` 渲染
+
+---
+
+#41
+**现象**：BambuStudio 中热床 3D 模型偏到右上角，不在热床中心
+**根因**：BambuStudio 的 `update_model_offset()`（3DBed.cpp:605-618）将 STL 模型的 `(0,0,0)` 点移到 `printable_area` 的中心 `(135,135)`。非 BBL 打印机（文件名不含 `bbl-3dp-`）不做额外偏移。如果 STL 以左下角为原点（0,0），偏移后左下角被放到 (135,135)，整个热床就偏到右上角
+**解决方案**：STL 必须以中心为原点建模。将 `Snapmaker U1_bed_texture.stl` 从左下角原点（X: -2.5~273.5, Y: -10.5~282.5）居中为（X: -138~138, Y: -146.5~146.5），使 (0,0,0) 在热床中心。修改后需 reinstall 才能生效
+
+---
+
+#42
+**现象**：Bridge 安装后依赖兼容包原始目录，删除兼容包目录后 Bridge 无法运行
+**根因**：Bridge 服务器从兼容包原始目录（`BambuStudio-SnapmakerU1-Compat\bridge\`）运行，没有安装到 BambuStudio 安装目录
+**解决方案**：install.ps1/reinstall.ps1 将 bridge/ 复制到 `C:\Program Files\Bambu Studio\bridge\`，安装后兼容包目录可删除
+
+---
+
+#43
+**现象**：Bridge 安装到 Program Files 后配置文件无法写入
+**根因**：`bridge_config.json` 存放在 bridge/ 目录下，Program Files 需要管理员权限才能写入
+**解决方案**：配置文件路径改为 `%APPDATA%\BambuStudio-Bridge\bridge_config.json`，首次加载时自动从旧位置迁移
+
+---
+
+#44
+**现象**：Bridge 需要手动启动，用户每次开机都要运行 start.bat
+**根因**：没有配置自动启动机制
+**解决方案**：安装脚本创建 VBS 隐藏启动器（`start-hidden.vbs`，用 `WshShell.Run ..., 0, False` 隐藏控制台窗口）+ Windows Startup 文件夹快捷方式（`%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\BambuStudio Bridge.lnk`），登录时自动后台运行
+
+---
+
+#45
+**现象**：安装脚本创建 `start-hidden.vbs` 时报"对路径的访问被拒绝"
+**根因**：VBS 文件放在 `C:\Program Files\Bambu Studio\bridge\` 下，普通用户没有写入权限
+**解决方案**：VBS 启动器放到 `%APPDATA%\BambuStudio-Bridge\start-hidden.vbs`，该目录用户可写。Startup 快捷方式指向此 VBS 文件
+
+---
+
+#46
+**现象**：WebUI 摄像头模块点击播放后无法显示视频流，`/webcam/?action=stream` 返回 502 Bad Gateway
+**根因**：U1 不使用 MJPEG stream 视频流方案。U1 的摄像头通过 `/server/files/camera/monitor.jpg` 单张 JPEG 照片轮询方式实现（500ms 间隔），Snapmaker App 和 OrcaSlicer 都用此方式。`/webcam/?action=stream` 返回 502 是因为 mjpegstreamer 服务未运行，U1 根本不提供 MJPEG 流
+**解决方案**：WebUI 摄像头从 MJPEG stream 改为 snapshot 轮询方式——`pollCam()` 每 500ms 请求 `/server/files/camera/monitor.jpg?_t=TIMESTAMP`，通过桥接代理转发到打印机。启动时通过 IIFE 探测该 URL 是否可用来设置 `camAvail`，不可用时显示友好错误提示
+
+---
+
+#47
+**现象**：Print Job 模块检测到有任务，但按钮一直显示 Start，不显示 Pause/Stop
+**根因**：两个问题叠加——(1) 初始 HTTP 查询 `/printer/objects/query` 缺少 `print_stats` 和 `display_status` 参数，`D.print_stats` 始终为空对象，`ps.state` 为 `undefined`，`if(ps.state)` 判断失败；(2) WebSocket 订阅的初始响应格式是 `{result: {status: {...}}}`（没有 `method` 字段），`onmessage` 只处理 `notify_status_update`，订阅响应被忽略。两个问题导致页面加载后打印状态永远不会更新到 UI
+**解决方案**：初始查询 URL 添加 `print_stats` 和 `display_status`；查询完成后调用 `upd({})` 触发完整 UI 更新；`onmessage` 添加 `if(m.result&&m.result.status)upd(m.result.status)` 处理订阅响应
+
+---
+
+#48
+**现象**：从 BambuStudio 切片界面点击打印，直接开始打印而不弹出确认对话框
+**根因**：两个问题——(1) Bridge 的 `_handle_upload_with_confirm` 将原始 multipart body（含 `print=true`）直接转发给 Moonraker 的 `/api/files/local`，Moonraker OctoPrint 兼容层收到 `print=true` 后立即启动打印，Bridge 虽然设置了 `pending_print_file` 但打印已经开始；(2) BambuStudio 的 Physical Printer `print_host` 可能仍指向打印机 IP 而非 Bridge 地址（`http://127.0.0.1:13628`），导致上传请求绕过 Bridge 直接发到 Moonraker
+**解决方案**：(1) 改用 `request.form()` 解析 multipart 表单，提取 file 和 print 字段，使用 Moonraker 原生上传 API (`/server/files/upload`) 只上传文件不启动打印（原生 API 不支持 `print` 参数），然后返回 OctoPrint 兼容响应给 BambuStudio；(2) 用户需将 Physical Printer 的 `print_host` 改为 `http://127.0.0.1:13628`
+
+---
+
+#49
+**现象**：打印确认对话框的选项（Auto Bed Leveling/Flow Calibration/Timelapse）永远不生效
+**根因**：`bridge_confirm_print` 的参数 `options: dict = None` 被 FastAPI 当作 query parameter 解析，而非 request body。前端通过 `body: JSON.stringify(opts)` 发送 JSON 请求体，但 FastAPI 不会从 POST 请求体中读取未标注的 `dict` 参数
+**解决方案**：改为 `request: Request` 参数 + `await request.json()` 手动读取请求体
+
+---
+
+#50
+**现象**：切片界面热床模型高度不对，薄模型会和热床模型重叠导致显示异常
+**根因**：`Snapmaker U1_bed_texture.stl`（bed_model 配置文件）的 Z 坐标范围为 0.000~0.510，整个模型在 Z=0（打印面）之上。BambuStudio 的 `update_model_offset()`（3DBed.cpp:609）默认 Z 偏移仅 -0.03，偏移后模型顶部仍在 Z=0.480，远高于打印面。BBL 打印机有专用 hack（Z=-0.45），但非 BBL 打印机只使用默认 -0.03
+**解决方案**：修改 STL 文件本身，将所有 Z 坐标下移使顶部对齐 Z=0。`Snapmaker U1_bed_texture.stl` 下移 0.510（Z 范围 → -0.510~0.000），`Snapmaker U1_bed.stl` 下移 0.050（Z 范围 → -0.500~0.000）。偏移后模型顶部在 Z=-0.03，刚好在打印面之下
+
+---
+
+#51
+**现象**：打印确认对话框点击 Start Print 后打印机无反应
+**根因**：U1 Moonraker 的 `/server/files/start_local_print` 端点注册时使用 `transports=(TransportType.all() & ~TransportType.HTTP)`（snapmakercloud.py:140），明确排除了 HTTP 传输，只支持 WebSocket/MQTT。Bridge 和 WebUI 通过 HTTP POST 调用此端点会被 Moonraker 静默拒绝
+**解决方案**：改用 `/printer/gcode/script` 端点发送 `SDCARD_PRINT_FILE_WITH_PARAMETERS` G-code 命令（参考 klippy_apis.py:332 的 `start_print_advanced` 实现），此端点支持 HTTP 传输
+
+---
+
+#52
+**现象**：BambuStudio 切片后点打印不触发确认对话框（即使 print_host 已设为 Bridge 地址）
+**根因**：BambuStudio 上传时用户通常在 Prepare 标签页，Device 标签页的 WebUI 未加载，WebSocket 连接未建立。Bridge 的 `_notify_webui` 发出 `pending_print` 通知后无人接收。用户切换到 Device 标签页时 WebUI 重新加载，但不检查是否有待确认的打印任务
+**解决方案**：WebSocket 连接建立后（`ws.onopen`）立即检查 `/api/bridge/pending_print`，如有待确认打印则弹出确认对话框
+
+---
+
+#53
+**现象**：打印确认对话框点击 Start Print 后报 "Print failed: gcode failed"
+**根因**：U1 Moonraker 的 `/printer/gcode/script` 没有注册为 HTTP 端点（klippy_apis.py 中只注册了 `/printer/print/start`、`/printer/print/pause` 等端点，`gcode/script` 只是 Klipper 内部 RPC 端点，通过 WebSocket JSON-RPC 可用但 HTTP 不可用）。WebUI 和 Bridge 通过 HTTP POST 调用此端点会返回 404
+**解决方案**：WebUI 改用已有的 WebSocket 连接发送 `printer.gcode.script` JSON-RPC 请求；Bridge 的 `confirm_print` 端点改用 `websockets` 库建立临时 WebSocket 连接到 Moonraker 发送 G-code
+
+---
+
+#54
+**现象**：耗材加载中/热端移动中点击打印，设备立即开始移动热端，无安全检测
+**根因**：`doPrint()` 函数没有检查打印机当前状态，直接发送打印命令
+**解决方案**：`doPrint()` 添加 `print_stats.state` 检查，printing/paused 状态禁止启动新打印并弹出提示
+
+---
+
+#55
+**现象**：`SDCARD_PRINT_FILE_WITH_PARAMETERS` 命令报错 "unable to parse True"/"unable to parse False"
+**根因**：Klipper 的 G-code 宏解析器不能识别字符串 `"True"`/`"False"`，只接受数字 `1`/`0`。WebUI 和 Bridge 生成的 G-code 格式为 `AUTO_BED_LEVELING="True"`，Klipper 无法解析引号包裹的布尔字符串
+**解决方案**：改为数字格式 `AUTO_BED_LEVELING=1`（去掉引号，用数字代替字符串）。WebUI: `opts[k]?'1':'0'`；Bridge: `val = "1" if str(v).lower() in ("true", "1", "yes") else "0"`
+
+---
+
+#56
+**现象**：切片后打印不触发确认对话框，直接开始打印
+**根因**：用户自定义 machine 配置 `Snapmaker U1 (0.4 nozzle) - 拷贝.json` 中 `"print_host": "192.168.1.12"` 覆盖了系统配置的 `"print_host": "http://127.0.0.1:13628"`。BambuStudio 的配置继承机制中，用户配置优先级高于系统配置，导致 Physical Printer 直接与打印机 IP 通信，绕过 Bridge
+**解决方案**：用户需在 BambuStudio 中修改 Physical Printer 的 print_host 为 `http://127.0.0.1:13628`，或删除用户自定义的 machine 配置让系统配置生效
+
+---
+
+#57
+**现象**：WebUI 中所有 G-code 控制命令（移动/加热/风扇/灯光/暂停/恢复/取消）不生效
+**根因**：`gcode()` 函数通过 HTTP POST 调用 `/printer/gcode/script` 端点，但该端点在 U1 Moonraker 中没有注册为 HTTP 端点（klippy_apis.py 中只注册了 `/printer/print/start` 等端点，`gcode/script` 只是 Klipper 内部 RPC 端点，通过 WebSocket JSON-RPC 可用但 HTTP 不可用）
+**解决方案**：`gcode()` 函数优先使用 WebSocket JSON-RPC 发送 `printer.gcode.script`，HTTP 作为 fallback（某些 Moonraker 版本可能支持）
+
+---
+
+#58
+**现象**：切片后打印不触发确认对话框，直接开始打印或上传到打印机 IP 而非 Bridge
+**根因**：用户在 BambuStudio 中添加 Physical Printer 时输入的打印机 IP（如 `192.168.1.12`）被保存到用户预设副本（`user\*\machine\Snapmaker U1 (0.4 nozzle) - 拷贝.json`）的 `print_host` 字段。BambuStudio 的配置继承机制中用户配置优先级高于系统配置，导致 Physical Printer 直接与打印机 IP 通信，绕过 Bridge（`http://127.0.0.1:13628`）
+**解决方案**：reinstall.ps1 新增步骤 6/10，扫描 `%APPDATA%\BambuStudioBeta\user\*\machine\` 下所有文件名含 "Snapmaker" 的 JSON 文件，使用 `ConvertFrom-Json` / `ConvertTo-Json` 将 `print_host` 修改为 `http://127.0.0.1:13628`，`host_type` 修改为 `octoprint`。如用户后续在 BambuStudio 中重新添加 Physical Printer，需手动确保 print_host 设为 Bridge 地址
+
+---
+
+#59
+**现象**：Bridge 收到 BambuStudio 的 `POST /api/files/local` 上传请求后，multipart 表单解析失败，`print=true` 参数无法被拦截，文件直接转发到 Moonraker 自动开始打印
+**根因**：Python Bridge 的 `requirements.txt` 缺少 `python-multipart` 库。FastAPI 的 `request.form()` / `request.stream()` 解析 multipart 表单需要此库，未安装时抛出 `The 'python-multipart' library must be installed to use form parsing` 异常。Bridge 的异常处理将原始请求原样转发给 Moonraker，Moonraker 收到 `print=true` 后直接启动打印
+**解决方案**：在 `requirements.txt` 中添加 `python-multipart>=0.0.6`。此问题也是从 Python Bridge 迁移到 Node.js Bridge 的直接原因之一——Python 嵌入式包的依赖管理太脆弱
+
+---
+
+#60
+**现象**：Python 嵌入式发行版（`python-3.x-embed-amd64.zip`）缺少 tkinter、pip 权限问题、依赖安装到用户目录而非嵌入环境
+**根因**：Python 嵌入式包设计为最小运行时，不包含 Tcl/Tk 库（tkinter 依赖）、`site-packages` 目录默认不在搜索路径中、`pip install` 因 Program Files 写入权限限制安装到用户目录
+**解决方案**：Bridge 从 Python 重构为 Node.js。Node.js 的依赖管理（`package.json` + `node_modules`）比 Python 嵌入式包可靠得多，且 Node.js 在 Windows 上安装后即可全局使用，无需嵌入式运行时
+
+---
+
+#61
+**现象**：切片后点击 Print，BambuStudio 弹出 "Upload / Print / Cancel" 对话框，选 Print 后需要手动切换到 Device 标签才能看到打印确认对话框，体验不顺畅
+**根因**：BambuStudio 的 `PrintHostSendDialog`（C++ wxWidgets 对话框）只提供 Upload/Print/Cancel 三个选项，没有耗材选择和打印选项。Snapmaker OrcaSlicer 的第二步弹窗（耗材/调平/延时摄影）是 OrcaSlicer 源码中专门添加的，BambuStudio 没有
+**解决方案**：Bridge 收到 `print=true` 的上传请求后，弹出 Windows 原生对话框（PowerShell + WinForms，深色主题），包含耗材选择（4 个 extruder checkbox）和打印选项（自动调平/流量校准/延时摄影 checkbox）。用户确认后 Bridge 通过 WebSocket 发送 `SDCARD_PRINT_FILE_WITH_PARAMETERS`。Linux 上使用 zenity 实现类似功能
+
+---
+
+#62
+**现象**：Bridge 启动后所有代理请求返回 500，Fluidd 显示"Connecting to moonraker..."无法连接，WebUI 也不刷新打印机信息。直接访问 Moonraker（`http://192.168.1.12/api/version`）正常返回 200
+**根因**：Express 5 的 `{*path}` 通配符参数返回数组而非字符串。`req.params.path` 为 `["version"]` 而非 `"version"`，调用 `.startsWith()` 报 `TypeError: req.params.path.startsWith is not a function`。Express 4 的 `:path(*)` 返回字符串，但 Express 5 改为返回数组
+**解决方案**：添加 `wcPath(req)` 辅助函数，兼容数组和字符串：`Array.isArray(p) ? p.join("/") : (p || "")`。所有使用 `{*path}` 的路由都通过此函数获取路径
+
+---
+
+#63
+**现象**：Fluidd 在 iframe 中一直显示"Connecting to moonraker..."，无法连接。WebUI 正常工作
+**根因**：Fluidd 连接流程需要 `/access/token` 端点获取 API token。U1 的 Moonraker 不支持此端点（返回 404），Fluidd 在获取 token 失败后卡住。另外 Fluidd 的 `config.json` 中 `endpoints: []` 没有配置后端地址
+**解决方案**：1) Bridge 拦截 `/access/token` 和 `/access/login` 请求，返回空 token `{"result":""}`；2) 修改 Fluidd 的 `config.json`，添加 `"endpoints": [{"url": "/"}]` 指定后端地址
+
+---
+
+#64
+**现象**：WebUI 热床温度不显示，其他温度正常
+**根因**：WebUI 初始查询 URL 中遗漏了 `heater_bed` 参数。`/printer/objects/query?extruder&extruder1&...` 没有 `&heater_bed`
+**解决方案**：在初始查询 URL 中添加 `&heater_bed`
+
+---
+
+#65
+**现象**：WebUI 摄像头模块无法显示视频，点击播放后图片加载失败。初始探测 IIFE 设置 `camAvail=false`，显示"Camera unavailable"
+**根因**：`proxyToMoonraker` 函数（server.js:415-416）使用 `r.text()` 读取 Moonraker 响应体，`text()` 将二进制数据按 UTF-8 解码为字符串，破坏了 JPEG 图片的二进制数据。`/server/files/camera/monitor.jpg` 请求经过代理后返回损坏的 JPEG 数据，`<img>` 元素无法渲染，触发 `onerror`
+**解决方案**：将 `proxyToMoonraker` 改为 `Buffer.from(await r.arrayBuffer())` 读取二进制响应体，仅在 `content-type` 为 JSON 时用 `body.toString("utf-8")` 解析。对比 `/webcam/` 路由已正确使用 `arrayBuffer()`
+
+---
+
+#66
+**现象**：Fluidd 在 iframe 中一直"Connecting to moonraker..."，即使 `/access/token` 拦截和 `config.json` endpoints 已正确配置。WebUI 正常工作
+**根因**：WebSocket 代理有竞态条件。原代码在 `moonrakerWs.on("open")` 回调中才注册 `ws.on("message")`，但 Fluidd 连接 WebSocket 后立即发送 `printer.objects.subscribe` 订阅请求，此时 Moonraker WS 可能还在 CONNECTING 状态，订阅请求被丢弃。Moonraker 永远收不到订阅请求，Fluidd 永远收不到订阅响应，卡在 Connecting
+**解决方案**：将 `ws.on("message")` 移到 `moonrakerWs.on("open")` 外面，立即注册。添加 `pendingMsgs` 队列，Moonraker WS 在 CONNECTING 状态时缓存客户端消息，连接建立后一次性发送
+
+---
+
+#67
+**现象**：摄像头图片代理返回有效 JPEG，但 WebView 缓存导致轮询不刷新。Express 自动生成 ETag 头（`W/"1104c-..."`），WebView 可能用 ETag 做缓存判断
+**根因**：Express 默认启用 ETag 生成，中间件中 `res.removeHeader("ETag")` 在 `res.send()` 之前执行，但 Express 在 `send()` 内部又添加了 ETag
+**解决方案**：使用 `app.set("etag", false)` 在 Express 应用级别禁用 ETag 生成。同时设置 `Cache-Control: no-cache, no-store, must-revalidate` 和 `Pragma: no-cache`
+
+---
+
+#68
+**现象**：切片后点打印→Upload→Print，报错 `HTTP 500: {"error":"Upload failed: formidable.IncomingForm is not a constructor"}`
+**根因**：代码写 `const { formidable } = require("formidable")` 解构导入，然后 `new formidable.IncomingForm()`。formidable v3 中 `require("formidable")` 返回的对象直接包含 `IncomingForm`，解构后 `formidable` 变成 `require("formidable").formidable`（一个工厂函数），其上没有 `IncomingForm` 属性
+**解决方案**：改为 `const formidable = require("formidable")` 直接导入，然后 `new formidable.IncomingForm()`
+
+---
+
+#69
+**现象**：reinstall 后 WebUI 和 Fluidd 都不工作，Camera 显示旧照片，Fluidd 一直 Connecting。源码目录运行正常
+**根因**：install.ps1/reinstall.ps1 只复制了 `bridge-node` 目录到 BambuStudio 的 `bridge` 目录，没有复制 `bridge/web` 目录（包含 webui.html 和 Fluidd dist）。部署后 server.js 的 `WEB_DIR` 回退逻辑 `path.join(PROJECT_DIR, "bridge", "web")` 指向不存在的路径
+**解决方案**：在 install.ps1 和 reinstall.ps1 中添加复制 `bridge/web` 到 `$bridgeDst\web` 的步骤
+
+---
+
+## 70. Express 中间件顺序导致 G-code 上传二进制请求体被 JSON parser 消费
+
+**现象**：BambuStudio 切片后上传 G-code 文件到 Bridge，`req.body` 为空对象 `{}`，formidable 无法解析 multipart 表单，上传失败。
+
+**根因**：Express 中间件注册顺序错误——`express.json()` 在 `express.raw()` 之前注册。当 BambuStudio 发送 `Content-Type: multipart/form-data` 的上传请求时，`express.json()` 不匹配（只处理 `application/json`），但 `express.urlencoded()` 会尝试解析请求体，消费了原始数据流。后续 `express.raw()` 虽然匹配 `application/octet-stream`，但请求体已被消费，`req.body` 为空。
+
+**解决方案**：将 `express.raw({ type: ["application/octet-stream", "application/x-gcode"] })` 移到 `express.json()` 之前注册，确保二进制请求体优先被 raw parser 处理。
+
+---
+
+## 71. proxyToMoonraker 只转发 content-type 响应头导致 Fluidd 连接失败
+
+**现象**：Fluidd 通过 Bridge 代理连接 Moonraker 时一直卡在 "Connecting"，WebSocket 订阅请求无响应。
+
+**根因**：v5.3.0 的 `proxyToMoonraker` 只转发了 `content-type` 响应头，丢失了其他关键响应头（如 `set-cookie`、`content-disposition` 等）。Moonraker 的某些 API 依赖完整的响应头传递信息，Fluidd 的连接流程也可能依赖特定响应头。
+
+**解决方案**：`proxyToMoonraker` 完全重写，转发所有响应头（仅排除 `transfer-encoding` 和 `connection`），确保代理响应与 Moonraker 原始响应一致。
+
+---
+
+## 72. Fluidd Vue Router 导航到子路径返回 404
+
+**现象**：Fluidd 在 iframe 中加载正常，但点击导航链接（如 `/fluidd/printer`、`/fluidd/temperature`）时返回 404 或空白页面。
+
+**根因**：Fluidd 是 Vue SPA，使用 Vue Router 的 history 模式。当用户在 Fluidd 内部导航到子路径时，浏览器会向 Bridge 服务器请求 `/fluidd/printer` 等路径。Bridge 的 `express.static` 只能匹配实际存在的文件路径，找不到 `/fluidd/printer` 对应的文件就返回 404。SPA 的正确行为是所有未匹配路径都返回 `index.html`，由前端路由处理。
+
+**解决方案**：新增 `app.get("/fluidd/{*path}", ...)` 路由，在 `express.static` 之后注册，对所有 `/fluidd/` 下的非静态资源路径返回 `index.html`。
+
+---
+
+## 73. WebSocket 代理缺少 Moonraker 错误处理导致客户端连接泄漏
+
+**现象**：Moonraker 服务重启或网络中断后，Bridge 的 WebSocket 客户端连接不释放，逐渐积累大量僵尸连接。
+
+**根因**：Bridge 的 WebSocket 代理只注册了 `moonrakerWs.on("message")` 和 `moonrakerWs.on("close")`，没有注册 `moonrakerWs.on("error")`。当 Moonraker 连接异常断开时，`error` 事件触发但没有处理程序，客户端 WebSocket 连接不会被关闭，形成泄漏。
+
+**解决方案**：添加 `moonrakerWs.on("error")` 处理程序，在 Moonraker 连接错误时关闭对应的客户端 WebSocket 连接。同时改进 `ws.on("close")` 中的清理逻辑，确保 Moonraker WebSocket 也被正确关闭。
+
+---
+
+## 74. undici 未声明为依赖导致上传报错
+
+**现象**：切片后点击打印，报错 `HTTP 500: {"error":"Upload failed: Cannot find package 'undici' imported from C:\\Program Files\\Bambu Studio\\bridge\\server.js"}`
+
+**根因**：server.js 第 364 行使用 `const FormData = (await import("undici")).FormData;` 动态导入 `undici` 包来构造 multipart 上传请求体（`node-fetch` v2 不支持 `FormData`），但 `package.json` 的 `dependencies` 中没有声明 `undici`。源码目录因为开发时全局安装过 `undici` 所以不报错，但 `npm install --production` 只安装 `dependencies` 中声明的包，部署目录缺少 `undici` 导致运行时报错。
+
+**解决方案**：在 `package.json` 的 `dependencies` 中添加 `"undici": "^6.21.0"`。reinstall 时 `npm install --production` 会自动安装。
+
+---
+
+## 75. node-fetch v2 不兼容 undici.FormData 导致上传 Content-Type 错误
+
+**现象**：添加 `undici` 依赖后上传仍报错：`streaming_form_data.parser.ParseFailedException: Content-Type is not multipart/form-data`。Moonraker 收到的请求不是有效的 multipart 格式。
+
+**根因**：`node-fetch` v2 不支持 `FormData` 作为 `body`。当把 `undici.FormData` 实例传给 `node-fetch` 的 `fetch()` 时，`node-fetch` 不知道如何序列化它，不会自动设置 `Content-Type: multipart/form-data; boundary=...` 头，请求体也不是有效的 multipart 编码。`node-fetch` v2 有自己的 `FormData` 实现（基于 `form-data` 包），与 `undici.FormData` 不兼容。
+
+**解决方案**：上传请求改用 `undici.fetch`（而非 `node-fetch`），因为 `FormData`、`Blob` 和 `fetch` 都来自 `undici`，天然兼容。`undici.fetch` 会自动设置正确的 `Content-Type` 头并正确序列化 multipart 请求体。
+
+---
+
+## 76. undici v6 不导出 Blob 构造函数
+
+**现象**：改用 `undici.FormData` + `undici.Blob` 后报错 `undici.Blob is not a constructor`。
+
+**根因**：`undici` v6 的导出列表不包含 `Blob`。`Blob` 在 Node.js 18+ 中是全局对象，`undici` 不重复导出。但 `undici.FormData.append()` 需要传入 `Blob` 或 `File` 实例作为文件参数，而全局 `Blob` 与 `undici.FormData` 的兼容性也不确定。
+
+**解决方案**：彻底放弃 `undici` 方案，改用 `form-data` 包（`npm install form-data`）。`form-data` 是 `node-fetch` v2 的标准搭档，提供 `getHeaders()` 方法返回正确的 `Content-Type: multipart/form-data; boundary=...` 头，与 `node-fetch` 的 `fetch()` 天然兼容。上传代码改为：`const FD = require("form-data"); const fd = new FD(); fd.append("file", buffer, { filename: name }); fetch(url, { headers: { ...otherHeaders, ...fd.getHeaders() }, body: fd });`
+
+---
+
+## 77. reinstall 后旧 Bridge 进程未重启，仍运行旧代码
+
+**现象**：reinstall 后报错仍然是旧代码的错误（如 `undici.Blob is not a constructor`），即使部署目录的 server.js 已经更新。
+
+**根因**：reinstall 脚本用 `Get-Process -Name "node" | Where-Object { $_.CommandLine -like "*bridge*" }` 查找 Bridge 进程，但通过 VBS 启动器启动的 node 进程的 `CommandLine` 属性为空，过滤条件匹配不到。即使匹配到了，Bridge 以管理员权限运行（VBS 启动器通过 Startup 快捷方式以当前用户身份运行，但 Program Files 目录需要管理员权限），非管理员权限的 `Stop-Process -Force` 会报"拒绝访问"。结果是旧进程没停掉，新进程启动后端口冲突无法监听，实际仍在用旧代码。
+
+**解决方案**：改用 `Get-NetTCPConnection -LocalPort 13628 | Where-Object { $_.State -eq "Listen" }` 按端口查找进程（比 CommandLine 更可靠），停止失败时用 `Start-Process powershell -Verb RunAs` 提权停止。
+
+---
+
+## 78. Fluidd Service Worker 拦截 WebUI 的 fetch 请求导致数据不显示
+
+**现象**：WebUI 页面加载后所有数据模块（温度、打印状态等）都不显示，顶栏状态显示 "Fetch failed: Failed to fetch"。但 Camera 模块正常（能显示照片）。
+
+**根因**：Fluidd 的 PWA 功能包含一个 Workbox Service Worker（`/fluidd/sw.js`），注册在 `/fluidd/` 路径下。在 BambuStudio WebView 中，Service Worker 的作用域可能被错误地扩展到整个 origin，导致它拦截了 WebUI 的 `fetch('/printer/objects/query?...')` 请求。Service Worker 可以拦截 `fetch()` API 的请求，但不能拦截 `new Image()` 的加载（Camera 用的是 Image 对象），所以 Camera 正常但数据 fetch 失败。
+
+**解决方案**：在 Bridge 的 Express 路由中，在 `express.static` 之前注册 `/fluidd/sw.js` 的拦截路由，返回一个自动注销的 Service Worker 脚本（`self.registration.unregister()`）。同时拦截 `/fluidd/manifest.webmanifest` 返回 404，防止 PWA 行为。这样既阻止了新的 SW 注册，也会让已注册的 SW 自动注销。
+
+---
+
+## 79. BambuStudio WebView 阻止 fetch()/XMLHttpRequest，但不阻止 script/img 加载
+
+**现象**：WebUI 在浏览器中正常工作，但在 BambuStudio 的 WebView 中所有 `fetch()` 和 `XMLHttpRequest` 调用都失败，报 "Failed to fetch" 或 "XHR network error"。`<img>` 标签加载图片和 `<script>` 标签加载 JS 正常。
+
+**根因**：BambuStudio 的 `PrinterWebView`（基于 wxWebView/WebKit）对 `fetch()` 和 `XMLHttpRequest` API 施加了安全限制，阻止了这些网络请求。但浏览器原生的资源加载（`<script src="...">`、`<img src="...">`、`<link href="...">`）不受影响。这是 WebView 的安全策略，不是 CORS 或 Service Worker 问题。
+
+**解决方案**：将所有 `fetch()`/`XMLHttpRequest` 调用替换为 JSONP 风格的 `<script>` 标签加载：
+1. **GET 请求**：`bridgeGET(path, callback)` — 通过 `<script src="/api/bridge/proxy.js?path=xxx&cb=callbackName">` 加载，服务端代理 Moonraker 请求并返回 `callbackName(data);` 格式的 JS
+2. **POST 请求**：`bridgePOST(path, body, callback)` — 将参数编码为 query string，通过 `<script src="/api/bridge/xxx.js?param1=1&cb=callbackName">` 的 GET 请求完成
+3. **图片加载**：`new Image()` 替代 `fetch() + blob URL`
+4. **初始数据**：`<script src="/api/bridge/init-data.js">` 直接加载
+
+**关键代码**：
+```javascript
+function loadJS(url, cb) {
+  var cbName = '_jscb' + (_jscb++);
+  window[cbName] = function(d) { delete window[cbName]; cb(d); };
+  var s = document.createElement('script');
+  s.src = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'cb=' + cbName;
+  s.onerror = function() { delete window[cbName]; cb(null); };
+  document.head.appendChild(s);
+}
+```

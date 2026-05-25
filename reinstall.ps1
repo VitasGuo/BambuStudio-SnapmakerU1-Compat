@@ -1,11 +1,16 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack Reinstaller"
+$AutoConfirm = $false
+if ($args -contains "-y" -or $args -contains "--yes" -or $args -contains "-AutoConfirm") {
+    $AutoConfirm = $true
+}
+
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.7.1 Reinstaller"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "    Snapmaker U1 BambuStudio Compat Pack - Reinstall" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.7.1 - Reinstall" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -18,7 +23,7 @@ if ($bambuProcess) {
 
 $pkgDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-Write-Host "  [1/7] Detecting BambuStudio..." -ForegroundColor White
+Write-Host "  [1/10] Detecting BambuStudio..." -ForegroundColor White
 $bambuDir = $null
 $searchPaths = @(
     "C:\Program Files\Bambu Studio",
@@ -56,16 +61,52 @@ Write-Host "  Found: $bambuDir" -ForegroundColor Green
 $profilesDir = "$bambuDir\resources\profiles"
 Write-Host ""
 
-$confirm = Read-Host "  Reinstall Snapmaker U1 profiles? (Y/N)"
-if ($confirm -ne "Y" -and $confirm -ne "y") {
-    Write-Host "  Cancelled." -ForegroundColor Yellow
-    Read-Host "Press Enter to exit"
-    exit 0
+if ($AutoConfirm) {
+    Write-Host "  Auto-confirmed." -ForegroundColor DarkGray
+} else {
+    $confirm = Read-Host "  Reinstall Snapmaker U1 profiles + Bridge Server? (Y/N)"
+    if ($confirm -ne "Y" -and $confirm -ne "y") {
+        Write-Host "  Cancelled." -ForegroundColor Yellow
+        Read-Host "Press Enter to exit"
+        exit 0
+    }
 }
 
 Write-Host ""
 
-Write-Host "  [2/7] Removing old profiles..." -ForegroundColor White
+Write-Host "  [2/10] Stopping Bridge Server..." -ForegroundColor White
+$stopped = $false
+$portProc = Get-NetTCPConnection -LocalPort 13628 -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Listen" } | Select-Object -First 1
+if ($portProc) {
+    try {
+        Stop-Process -Id $portProc.OwningProcess -Force -ErrorAction Stop
+        Start-Sleep -Milliseconds 500
+        $stopped = $true
+        Write-Host "  Stopped Bridge process (PID $($portProc.OwningProcess))" -ForegroundColor Green
+    } catch {
+        try {
+            Start-Process powershell -Verb RunAs -ArgumentList "-Command Stop-Process -Id $($portProc.OwningProcess) -Force" -Wait
+            Start-Sleep -Milliseconds 500
+            $stopped = $true
+            Write-Host "  Stopped Bridge process (elevated, PID $($portProc.OwningProcess))" -ForegroundColor Green
+        } catch {
+            Write-Host "  [!] Failed to stop Bridge process. Please stop it manually." -ForegroundColor Yellow
+        }
+    }
+} else {
+    $bridgeProc = Get-Process -Name "node" -ErrorAction SilentlyContinue
+    if ($bridgeProc) {
+        foreach ($bp in $bridgeProc) {
+            try { Stop-Process -Id $bp.Id -Force -ErrorAction SilentlyContinue; $stopped = $true } catch {}
+        }
+        if ($stopped) { Write-Host "  Stopped node process(es)" -ForegroundColor Green }
+    }
+}
+if (-not $stopped -and -not $portProc) {
+    Write-Host "  No Bridge process running (OK)" -ForegroundColor DarkGray
+}
+
+Write-Host "  [3/10] Removing old profiles..." -ForegroundColor White
 if (Test-Path "$profilesDir\Snapmaker.json") {
     Remove-Item "$profilesDir\Snapmaker.json" -Force
     Write-Host "  Removed Snapmaker.json" -ForegroundColor Green
@@ -78,7 +119,7 @@ if (-not (Test-Path "$profilesDir\Snapmaker.json") -and -not (Test-Path "$profil
     Write-Host "  No old profiles found (OK)" -ForegroundColor DarkGray
 }
 
-Write-Host "  [3/7] Clearing BambuStudio system cache..." -ForegroundColor White
+Write-Host "  [4/10] Clearing BambuStudio system cache..." -ForegroundColor White
 $cacheDir = "$env:APPDATA\BambuStudioBeta\system\Snapmaker"
 $cacheVendor = "$env:APPDATA\BambuStudioBeta\system\Snapmaker.json"
 if (Test-Path $cacheDir) {
@@ -91,24 +132,33 @@ if (Test-Path $cacheVendor) {
     Remove-Item $cacheVendor -Force
 }
 
-$userDefaultDir = "$env:APPDATA\BambuStudioBeta\user\default"
-if (Test-Path $userDefaultDir) {
-    $snapmakerUserFiles = Get-ChildItem $userDefaultDir -Filter "*.json" -Recurse | Where-Object {
-        $content = Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue
-        $content -match "Snapmaker" -or $_.Name -match "Snapmaker" -or $_.Name -match "@U1"
-    }
-    if ($snapmakerUserFiles) {
-        foreach ($f in $snapmakerUserFiles) {
-            Remove-Item $f.FullName -Force
-            Write-Host "  Removed user preset: $($f.Name)" -ForegroundColor DarkGray
+$userBaseDir = "$env:APPDATA\BambuStudioBeta\user"
+$userCleanedCount = 0
+if (Test-Path $userBaseDir) {
+    $userSubDirs = Get-ChildItem $userBaseDir -Directory
+    foreach ($subDir in $userSubDirs) {
+        $filamentDir = Join-Path $subDir.FullName "filament"
+        if (Test-Path $filamentDir) {
+            $snapmakerFiles = Get-ChildItem $filamentDir -File | Where-Object {
+                ($_.Extension -eq ".json" -or $_.Extension -eq ".info") -and (
+                    $_.Name -match "Snapmaker" -or $_.Name -match "@U1"
+                )
+            }
+            foreach ($f in $snapmakerFiles) {
+                Remove-Item $f.FullName -Force
+                Write-Host "  Removed: $($subDir.Name)\filament\$($f.Name)" -ForegroundColor DarkGray
+                $userCleanedCount++
+            }
         }
-        Write-Host "  Cleared Snapmaker user presets" -ForegroundColor Green
+    }
+    if ($userCleanedCount -gt 0) {
+        Write-Host "  Cleared $userCleanedCount Snapmaker filament preset(s)" -ForegroundColor Green
     } else {
-        Write-Host "  No Snapmaker user presets found (OK)" -ForegroundColor DarkGray
+        Write-Host "  No Snapmaker filament presets found (OK)" -ForegroundColor DarkGray
     }
 }
 
-Write-Host "  [4/7] Deep-cleaning BambuStudio.conf..." -ForegroundColor White
+Write-Host "  [5/10] Deep-cleaning BambuStudio.conf..." -ForegroundColor White
 $confPath = "$env:APPDATA\BambuStudioBeta\BambuStudio.conf"
 if (Test-Path $confPath) {
     try {
@@ -203,7 +253,68 @@ if (Test-Path $confPath) {
     Write-Host "  BambuStudio.conf not found (OK for first install)" -ForegroundColor DarkGray
 }
 
-Write-Host "  [5/7] Installing profiles..." -ForegroundColor White
+Write-Host "  [6/10] Patching user machine configs (print_host -> Bridge)..." -ForegroundColor White
+$userDir = "$env:APPDATA\BambuStudioBeta\user"
+$patchedCount = 0
+if (Test-Path $userDir) {
+    $machineFiles = Get-ChildItem $userDir -Filter "*.json" -Recurse | Where-Object {
+        $_.DirectoryName -match '\\machine\\' -and $_.Name -match 'Snapmaker'
+    }
+    foreach ($mf in $machineFiles) {
+        try {
+            $raw = [System.IO.File]::ReadAllText($mf.FullName, [System.Text.UTF8Encoding]::new($false))
+            if ($raw -match 'Snapmaker') {
+                $json = $raw | ConvertFrom-Json
+                $changed = $false
+                if ($json.PSObject.Properties.Match('print_host')) {
+                    if ($json.print_host -ne 'http://127.0.0.1:13628') {
+                        $oldHost = $json.print_host
+                        $json.print_host = 'http://127.0.0.1:13628'
+                        Write-Host "    print_host: $oldHost -> http://127.0.0.1:13628" -ForegroundColor DarkGray
+                        $changed = $true
+                    }
+                } else {
+                    $json | Add-Member -NotePropertyName 'print_host' -NotePropertyValue 'http://127.0.0.1:13628' -Force
+                    Write-Host "    print_host: (added) http://127.0.0.1:13628" -ForegroundColor DarkGray
+                    $changed = $true
+                }
+                if ($json.PSObject.Properties.Match('host_type')) {
+                    if ($json.host_type -ne 'octoprint') {
+                        $json.host_type = 'octoprint'
+                        Write-Host "    host_type: -> octoprint" -ForegroundColor DarkGray
+                        $changed = $true
+                    }
+                } else {
+                    $json | Add-Member -NotePropertyName 'host_type' -NotePropertyValue 'octoprint' -Force
+                    Write-Host "    host_type: (added) octoprint" -ForegroundColor DarkGray
+                    $changed = $true
+                }
+                if ($json.PSObject.Properties.Match('print_host_webui')) {
+                    if ($json.print_host_webui -ne 'http://127.0.0.1:13628') {
+                        $json.print_host_webui = 'http://127.0.0.1:13628'
+                        $changed = $true
+                    }
+                }
+                if ($changed) {
+                    $output = $json | ConvertTo-Json -Depth 10
+                    [System.IO.File]::WriteAllText($mf.FullName, $output, [System.Text.UTF8Encoding]::new($false))
+                    Write-Host "  Patched: $($mf.Name)" -ForegroundColor Green
+                    $patchedCount++
+                }
+            }
+        } catch {
+            Write-Host "  [!] Failed to patch $($mf.Name): $_" -ForegroundColor Yellow
+        }
+    }
+}
+if ($patchedCount -eq 0) {
+    Write-Host "  No user machine configs needed patching (OK)" -ForegroundColor DarkGray
+} else {
+    Write-Host "  Patched $patchedCount user machine config(s)" -ForegroundColor Green
+}
+
+Write-Host ""
+Write-Host "  [7/10] Installing profiles..." -ForegroundColor White
 try {
     Copy-Item "$pkgDir\Snapmaker.json" "$bambuDir\resources\profiles\Snapmaker.json" -Force
     Write-Host "  Snapmaker.json" -ForegroundColor Green
@@ -231,36 +342,104 @@ try {
     exit 1
 }
 
-Write-Host "  [6/7] Verifying..." -ForegroundColor White
+Write-Host "  [8/10] Reinstalling Bridge Server (Node.js)..." -ForegroundColor White
+$bridgeSrc = "$pkgDir\bridge-node"
+$bridgeDst = "$bambuDir\bridge"
+$webSrc = "$pkgDir\bridge\web"
+
+if (-not (Test-Path $bridgeSrc)) {
+    Write-Host "  Bridge source not found at $bridgeSrc, skipping" -ForegroundColor Yellow
+} else {
+    try {
+        if (Test-Path $bridgeDst) {
+            Remove-Item $bridgeDst -Recurse -Force
+        }
+        Copy-Item $bridgeSrc $bridgeDst -Recurse -Force
+        Write-Host "  Bridge files copied to $bridgeDst" -ForegroundColor Green
+
+        if (Test-Path $webSrc) {
+            $webDst = "$bridgeDst\web"
+            if (Test-Path $webDst) {
+                Remove-Item $webDst -Recurse -Force
+            }
+            Copy-Item $webSrc $webDst -Recurse -Force
+            Write-Host "  Web UI files copied to $webDst" -ForegroundColor Green
+        } else {
+            Write-Host "  [!] Web UI source not found at $webSrc" -ForegroundColor Yellow
+        }
+
+        $nodeExe = Get-Command node -ErrorAction SilentlyContinue
+        if ($nodeExe) {
+            Write-Host "  Node.js found: $($nodeExe.Source)" -ForegroundColor Green
+
+            Write-Host "  Installing npm dependencies..." -ForegroundColor White
+            try {
+                Push-Location $bridgeDst
+                npm install --production 2>&1 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+                Pop-Location
+                Write-Host "  npm dependencies installed" -ForegroundColor Green
+            } catch {
+                Pop-Location
+                Write-Host "  [!] npm install failed: $_" -ForegroundColor Yellow
+                Write-Host "  You may need to run 'npm install' manually in $bridgeDst" -ForegroundColor Yellow
+            }
+        } else {
+            Write-Host "  [!] Node.js not found! Install from https://nodejs.org" -ForegroundColor Red
+        }
+
+        $bridgeConfigDir = "$env:APPDATA\BambuStudio-Bridge"
+        if (-not (Test-Path $bridgeConfigDir)) {
+            New-Item -ItemType Directory -Path $bridgeConfigDir -Force | Out-Null
+        }
+
+        $vbsContent = @"
+Set WshShell = CreateObject("WScript.Shell")
+WshShell.Run "node ""$bridgeDst\server.js""", 0, False
+"@
+        $vbsPath = "$bridgeConfigDir\start-hidden.vbs"
+        [System.IO.File]::WriteAllText($vbsPath, $vbsContent, [System.Text.Encoding]::Unicode)
+        Write-Host "  Created hidden launcher: $vbsPath" -ForegroundColor Green
+
+        $startupFolder = [System.Environment]::GetFolderPath('Startup')
+        $shortcutPath = "$startupFolder\BambuStudio Bridge.lnk"
+        $WScriptShell = New-Object -ComObject WScript.Shell
+        $shortcut = $WScriptShell.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = "wscript.exe"
+        $shortcut.Arguments = "`"$vbsPath`""
+        $shortcut.WorkingDirectory = $bridgeDst
+        $shortcut.Description = "BambuStudio Bridge Server"
+        $shortcut.Save()
+        Write-Host "  Updated startup shortcut" -ForegroundColor Green
+    } catch {
+        Write-Host "  [!] Bridge reinstall failed: $_" -ForegroundColor Yellow
+    }
+}
+
+Write-Host "  [9/10] Verifying..." -ForegroundColor White
 $vendorOk = Test-Path "$bambuDir\resources\profiles\Snapmaker.json"
 $u1Ok = Test-Path "$bambuDir\resources\profiles\Snapmaker\machine\Snapmaker U1.json"
 $processOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\process\0.20 Standard @Snapmaker U1.json"
 $filamentOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Snapmaker PLA Basic @U1.json"
-$petgHfOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Snapmaker PETG HF @U1.json"
-$tpu90aOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Snapmaker TPU 90A @U1.json"
-$tpu95aOk = Test-Path "$bambuDir\resources\profiles\Snapmaker\filament\Snapmaker TPU 95A HF @U1.json"
+$bridgeOk = Test-Path "$bambuDir\bridge\server.js"
 
 if ($vendorOk -and $u1Ok -and $processOk -and $filamentOk) {
-    Write-Host "  Core verification passed!" -ForegroundColor Green
-    if ($petgHfOk) { Write-Host "  PETG HF: OK" -ForegroundColor DarkGray }
-    if ($tpu90aOk) { Write-Host "  TPU 90A: OK" -ForegroundColor DarkGray }
-    if ($tpu95aOk) { Write-Host "  TPU 95A HF: OK" -ForegroundColor DarkGray }
+    Write-Host "  Profile verification passed!" -ForegroundColor Green
 } else {
-    Write-Host "  [X] Verification failed!" -ForegroundColor Red
-    if (-not $vendorOk) { Write-Host "  Missing: Snapmaker.json" -ForegroundColor Red }
-    if (-not $u1Ok) { Write-Host "  Missing: Snapmaker U1.json" -ForegroundColor Red }
-    if (-not $processOk) { Write-Host "  Missing: process file" -ForegroundColor Red }
-    if (-not $filamentOk) { Write-Host "  Missing: Snapmaker filament file" -ForegroundColor Red }
-    Read-Host "Press Enter to exit"
-    exit 1
+    Write-Host "  [X] Profile verification failed!" -ForegroundColor Red
+}
+if ($bridgeOk) {
+    Write-Host "  Bridge Server (Node.js): installed" -ForegroundColor Green
 }
 
-Write-Host "  [7/7] Listing installed Snapmaker filaments..." -ForegroundColor White
-$filamentDir = "$bambuDir\resources\profiles\Snapmaker\filament"
-$filamentFiles = Get-ChildItem $filamentDir -Filter "*@U1.json" | Sort-Object Name
-foreach ($f in $filamentFiles) {
-    $fContent = Get-Content $f.FullName -Raw | ConvertFrom-Json
-    Write-Host "    $($fContent.name)" -ForegroundColor Cyan
+Write-Host "  [10/10] Starting Bridge Server..." -ForegroundColor White
+$vbsPath = "$env:APPDATA\BambuStudio-Bridge\start-hidden.vbs"
+if (Test-Path $vbsPath) {
+    try {
+        Start-Process "wscript.exe" -ArgumentList "`"$vbsPath`""
+        Write-Host "  Bridge Server started (background)" -ForegroundColor Green
+    } catch {
+        Write-Host "  [!] Failed to start Bridge: $_" -ForegroundColor Yellow
+    }
 }
 
 Write-Host ""
@@ -268,8 +447,21 @@ Write-Host "  ======================================================" -Foregroun
 Write-Host "    Reinstall Successful!" -ForegroundColor Green
 Write-Host "  ======================================================" -ForegroundColor Green
 Write-Host ""
+Write-Host "  Installed:" -ForegroundColor White
+Write-Host "    - Snapmaker U1 profiles -> BambuStudio" -ForegroundColor Green
+Write-Host "    - Bridge Server (Node.js) -> $bambuDir\bridge\" -ForegroundColor Green
+Write-Host "    - Auto-start -> Windows Startup" -ForegroundColor Green
+Write-Host ""
 Write-Host "  Next steps:" -ForegroundColor White
 Write-Host "    1. Start BambuStudio" -ForegroundColor White
-Write-Host "    2. All filaments will auto-appear" -ForegroundColor White
+Write-Host "    2. Select Snapmaker U1 printer" -ForegroundColor DarkGray
+Write-Host "    3. Slice and click Print -> native dialog will appear" -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "  Bridge auto-detects your printer via mDNS (no manual IP needed)." -ForegroundColor DarkGray
+Write-Host "  If auto-detection fails, open http://127.0.0.1:13628 in browser to configure." -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "  Bridge Server runs automatically on login." -ForegroundColor DarkGray
+Write-Host "  Config stored in: %APPDATA%\BambuStudio-Bridge\" -ForegroundColor DarkGray
+Write-Host "  Log file: %APPDATA%\BambuStudio-Bridge\bridge.log" -ForegroundColor DarkGray
 Write-Host ""
 Read-Host "Press Enter to exit"

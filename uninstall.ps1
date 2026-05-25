@@ -1,11 +1,11 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack Uninstaller"
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.7.1 Uninstaller"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack Uninstall" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.7.1 Uninstall" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -25,7 +25,7 @@ $searchPaths = @(
 )
 
 foreach ($p in $searchPaths) {
-    if ((Test-Path "$p\resources\profiles\Snapmaker.json") -or (Test-Path "$p\resources\profiles\Snapmaker")) {
+    if ((Test-Path "$p\resources\profiles\Snapmaker.json") -or (Test-Path "$p\resources\profiles\Snapmaker") -or (Test-Path "$p\bridge")) {
         $bambuDir = $p
         break
     }
@@ -41,8 +41,9 @@ if (-not $bambuDir) {
 $profilesDir = "$bambuDir\resources\profiles"
 $hasVendor = Test-Path "$profilesDir\Snapmaker.json"
 $hasDir = Test-Path "$profilesDir\Snapmaker"
+$hasBridge = Test-Path "$bambuDir\bridge"
 
-if (-not $hasVendor -and -not $hasDir) {
+if (-not $hasVendor -and -not $hasDir -and -not $hasBridge) {
     Write-Host "  [!] Compatibility pack not found, nothing to uninstall." -ForegroundColor Yellow
     Read-Host "Press Enter to exit"
     exit 0
@@ -53,8 +54,10 @@ Write-Host ""
 Write-Host "  Will remove:" -ForegroundColor White
 if ($hasVendor) { Write-Host "    - Snapmaker.json" }
 if ($hasDir) { Write-Host "    - Snapmaker\ directory" }
+if ($hasBridge) { Write-Host "    - Bridge Server (bridge\)" }
 Write-Host "    - BambuStudio cache for Snapmaker"
 Write-Host "    - Snapmaker references in BambuStudio.conf"
+Write-Host "    - Bridge startup shortcut"
 Write-Host ""
 Write-Host "  This does NOT affect other BambuStudio features." -ForegroundColor DarkGray
 Write-Host ""
@@ -69,7 +72,7 @@ if ($confirm -ne "Y" -and $confirm -ne "y") {
 Write-Host ""
 
 if ($hasVendor) {
-    Write-Host "  [1/5] Removing vendor config..." -ForegroundColor White
+    Write-Host "  [1/7] Removing vendor config..." -ForegroundColor White
     try {
         Remove-Item "$profilesDir\Snapmaker.json" -Force
         Write-Host "  [OK] Snapmaker.json removed" -ForegroundColor Green
@@ -79,11 +82,11 @@ if ($hasVendor) {
         exit 1
     }
 } else {
-    Write-Host "  [1/5] Snapmaker.json not found, skipping" -ForegroundColor DarkGray
+    Write-Host "  [1/7] Snapmaker.json not found, skipping" -ForegroundColor DarkGray
 }
 
 if ($hasDir) {
-    Write-Host "  [2/5] Removing profile directory..." -ForegroundColor White
+    Write-Host "  [2/7] Removing profile directory..." -ForegroundColor White
     try {
         Remove-Item "$profilesDir\Snapmaker" -Recurse -Force
         Write-Host "  [OK] Snapmaker\ directory removed" -ForegroundColor Green
@@ -93,30 +96,101 @@ if ($hasDir) {
         exit 1
     }
 } else {
-    Write-Host "  [2/5] Snapmaker\ directory not found, skipping" -ForegroundColor DarkGray
+    Write-Host "  [2/7] Snapmaker\ directory not found, skipping" -ForegroundColor DarkGray
 }
 
-Write-Host "  [3/5] Clearing BambuStudio cache..." -ForegroundColor White
+Write-Host "  [3/7] Stopping and removing Bridge Server..." -ForegroundColor White
+$portProc = Get-NetTCPConnection -LocalPort 13628 -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Listen" } | Select-Object -First 1
+if ($portProc) {
+    try {
+        Stop-Process -Id $portProc.OwningProcess -Force -ErrorAction Stop
+        Start-Sleep -Milliseconds 500
+        Write-Host "  Stopped Bridge process (PID $($portProc.OwningProcess))" -ForegroundColor DarkGray
+    } catch {
+        try {
+            Start-Process powershell -Verb RunAs -ArgumentList "-Command Stop-Process -Id $($portProc.OwningProcess) -Force" -Wait
+            Start-Sleep -Milliseconds 500
+            Write-Host "  Stopped Bridge process (elevated)" -ForegroundColor DarkGray
+        } catch {
+            Write-Host "  [!] Failed to stop Bridge process. Please stop it manually." -ForegroundColor Yellow
+        }
+    }
+} else {
+    $bridgeProc = Get-Process -Name "node" -ErrorAction SilentlyContinue
+    if ($bridgeProc) {
+        foreach ($bp in $bridgeProc) { try { Stop-Process -Id $bp.Id -Force -ErrorAction SilentlyContinue } catch {} }
+        Write-Host "  Stopped node process(es)" -ForegroundColor DarkGray
+    }
+}
+
+$startupFolder = [System.Environment]::GetFolderPath('Startup')
+$shortcutPath = "$startupFolder\BambuStudio Bridge.lnk"
+if (Test-Path $shortcutPath) {
+    Remove-Item $shortcutPath -Force
+    Write-Host "  Removed startup shortcut" -ForegroundColor Green
+}
+
+if ($hasBridge) {
+    try {
+        Remove-Item "$bambuDir\bridge" -Recurse -Force
+        Write-Host "  [OK] Bridge directory removed" -ForegroundColor Green
+    } catch {
+        Write-Host "  [!] Failed to remove bridge directory: $_" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "  Bridge directory not found, skipping" -ForegroundColor DarkGray
+}
+
+# Cleanup old files in Program Files (from v3.x)
+$oldVbsInBambu = "$bambuDir\bridge\start-hidden.vbs"
+if (Test-Path $oldVbsInBambu) {
+    try {
+        Remove-Item $oldVbsInBambu -Force -ErrorAction SilentlyContinue
+    } catch { }
+}
+
+Write-Host "  [4/7] Cleaning Bridge APPDATA..." -ForegroundColor White
+$bridgeConfigDir = "$env:APPDATA\BambuStudio-Bridge"
+if (Test-Path $bridgeConfigDir) {
+    try {
+        Remove-Item $bridgeConfigDir -Recurse -Force
+        Write-Host "  [OK] Bridge APPDATA removed" -ForegroundColor Green
+    } catch {
+        Write-Host "  [!] Failed to remove APPDATA: $_" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "  Bridge APPDATA not found, skipping" -ForegroundColor DarkGray
+}
+
+Write-Host "  [5/7] Clearing BambuStudio cache..." -ForegroundColor White
 $cacheDir = "$env:APPDATA\BambuStudioBeta\system\Snapmaker"
 $cacheVendor = "$env:APPDATA\BambuStudioBeta\system\Snapmaker.json"
 if (Test-Path $cacheDir) { Remove-Item $cacheDir -Recurse -Force }
 if (Test-Path $cacheVendor) { Remove-Item $cacheVendor -Force }
 
-$userDefaultDir = "$env:APPDATA\BambuStudioBeta\user\default"
-if (Test-Path $userDefaultDir) {
-    $snapmakerUserFiles = Get-ChildItem $userDefaultDir -Filter "*.json" -Recurse | Where-Object {
-        $content = Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue
-        $content -match "Snapmaker" -or $_.Name -match "Snapmaker" -or $_.Name -match "@U1"
-    }
-    if ($snapmakerUserFiles) {
-        foreach ($f in $snapmakerUserFiles) {
-            Remove-Item $f.FullName -Force
+$userBaseDir = "$env:APPDATA\BambuStudioBeta\user"
+if (Test-Path $userBaseDir) {
+    $userDirs = Get-ChildItem $userBaseDir -Directory -ErrorAction SilentlyContinue
+    foreach ($userDir in $userDirs) {
+        $machineDir = Join-Path $userDir.FullName "machine"
+        $filamentDir = Join-Path $userDir.FullName "filament"
+        foreach ($scanDir in @($machineDir, $filamentDir)) {
+            if (-not (Test-Path $scanDir)) { continue }
+            $snapmakerUserFiles = Get-ChildItem $scanDir -Filter "*.json" -ErrorAction SilentlyContinue | Where-Object {
+                $content = Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue
+                $content -match "Snapmaker" -or $_.Name -match "Snapmaker" -or $_.Name -match "@U1"
+            }
+            if ($snapmakerUserFiles) {
+                foreach ($f in $snapmakerUserFiles) {
+                    Remove-Item $f.FullName -Force
+                }
+            }
         }
     }
 }
 Write-Host "  [OK] Cache cleared" -ForegroundColor Green
 
-Write-Host "  [4/5] Cleaning BambuStudio.conf..." -ForegroundColor White
+Write-Host "  [6/7] Cleaning BambuStudio.conf..." -ForegroundColor White
 $confPath = "$env:APPDATA\BambuStudioBeta\BambuStudio.conf"
 if (Test-Path $confPath) {
     try {
@@ -209,11 +283,12 @@ if (Test-Path $confPath) {
     Write-Host "  [--] BambuStudio.conf not found" -ForegroundColor DarkGray
 }
 
-Write-Host "  [5/5] Verifying..." -ForegroundColor White
+Write-Host "  [7/7] Verifying..." -ForegroundColor White
 $vendorGone = -not (Test-Path "$profilesDir\Snapmaker.json")
 $dirGone = -not (Test-Path "$profilesDir\Snapmaker")
+$bridgeGone = -not (Test-Path "$bambuDir\bridge")
 
-if ($vendorGone -and $dirGone) {
+if ($vendorGone -and $dirGone -and $bridgeGone) {
     Write-Host "  Verification passed!" -ForegroundColor Green
 } else {
     Write-Host "  [!] Some files may remain (check manually)" -ForegroundColor Yellow

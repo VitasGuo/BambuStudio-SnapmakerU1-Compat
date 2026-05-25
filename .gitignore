@@ -1,3 +1,12 @@
 .DS_Store
 Thumbs.db
 *.log
+*.pyc
+bridge/web/dist/
+bridge/bridge_config.json
+bridge/python/
+bridge-node/node_modules/
+bridge-node/dist/
+bridge-node/package-lock.json
+bridge-node/test_*.js
+bridge-node/test*.js
