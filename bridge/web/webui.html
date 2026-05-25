@@ -167,9 +167,20 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-u
 .modal-btn-print:hover{background:#1976d2}
 .modal-btn-print:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:900px){.grid{grid-template-columns:1fr}.sidebar{width:66px}.sidebar-top .logo{width:38px;height:38px}}
+.bridge-offline-bar{display:none;background:#ff4444;color:#fff;padding:10px 16px;text-align:center;font-size:13px;position:sticky;top:0;z-index:100}
+.bridge-offline-bar.show{display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap}
+.bridge-offline-bar .bar-text{font-weight:600}
+.bridge-offline-bar button{background:rgba(255,255,255,0.2);color:#fff;border:1px solid rgba(255,255,255,0.4);border-radius:6px;padding:4px 12px;cursor:pointer;font-size:12px;white-space:nowrap}
+.bridge-offline-bar button:hover{background:rgba(255,255,255,0.35)}
 </style>
 </head>
 <body>
+<div class="bridge-offline-bar" id="offlineBar">
+<span class="bar-text" data-i18n="bridge_offline">Bridge Offline</span>
+<span data-i18n="bridge_offline_msg">Bridge server is not running.</span>
+<button onclick="restartBridge()" data-i18n="restart_bridge">Restart Bridge</button>
+<button onclick="openFluidd()" data-i18n="open_fluidd">Open Fluidd</button>
+</div>
 <div class="app">
 
 <div class="sidebar">
@@ -364,28 +375,28 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-u
 <div class="fil-type" id="fil0type">--</div>
 <div class="fil-det" id="fil0det">--</div>
 <div class="fil-det" id="fil0state">--</div>
-<button class="fil-cal-btn" id="fil0cal" onclick="event.stopPropagation();calibrateFlow(0)" data-i18n="flow_cal">Flow Cal</button>
+<button class="fil-cal-btn" id="fil0cal" onclick="calibrateFlow(0);return false;" data-i18n="flow_cal">Flow Cal</button>
 </div>
 <div class="fil-slot" id="fil1" onclick="selFil(1)">
 <div class="fil-num" style="background:#333">2</div>
 <div class="fil-type" id="fil1type">--</div>
 <div class="fil-det" id="fil1det">--</div>
 <div class="fil-det" id="fil1state">--</div>
-<button class="fil-cal-btn" id="fil1cal" onclick="event.stopPropagation();calibrateFlow(1)" data-i18n="flow_cal">Flow Cal</button>
+<button class="fil-cal-btn" id="fil1cal" onclick="calibrateFlow(1);return false;" data-i18n="flow_cal">Flow Cal</button>
 </div>
 <div class="fil-slot" id="fil2" onclick="selFil(2)">
 <div class="fil-num" style="background:#8d6e63">3</div>
 <div class="fil-type" id="fil2type">--</div>
 <div class="fil-det" id="fil2det">--</div>
 <div class="fil-det" id="fil2state">--</div>
-<button class="fil-cal-btn" id="fil2cal" onclick="event.stopPropagation();calibrateFlow(2)" data-i18n="flow_cal">Flow Cal</button>
+<button class="fil-cal-btn" id="fil2cal" onclick="calibrateFlow(2);return false;" data-i18n="flow_cal">Flow Cal</button>
 </div>
 <div class="fil-slot" id="fil3" onclick="selFil(3)">
 <div class="fil-num" style="background:#607d8b">4</div>
 <div class="fil-type" id="fil3type">--</div>
 <div class="fil-det" id="fil3det">--</div>
 <div class="fil-det" id="fil3state">--</div>
-<button class="fil-cal-btn" id="fil3cal" onclick="event.stopPropagation();calibrateFlow(3)" data-i18n="flow_cal">Flow Cal</button>
+<button class="fil-cal-btn" id="fil3cal" onclick="calibrateFlow(3);return false;" data-i18n="flow_cal">Flow Cal</button>
 </div>
 </div>
 <div style="margin-top:12px;padding:10px 12px;background:var(--panel2);border-radius:8px">
@@ -492,6 +503,8 @@ loaded:'Loaded',empty:'Empty',extruder_n:'Extruder',
 start:'Start',pause:'Pause',resume:'Resume',stop:'Stop',
 idle:'Idle',printing:'Printing',paused:'Paused',complete:'Complete',cancelled:'Cancelled',error:'Error',
 layers:'layers',online:'Online',reconnecting:'Reconnecting...',ws_error:'WS Error',
+bridge_offline:'Bridge Offline',bridge_offline_msg:'Bridge server is not running. Please restart it or use Fluidd mode.',
+restart_bridge:'Restart Bridge',open_fluidd:'Open Fluidd',
 file_name:'File',progress:'Progress',elapsed:'Elapsed',remaining:'Remaining',
 calibrating:'Calibrating...',printer_busy:'Printer is busy',
 no_pending:'No pending print',print_started:'Print started',print_failed:'Print failed',
@@ -517,6 +530,8 @@ loaded:'已装入',empty:'未装入',extruder_n:'喷头',
 start:'开始',pause:'暂停',resume:'恢复',stop:'停止',
 idle:'待机',printing:'打印中',paused:'已暂停',complete:'已完成',cancelled:'已取消',error:'错误',
 layers:'层',online:'已连接',reconnecting:'重连中...',ws_error:'连接错误',
+bridge_offline:'Bridge 离线',bridge_offline_msg:'Bridge 服务器未运行，请重启或使用 Fluidd 模式。',
+restart_bridge:'重启 Bridge',open_fluidd:'打开 Fluidd',
 file_name:'文件',progress:'进度',elapsed:'已用时间',remaining:'剩余时间',
 calibrating:'校准中...',printer_busy:'打印机工作中',
 no_pending:'无待打印任务',print_started:'打印已开始',print_failed:'打印失败',
@@ -754,15 +769,28 @@ setTimeout(function(){if(btn)btn.disabled=false;},5000);
 function refreshCtrl(){}
 function refreshFil(){loadFilamentInfo();}
 
+var _wsFailCount=0;
+function showOfflineBar(show){
+var bar=$('offlineBar');
+if(bar){if(show)bar.classList.add('show');else bar.classList.remove('show');}
+}
+function restartBridge(){
+bridgeGET('/api/bridge/restart',function(d){
+if(d&&d.ok){showOfflineBar(false);setTimeout(function(){location.reload();},2000);}
+else{alert('Restart failed. Please run reinstall.ps1 manually.');}
+});
+}
+function openFluidd(){window.open('/fluidd/','_blank');}
+
 function connect(){
 if(ws&&ws.readyState<=1)return;
 try{
 ws=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+'/websocket');
-ws.onopen=function(){console.log('[Bridge] WS connected');$('connStatus').textContent=t('online');ws.send(JSON.stringify({jsonrpc:"2.0",method:"printer.objects.subscribe",params:{objects:{toolhead:null,extruder:null,extruder1:null,extruder2:null,extruder3:null,heater_bed:null,print_stats:null,system_stats:null,display_status:null,fan:null,"fan_generic cavity_fan":null,"filament_feed left":null,"filament_feed right":null,filament_parameters:null,gcode_move:null,"led cavity_led":null}},id:1}));bridgeGET('/api/bridge/pending_print',function(d){if(d&&d.filename)onPendingPrint(d.filename);});};
+ws.onopen=function(){console.log('[Bridge] WS connected');$('connStatus').textContent=t('online');_wsFailCount=0;showOfflineBar(false);ws.send(JSON.stringify({jsonrpc:"2.0",method:"printer.objects.subscribe",params:{objects:{toolhead:null,extruder:null,extruder1:null,extruder2:null,extruder3:null,heater_bed:null,print_stats:null,system_stats:null,display_status:null,fan:null,"fan_generic cavity_fan":null,"filament_feed left":null,"filament_feed right":null,filament_parameters:null,gcode_move:null,"led cavity_led":null}},id:1}));bridgeGET('/api/bridge/pending_print',function(d){if(d&&d.filename)onPendingPrint(d.filename);});};
 ws.onmessage=function(e){var m=JSON.parse(e.data);if(m.method==='notify_status_update')upd(m.params[0]);if(m.method==='notify_proc_stat_update')updSys(m.params[0]);if(m.method==='notify_bridge_event'){var evt=m.params[0],data=m.params[1]||{};if(evt==='pending_print'&&data.filename)onPendingPrint(data.filename);}if(m.result&&m.result.status)upd(m.result.status);};
-ws.onclose=function(){console.warn('[Bridge] WS closed, reconnecting in 3s');$('connStatus').textContent=t('reconnecting');rt=setTimeout(connect,3000);};
+ws.onclose=function(){console.warn('[Bridge] WS closed, reconnecting in 3s');$('connStatus').textContent=t('reconnecting');_wsFailCount++;if(_wsFailCount>=3)showOfflineBar(true);rt=setTimeout(connect,3000);};
 ws.onerror=function(e){console.error('[Bridge] WS error:',e);$('connStatus').textContent=t('ws_error');};
-}catch(e){rt=setTimeout(connect,3000);}
+}catch(e){_wsFailCount++;if(_wsFailCount>=3)showOfflineBar(true);rt=setTimeout(connect,3000);}
 }
 
 function upd(d){

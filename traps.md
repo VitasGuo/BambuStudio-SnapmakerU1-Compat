@@ -819,3 +819,23 @@ function loadJS(url, cb) {
 日志证据：`Auto-detected printer: 192.168.1.12:1884`（应为 `:80`）
 
 **解决方案**：`autoDetectPrinter()` 中移除 `service.port` 使用，硬编码 `printerConfig.port = 80`（Moonraker HTTP 端口始终是 80）。`/api/bridge/scan` 端点返回 `port: 80`（HTTP 端口）+ `mdns_port`（mDNS 原始端口，仅供参考）。
+
+---
+
+## 81. VBS 启动器使用裸 `node` 命令导致开机自启失败
+
+**现象**：重启电脑后 Bridge 不运行，WebUI 显示 reconnecting。手动运行 `node server.js` 正常，但开机自启不生效。
+
+**根因**：`start-hidden.vbs` 中使用 `WshShell.Run "node ""...\server.js""", 0, False`，裸 `node` 命令依赖 PATH 环境变量。Windows 登录时，Startup 文件夹的 VBS 脚本可能在用户 PATH 完全加载前执行，导致 `node` 找不到，Bridge 静默启动失败。
+
+**解决方案**：VBS 启动器改用 `node.exe` 完整路径（如 `C:\Program Files\nodejs\node.exe`），安装脚本在创建 VBS 时自动检测并写入完整路径。`WshShell.Run """C:\Program Files\nodejs\node.exe"" ""...\server.js""", 0, False`
+
+---
+
+## 82. Flow Cal 按钮在 BambuStudio WebView 中点击无反应
+
+**现象**：Filament 模块的 Flow Cal 按钮点击后无任何反应，不发送 G-code，不显示校准中状态。
+
+**根因**：按钮 `onclick` 使用 `event.stopPropagation();calibrateFlow(0)`，BambuStudio 的 wxWebView 在内联 `onclick` 属性中不自动注入 `event` 对象，导致 `event is not defined` JavaScript 错误，后续 `calibrateFlow()` 不执行。
+
+**解决方案**：移除 `event.stopPropagation()`，改用 `return false;` 阻止冒泡和默认行为：`onclick="calibrateFlow(0);return false;"`

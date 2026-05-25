@@ -3,7 +3,34 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 更新日期: 2026-05-26 (v5.7.2)
+## 更新日期: 2026-05-26 (v5.7.3)
+
+---
+
+## v5.7.3 安装脚本增强 + WebUI 离线检测 + Flow Cal 修复
+
+### 问题
+1. 安装脚本仅用 `Get-Command node` 检测 Node.js，若不在 PATH 则只打印红字，不引导安装
+2. VBS 启动器使用裸 `node` 命令，开机自启时 PATH 可能未加载完成，导致 Bridge 无法启动
+3. 安装后无验证 Bridge 是否真正在运行
+4. Bridge 离线时 WebUI 只显示 reconnecting，无操作提示
+5. Flow Cal 按钮在 BambuStudio WebView 中点击无反应（`event.stopPropagation()` 报错）
+
+### 修复
+- Node.js 检测增强：PATH → 多路径搜索（Program Files、nvm 等）→ 自动下载 LTS 安装
+- VBS 启动器改用 `node.exe` 完整路径，确保开机自启可靠
+- 安装后验证：循环检测端口 13628 是否在监听，最多等 5 秒
+- WebUI 离线检测：WS 连续失败 3 次后显示红色横幅，提供「重启 Bridge」和「打开 Fluidd」按钮
+- Bridge 新增 `/api/bridge/restart.js` 端点，支持 WebUI 远程重启（spawn 新进程后退出）
+- Flow Cal 按钮：移除 `event.stopPropagation()`，改用 `return false;`
+
+### 修改文件
+- `install.ps1` — Node.js 检测增强 + VBS 完整路径 + 端口验证
+- `reinstall.ps1` — 同上
+- `bridge-node/server.js` — 版本号 5.7.2→5.7.3；新增 restart 端点
+- `bridge/web/webui.html` — 离线横幅 + restart/fluidd 按钮 + Flow Cal 修复
+- `bridge-node/package.json` / `package-lock.json` — 版本号
+- `reinstall.ps1` / `install.ps1` / `uninstall.ps1` — v5.7.3
 
 ---
 

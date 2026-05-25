@@ -7,7 +7,7 @@ const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 
-const BRIDGE_VERSION = "5.7.2";
+const BRIDGE_VERSION = "5.7.3";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -411,6 +411,22 @@ app.get("/api/bridge/debug/logs.js", (req, res) => {
   if (level) logs = logs.filter((l) => l.includes(`[${level}]`));
   res.type("application/javascript");
   res.send(`${cb}(${JSON.stringify({ version: BRIDGE_VERSION, total: debugLog.length, logs: logs.slice(-lines) })});`);
+});
+
+app.get("/api/bridge/restart.js", (req, res) => {
+  const cb = req.query.cb || "callback";
+  log("INFO", "Bridge restart requested via WebUI");
+  res.type("application/javascript");
+  res.send(`${cb}(${JSON.stringify({ ok: true })});`);
+  setTimeout(() => {
+    const child = require("child_process").spawn(
+      process.execPath,
+      [process.argv[1]],
+      { detached: true, stdio: "ignore", cwd: process.cwd() }
+    );
+    child.unref();
+    process.exit(0);
+  }, 500);
 });
 
 app.get("/api/bridge/scan", async (req, res) => {

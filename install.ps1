@@ -1,11 +1,11 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.7.2 Installer"
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.7.3 Installer"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.7.2" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.7.3" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -273,22 +273,105 @@ if (-not (Test-Path $bridgeSrc)) {
         }
 
         $nodeExe = Get-Command node -ErrorAction SilentlyContinue
+        $nodePath = $null
         if ($nodeExe) {
-            Write-Host "  Node.js found: $($nodeExe.Source)" -ForegroundColor Green
-
-            Write-Host "  Installing npm dependencies..." -ForegroundColor White
-            try {
-                Push-Location $bridgeDst
-                npm install --production 2>&1 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
-                Pop-Location
-                Write-Host "  npm dependencies installed" -ForegroundColor Green
-            } catch {
-                Pop-Location
-                Write-Host "  [!] npm install failed: $_" -ForegroundColor Yellow
-                Write-Host "  You may need to run 'npm install' manually in $bridgeDst" -ForegroundColor Yellow
-            }
+            $nodePath = $nodeExe.Source
+            Write-Host "  Node.js found: $nodePath" -ForegroundColor Green
         } else {
-            Write-Host "  [!] Node.js not found! Install from https://nodejs.org" -ForegroundColor Red
+            Write-Host "  Node.js not in PATH, searching common locations..." -ForegroundColor Yellow
+            $nodeSearchPaths = @(
+                "C:\Program Files\nodejs\node.exe",
+                "C:\Program Files (x86)\nodejs\node.exe",
+                "${env:ProgramFiles}\nodejs\node.exe",
+                "${env:LOCALAPPDATA}\Programs\nodejs\node.exe",
+                "$env:USERPROFILE\AppData\Roaming\nvm\v*\node.exe"
+            )
+            foreach ($sp in $nodeSearchPaths) {
+                $resolved = Resolve-Path $sp -ErrorAction SilentlyContinue
+                if ($resolved) {
+                    $nodePath = $resolved[0].Path
+                    break
+                }
+                if (Test-Path $sp) {
+                    $nodePath = $sp
+                    break
+                }
+            }
+            if ($nodePath) {
+                Write-Host "  Node.js found: $nodePath" -ForegroundColor Green
+            }
+        }
+
+        if (-not $nodePath) {
+            Write-Host ""
+            Write-Host "  [X] Node.js is required but not installed!" -ForegroundColor Red
+            Write-Host ""
+            Write-Host "  Please install Node.js LTS from: https://nodejs.org" -ForegroundColor White
+            Write-Host "  After installing Node.js, run this installer again." -ForegroundColor White
+            Write-Host ""
+            $dlChoice = Read-Host "  Auto-download Node.js LTS installer? (Y/N)"
+            if ($dlChoice -eq "Y" -or $dlChoice -eq "y") {
+                Write-Host "  Downloading Node.js LTS..." -ForegroundColor White
+                $nodeMsi = "$env:TEMP\node-lts.msi"
+                try {
+                    Invoke-WebRequest -Uri "https://nodejs.org/dist/latest-v22.x/" -UseBasicParsing -TimeoutSec 10 | Out-Null
+                    $latestUrl = "https://nodejs.org/dist/latest-v22.x/"
+                    $page = Invoke-WebRequest -Uri $latestUrl -UseBasicParsing -TimeoutSec 15
+                    $msiMatch = [regex]::Match($page.Content, 'node-v22\.\d+\.\d+-x64\.msi')
+                    if ($msiMatch.Success) {
+                        $msiUrl = "${latestUrl}$($msiMatch.Value)"
+                        Write-Host "  Downloading $($msiMatch.Value)..." -ForegroundColor White
+                        Invoke-WebRequest -Uri $msiUrl -OutFile $nodeMsi -UseBasicParsing -TimeoutSec 120
+                        Write-Host "  Downloaded to $nodeMsi" -ForegroundColor Green
+                        Write-Host "  Launching Node.js installer..." -ForegroundColor White
+                        Start-Process msiexec.exe -ArgumentList "/i", "`"$nodeMsi`"", "/qn", "/norestart" -Verb RunAs -Wait
+                        $nodeExe2 = Get-Command node -ErrorAction SilentlyContinue
+                        if ($nodeExe2) {
+                            $nodePath = $nodeExe2.Source
+                            Write-Host "  Node.js installed: $nodePath" -ForegroundColor Green
+                        } else {
+                            $fallbackPath = "C:\Program Files\nodejs\node.exe"
+                            if (Test-Path $fallbackPath) {
+                                $nodePath = $fallbackPath
+                                Write-Host "  Node.js installed: $nodePath" -ForegroundColor Green
+                            } else {
+                                Write-Host "  [X] Node.js installation may have failed." -ForegroundColor Red
+                                Write-Host "  Please install manually from https://nodejs.org and rerun." -ForegroundColor Red
+                                Read-Host "Press Enter to exit"
+                                exit 1
+                            }
+                        }
+                    } else {
+                        Write-Host "  [X] Could not determine latest Node.js version." -ForegroundColor Red
+                        Write-Host "  Please install manually from https://nodejs.org and rerun." -ForegroundColor Red
+                        Read-Host "Press Enter to exit"
+                        exit 1
+                    }
+                } catch {
+                    Write-Host "  [X] Download failed: $_" -ForegroundColor Red
+                    Write-Host "  Please install Node.js manually from https://nodejs.org and rerun." -ForegroundColor Red
+                    Read-Host "Press Enter to exit"
+                    exit 1
+                }
+            } else {
+                Read-Host "Press Enter to exit"
+                exit 1
+            }
+        }
+
+        $nodeVersion = & $nodePath --version 2>&1
+        Write-Host "  Node.js version: $nodeVersion" -ForegroundColor Green
+
+        Write-Host "  Installing npm dependencies..." -ForegroundColor White
+        try {
+            Push-Location $bridgeDst
+            & $nodePath "$((Get-Command npm -ErrorAction SilentlyContinue).Source ?? (Join-Path (Split-Path $nodePath) 'npm.cmd'))" install --production 2>&1 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+            Pop-Location
+            Write-Host "  npm dependencies installed" -ForegroundColor Green
+        } catch {
+            Pop-Location
+            Write-Host "  [!] npm install failed: $_" -ForegroundColor Yellow
+            Write-Host "  You may need to run 'npm install' manually in $bridgeDst" -ForegroundColor Yellow
         }
 
         $bridgeConfigDir = "$env:APPDATA\BambuStudio-Bridge"
@@ -298,11 +381,12 @@ if (-not (Test-Path $bridgeSrc)) {
 
         $vbsContent = @"
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run "node ""$bridgeDst\server.js""", 0, False
+WshShell.Run """$nodePath"" ""$bridgeDst\server.js""", 0, False
 "@
         $vbsPath = "$bridgeConfigDir\start-hidden.vbs"
         [System.IO.File]::WriteAllText($vbsPath, $vbsContent, [System.Text.Encoding]::Unicode)
         Write-Host "  Created hidden launcher: $vbsPath" -ForegroundColor Green
+        Write-Host "  Node.exe path in launcher: $nodePath" -ForegroundColor DarkGray
 
         $startupFolder = [System.Environment]::GetFolderPath('Startup')
         $shortcutPath = "$startupFolder\BambuStudio Bridge.lnk"
@@ -368,7 +452,24 @@ if (Test-Path $vbsPath) {
             }
         }
         Start-Process "wscript.exe" -ArgumentList "`"$vbsPath`""
-        Write-Host "  Bridge Server started (background)" -ForegroundColor Green
+        Write-Host "  Bridge Server starting..." -ForegroundColor Green
+
+        Write-Host "  Verifying Bridge is listening on port 13628..." -ForegroundColor White
+        $bridgeReady = $false
+        for ($i = 0; $i -lt 10; $i++) {
+            Start-Sleep -Milliseconds 500
+            $check = Get-NetTCPConnection -LocalPort 13628 -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Listen" }
+            if ($check) {
+                $bridgeReady = $true
+                break
+            }
+        }
+        if ($bridgeReady) {
+            Write-Host "  Bridge Server is running on http://127.0.0.1:13628" -ForegroundColor Green
+        } else {
+            Write-Host "  [!] Bridge may not have started correctly." -ForegroundColor Yellow
+            Write-Host "  Try running manually: node `"$bambuDir\bridge\server.js`"" -ForegroundColor Yellow
+        }
     } catch {
         Write-Host "  [!] Failed to start Bridge: $_" -ForegroundColor Yellow
     }

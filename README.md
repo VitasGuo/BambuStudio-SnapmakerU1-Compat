@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.7.2
+# Snapmaker U1 BambuStudio 兼容包 v5.7.3
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -191,6 +191,12 @@ A: 重新运行 `install.bat`。
 
 ## 版本历史
 
+- **v5.7.3** (2026-05-26) - 安装脚本增强 + WebUI 离线检测 + Flow Cal 修复
+  - Node.js 检测增强：多路径搜索 + 自动下载 LTS 安装引导
+  - VBS 启动器改用 node.exe 完整路径，确保开机自启可靠
+  - 安装后端口验证，确认 Bridge 真正在运行
+  - WebUI 离线检测：连续失败后显示红色横幅，提供重启 Bridge / 打开 Fluidd 按钮
+  - 修复 Flow Cal 按钮在 BambuStudio WebView 中点击无反应
 - **v5.7.2** (2026-05-26) - 修复 mDNS 自动检测端口错误
   - 修复 uninstall-reinstall 后 WebUI 无法连接打印机（mDNS 返回 MQTT 端口 1884 而非 HTTP 端口 80）
   - 自动检测和扫描端点现在始终使用 Moonraker HTTP 端口 80
