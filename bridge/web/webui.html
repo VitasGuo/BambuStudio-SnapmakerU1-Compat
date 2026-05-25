@@ -764,7 +764,7 @@ alert(t('printer_busy')+' ('+ps.state+')');return;
 }
 var btn=$('fil'+idx+'cal');
 if(btn){btn.disabled=true;btn.textContent=t('calibrating');}
-var cmd='SM_PRINT_FLOW_CALIBRATE INDEX='+idx;
+var cmd='SM_PRINT_FLOW_CALIBRATE EXTRUDER='+idx;
 console.log('[FlowCal] sending: '+cmd+', ws='+(ws?ws.readyState:'null'));
 var ok=gcode(cmd);
 console.log('[FlowCal] gcode returned: '+ok);

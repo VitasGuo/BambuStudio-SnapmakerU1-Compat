@@ -857,3 +857,20 @@ function loadJS(url, cb) {
 - 删除行 759-767 的重复 `gcode()` 定义
 - `calibrateFlow()` 添加 try-catch、console.log 调试、按钮文字变"校准中..."、gcode 失败时恢复按钮
 - reinstall 后部署目录同步最新源码
+
+---
+
+## 84. SM_PRINT_FLOW_CALIBRATE 宏参数名错误：INDEX vs EXTRUDER
+
+**现象**：Flow Cal 按钮点击后 G-code 命令发送成功（WebSocket 返回无错误），但打印机不执行流量校准，按钮看起来"没反应"。
+
+**根因**：WebUI 发送的 G-code 是 `SM_PRINT_FLOW_CALIBRATE INDEX=0`，但 U1 的 Klipper 宏定义使用的参数名是 `EXTRUDER`，不是 `INDEX`。对比 `fdm_machine_common.json` 的 start gcode 中所有 U1 宏都使用 `EXTRUDER=` 参数名：
+```
+SM_PRINT_AUTO_FEED EXTRUDER=0
+SM_PRINT_FLOW_CALIBRATE EXTRUDER=0
+SM_PRINT_EXTRUDER_PREHEAT EXTRUDER=1 TEMP=140
+```
+
+Klipper 宏参数名不匹配时，宏不会执行也不会报错——Klipper 静默忽略未知参数，宏体中引用的 `EXTRUDER` 参数为空或默认值，导致宏不执行有效操作。
+
+**解决方案**：将 `SM_PRINT_FLOW_CALIBRATE INDEX=` 改为 `SM_PRINT_FLOW_CALIBRATE EXTRUDER=`，与 U1 的 Klipper 宏定义参数名一致。

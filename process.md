@@ -3,7 +3,37 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 更新日期: 2026-05-26 (v5.7.4)
+## 更新日期: 2026-05-26 (v5.7.5)
+
+---
+
+## v5.7.5 Flow Cal 宏参数名修正：INDEX→EXTRUDER
+
+### 问题
+Flow Cal 按钮点击后仍然无反应（v5.7.4 修复 gcode() 后仍不工作）
+
+### 根因
+`SM_PRINT_FLOW_CALIBRATE` 宏的参数名错误！WebUI 发送的是 `SM_PRINT_FLOW_CALIBRATE INDEX=0`，但 U1 的 Klipper 宏定义使用的参数名是 **`EXTRUDER`**，不是 `INDEX`。
+
+证据来自 `fdm_machine_common.json` 的 start gcode：
+```
+SM_PRINT_AUTO_FEED EXTRUDER=0
+SM_PRINT_FLOW_CALIBRATE EXTRUDER=0
+SM_PRINT_FLOW_CALIBRATE EXTRUDER=1
+SM_PRINT_FLOW_CALIBRATE EXTRUDER=2
+SM_PRINT_FLOW_CALIBRATE EXTRUDER=3
+```
+
+Klipper 宏参数名不匹配时，宏不会执行也不会报错（静默忽略未知参数），所以按钮看起来"没反应"。
+
+### 修复
+- `calibrateFlow()` 中 `SM_PRINT_FLOW_CALIBRATE INDEX=` → `SM_PRINT_FLOW_CALIBRATE EXTRUDER=`
+
+### 修改文件
+- `bridge/web/webui.html` — 宏参数名修正
+- `bridge-node/server.js` — 版本号 5.7.4→5.7.5
+- `bridge-node/package.json` / `package-lock.json` — 版本号
+- `install.ps1` / `reinstall.ps1` / `uninstall.ps1` — v5.7.5
 
 ---
 
