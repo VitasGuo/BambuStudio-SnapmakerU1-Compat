@@ -3,7 +3,25 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 更新日期: 2026-05-26 (v5.7.5)
+## 更新日期: 2026-05-26 (v5.7.6)
+
+---
+
+## v5.7.6 Flow Cal 宏参数名修正 + 完整修复汇总
+
+### 问题
+Flow Cal 按钮点击无反应，打印确认框选了流量校准也没反应
+
+### 根因汇总（traps.md #80-84）
+1. **#80**: mDNS 自动检测把 mDNS 的 port 当成了 Moonraker 的 HTTP 端口
+2. **#81**: VBS 启动脚本使用裸 `node` 命令导致登录时 PATH 未加载
+3. **#82**: `event.stopPropagation()` 在 wxWebView 里报错导致点击不执行
+4. **#83**: `gcode()` 函数有重复定义，且旧版本不返回值、WS 断连时无错误提示
+5. **#84**: Flow Cal 宏参数名错误！`SM_PRINT_FLOW_CALIBRATE EXTRUDER=0` 而不是 `INDEX=0`
+
+### 修复
+- `calibrateFlow()` 中 `SM_PRINT_FLOW_CALIBRATE INDEX=` → `SM_PRINT_FLOW_CALIBRATE EXTRUDER=`
+- 统一更新所有文件版本号到 v5.7.6
 
 ---
 
