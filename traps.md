@@ -807,3 +807,15 @@ function loadJS(url, cb) {
   document.head.appendChild(s);
 }
 ```
+
+---
+
+## 80. mDNS 自动检测端口错误：MQTT 端口 1884 替代 HTTP 端口 80
+
+**现象**：uninstall-重启-reinstall 后，WebUI 显示 reconnecting，无法连接打印机。Bridge 日志持续 `WS Moonraker error: read ECONNRESET`，WebSocket 每隔 4 秒重连一次均失败。
+
+**根因**：`autoDetectPrinter()` 函数（server.js:765）使用 `service.port` 获取 mDNS 服务端口，U1 的 `_snapmaker._tcp.local.` mDNS 服务注册的端口是 **1884**（Snapmaker MQTT 端口），不是 Moonraker HTTP 端口 **80**。自动检测后将 `printerConfig.port` 设为 1884，`getBaseUrl()` 返回 `http://192.168.1.12:1884`，所有 HTTP API 和 WebSocket 请求都发到了 MQTT 端口，连接被重置。
+
+日志证据：`Auto-detected printer: 192.168.1.12:1884`（应为 `:80`）
+
+**解决方案**：`autoDetectPrinter()` 中移除 `service.port` 使用，硬编码 `printerConfig.port = 80`（Moonraker HTTP 端口始终是 80）。`/api/bridge/scan` 端点返回 `port: 80`（HTTP 端口）+ `mdns_port`（mDNS 原始端口，仅供参考）。

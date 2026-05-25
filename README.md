@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.7.1
+# Snapmaker U1 BambuStudio 兼容包 v5.7.2
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -191,6 +191,9 @@ A: 重新运行 `install.bat`。
 
 ## 版本历史
 
+- **v5.7.2** (2026-05-26) - 修复 mDNS 自动检测端口错误
+  - 修复 uninstall-reinstall 后 WebUI 无法连接打印机（mDNS 返回 MQTT 端口 1884 而非 HTTP 端口 80）
+  - 自动检测和扫描端点现在始终使用 Moonraker HTTP 端口 80
 - **v5.7.1** (2026-05-25) - 排版优化 + 中文术语修正 + Snapmaker logo
   - WebUI 排版优化：温度显示格式、风扇/速度行防溢出、耗材 slot 更紧凑
   - 中文翻译修正为3D打印专业术语（喷头/设定温度/冷却风扇/回原点/待机等）

@@ -3,7 +3,27 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 更新日期: 2026-05-25 (v5.7.1)
+## 更新日期: 2026-05-26 (v5.7.2)
+
+---
+
+## v5.7.2 修复 mDNS 自动检测端口错误（1884→80）
+
+### 问题
+uninstall-重启-reinstall 后，WebUI 显示 reconnecting，无法连接打印机。Bridge 日志持续 `WS Moonraker error: read ECONNRESET`。
+
+### 根因
+mDNS 自动检测使用 `service.port` 获取端口，U1 的 `_snapmaker._tcp.local.` mDNS 服务注册的端口是 **1884**（MQTT 端口），不是 Moonraker HTTP 端口 80。`autoDetectPrinter()` 将 `printerConfig.port` 设为 1884，导致 `getBaseUrl()` 返回 `http://192.168.1.12:1884`，所有 HTTP/WebSocket 请求发到了 MQTT 端口。traps.md #80
+
+### 修复
+- `autoDetectPrinter()`：移除 `service.port` 使用，硬编码 `printerConfig.port = 80`（Moonraker HTTP 端口）
+- `/api/bridge/scan`：返回 `port: 80`（HTTP 端口）+ `mdns_port`（mDNS 原始端口，仅供参考）
+- 日志改进：显示 mDNS 原始端口和实际使用端口
+
+### 修改文件
+- `bridge-node/server.js` — 版本号 5.7.1→5.7.2；mDNS 端口修复；scan 端点修复
+- `bridge-node/package.json` — 版本号 5.7.1→5.7.2
+- `reinstall.ps1` / `install.ps1` / `uninstall.ps1` — v5.7.2
 
 ---
 

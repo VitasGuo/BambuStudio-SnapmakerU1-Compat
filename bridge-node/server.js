@@ -7,7 +7,7 @@ const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 
-const BRIDGE_VERSION = "5.7.1";
+const BRIDGE_VERSION = "5.7.2";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -428,7 +428,7 @@ app.get("/api/bridge/scan", async (req, res) => {
           props[k] = typeof v === "string" ? v : String(v);
         }
       }
-      found.push({ name: service.name, ip, port: service.port || 80, properties: props });
+      found.push({ name: service.name, ip, port: 80, mdns_port: service.port || 80, properties: props });
     });
 
     setTimeout(() => {
@@ -762,8 +762,8 @@ async function autoDetectPrinter() {
       const browser = bonjour.find({ type: "snapmaker" }, (service) => {
         const ip = service.addresses?.[0] || service.referer?.address || "";
         if (ip) {
-          found.push({ name: service.name, ip, port: service.port || 80 });
-          log("INFO", `Found printer: ${service.name} at ${ip}`);
+          found.push({ name: service.name, ip });
+          log("INFO", `Found printer: ${service.name} at ${ip} (mDNS port ${service.port}, using HTTP port 80)`);
         }
       });
       setTimeout(() => {
@@ -771,10 +771,10 @@ async function autoDetectPrinter() {
         bonjour.destroy();
         if (found.length > 0) {
           printerConfig.host = found[0].ip;
-          printerConfig.port = found[0].port;
+          printerConfig.port = 80;
           printerConfig.mode = "webui";
           saveConfig();
-          log("INFO", `Auto-detected printer: ${found[0].ip}:${found[0].port}`);
+          log("INFO", `Auto-detected printer: ${found[0].ip}:80`);
         } else {
           log("INFO", "No printer found via mDNS auto-detection");
         }
