@@ -839,3 +839,21 @@ function loadJS(url, cb) {
 **根因**：按钮 `onclick` 使用 `event.stopPropagation();calibrateFlow(0)`，BambuStudio 的 wxWebView 在内联 `onclick` 属性中不自动注入 `event` 对象，导致 `event is not defined` JavaScript 错误，后续 `calibrateFlow()` 不执行。
 
 **解决方案**：移除 `event.stopPropagation()`，改用 `return false;` 阻止冒泡和默认行为：`onclick="calibrateFlow(0);return false;"`
+
+---
+
+## 83. Flow Cal 按钮点击无反应（部署版 gcode() 不返回值 + 无视觉反馈）
+
+**现象**：v5.7.3 修复 #82 后，Flow Cal 按钮仍然点击无反应。按钮文字不变，无 alert 提示，功能"感觉没有实现"。
+
+**根因**：
+1. 部署目录（`C:\Program Files\Bambu Studio\bridge\web\webui.html`）运行的是旧版代码，`gcode()` 函数不返回 boolean 值，WS 未连接时静默失败无 alert
+2. 部署版 `calibrateFlow()` 不改变按钮文字为"校准中..."，不检查 `gcode()` 返回值
+3. 源码有两个 `gcode()` 函数定义（行 615 旧版 + 行 759-767 改进版），JavaScript 后者覆盖前者，但部署版只有旧版
+4. 用户 reinstall 后部署目录未同步源码改进版
+
+**解决方案**：
+- 将行 615 的旧 `gcode()` 替换为改进版（返回 `true`/`false`，WS 断连时 `alert(t('reconnecting'))`）
+- 删除行 759-767 的重复 `gcode()` 定义
+- `calibrateFlow()` 添加 try-catch、console.log 调试、按钮文字变"校准中..."、gcode 失败时恢复按钮
+- reinstall 后部署目录同步最新源码

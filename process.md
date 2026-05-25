@@ -3,7 +3,34 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 更新日期: 2026-05-26 (v5.7.3)
+## 更新日期: 2026-05-26 (v5.7.4)
+
+---
+
+## v5.7.4 Flow Cal 功能完整修复 + gcode() 函数统一
+
+### 问题
+1. Flow Cal 按钮点击无反应，功能"感觉没有实现"
+2. `gcode()` 函数有两个定义（行 615 和行 759），旧版不返回值、WS 断连时静默失败
+3. 部署目录运行旧版代码，缺少视觉反馈和错误提示
+
+### 根因
+1. 部署目录的 `gcode()` 函数是旧版（行 615），不返回 boolean，WS 未连接时静默失败无 alert
+2. 部署目录的 `calibrateFlow()` 不改变按钮文字（无"校准中..."反馈），不检查 `gcode()` 返回值
+3. 源码有两个 `gcode()` 定义，第二个覆盖第一个，但部署版只有旧版
+4. `doPrintSimple()` 使用硬编码英文 alert，未走 i18n
+
+### 修复
+- `gcode()` 统一为改进版：返回 `true`/`false`，WS 未连接时 `alert(t('reconnecting'))`
+- 删除重复的 `gcode()` 定义（行 759-767），只保留行 615 的改进版
+- `calibrateFlow()` 增强：try-catch 包裹、console.log 调试、按钮文字变"校准中..."、gcode 失败时恢复按钮
+- `doPrintSimple()` 改用 `t('printer_busy')` i18n、用 `gcode()` 返回值判断是否切换标签
+
+### 修改文件
+- `bridge/web/webui.html` — gcode() 统一；calibrateFlow() 增强；doPrintSimple() 改进
+- `bridge-node/server.js` — 版本号 5.7.3→5.7.4
+- `bridge-node/package.json` / `package-lock.json` — 版本号
+- `install.ps1` / `reinstall.ps1` / `uninstall.ps1` — v5.7.4
 
 ---
 
