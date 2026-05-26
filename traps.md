@@ -20,16 +20,16 @@
 #26 bed_model/bed_texture 为空 | #27 SVG 不渲染 | #41 STL 不居中 | #50 热床模型高度
 
 ### Bridge 代理与通信
-#28 WebView 不注入 API Key | #29 网络插件签名验证 | #30 /moonraker/ 前缀不工作 | #31 /ws 路径错误 | #62 Express 5 {*path} 数组 | #63 /access/token 拦截 | #64 热床温度不显示 | #70 中间件顺序 | #71 只转发 content-type | #72 Fluidd SPA 404 | #73 WS 缺错误处理
+#28 WebView 不注入 API Key | #29 网络插件签名验证 | #30 /moonraker/ 前缀不工作 | #31 /ws 路径错误 | #62 Express 5 {*path} 数组 | #63 /access/token 拦截 | #64 热床温度不显示 | #70 中间件顺序 | #71 只转发 content-type | #72 Fluidd SPA 404 | #73 WS 缺错误处理 | #94 温度不自动更新
 
 ### 打印确认流程
-#47 print_stats 初始查询缺失 | #48 切片不触发确认 | #49 confirm_print 参数解析 | #51 start_local_print 不支持 HTTP | #52 WebUI 未加载通知丢失 | #53 gcode/script HTTP 不可用 | #54 无安全检测 | #56 print_host 被覆盖 | #57 gcode() 用不存在的 HTTP | #58 用户预设覆盖 print_host | #59 python-multipart 缺失 | #61 弹窗体验 | #89 布尔值回归 | #91 JSON-RPC 方法名错误 | #92 热床调平参数名
+#47 print_stats 初始查询缺失 | #48 切片不触发确认 | #49 confirm_print 参数解析 | #51 start_local_print 不支持 HTTP | #52 WebUI 未加载通知丢失 | #53 gcode/script HTTP 不可用 | #54 无安全检测 | #56 print_host 被覆盖 | #57 gcode() 用不存在的 HTTP | #58 用户预设覆盖 print_host | #59 python-multipart 缺失 | #61 弹窗体验 | #89 布尔值回归 | #91 JSON-RPC 方法名错误 | #92 热床调平参数名（BED_LEVEL） | #96 耗材匹配缺失 | #97 bridgePOST 数组参数
 
 ### 摄像头（重点）
-#37 webcams/list 返回空 | #39 MJPEG 流代理不工作 | #46 U1 用 snapshot 轮询 | #65 代理破坏二进制 JPEG | #67 Express ETag 缓存 | #85 camera.start_monitor 必须走 WS | #90 摄像头监控需服务端触发
+#37 webcams/list 返回空 | #39 MJPEG 流代理不工作 | #46 U1 用 snapshot 轮询 | #65 代理破坏二进制 JPEG | #67 Express ETag 缓存 | #85 camera.start_monitor 必须走 WS | #90 摄像头监控需服务端触发 | #93 摄像头参数缺失（domain）
 
 ### WebUI 前端
-#34 Flutter Web DOM 不可读 | #38 SET_LED 缺 WHITE | #40 filament_feed 无类型 | #66 WS 竞态条件 | #78 Fluidd SW 拦截 fetch | #79 WebView 阻止 fetch/XHR | #82 event.stopPropagation | #83 gcode() 不返回值 | #84 EXTRUDER vs INDEX
+#34 Flutter Web DOM 不可读 | #38 SET_LED 缺 WHITE | #40 filament_feed 无类型 | #66 WS 竞态条件 | #78 Fluidd SW 拦截 fetch | #79 WebView 阻止 fetch/XHR | #82 event.stopPropagation | #83 gcode() 不返回值 | #84 EXTRUDER vs INDEX | #95 风扇控制参数范围 | #99 耗材类型品牌前缀 | #100 WebView 外部链接拦截
 
 ### 安装与部署
 #32 系统无 Python | #33 Fluidd hosted 模式 | #35 CWD 指向已删目录 | #36 curl 下载失败 | #42 Bridge 依赖原目录 | #43 Program Files 权限 | #44 需手动启动 | #45 VBS 权限 | #60 Python 嵌入式限制 | #68 formidable 构造函数 | #69 bridge/web 未复制 | #74 undici 未声明 | #75 node-fetch 不兼容 undici | #76 undici 不导出 Blob | #77 旧进程未重启 | #80 mDNS 端口错误 | #81 VBS 裸 node 命令
@@ -698,7 +698,63 @@
 
 ---
 
-#92 ❌
+#92 ✅
 **现象**：打印确认框勾选 Auto Bed Leveling 后，Fluidd 日志显示参数正确传递 `AUTO_BED_LEVELING="1"`，但设备输出 `print_task_config configuration does not do auto-leveling`，热床调平未执行。Flow Calibration 和 Timelapse 正常工作
-**根因**：参数名可能不正确。OrcaSlicer 的 `PrintParams` 使用 `task_bed_leveling` 字段，通过闭源 `bambu_network.dll` 映射到 MQTT 消息的 `options` 字典。当前 Bridge 使用的 `auto_bed_leveling` 可能不是设备端期望的参数名
-**解决方案**：待研究。可能需要将 `auto_bed_leveling` 改为 `task_bed_leveling`，或其他设备端期望的参数名。需要通过日志或抓包确认 MQTT 消息中的实际参数名
+**根因**：G-code 参数名不正确。`klippy_apis.py` L333-335 的 `start_print_advanced` 将 options 字典的 key 转 `.upper()` 后拼成 G-code 参数。从 Snapmaker u1-klipper 开源仓库 `print_task_config.py` L965 确认：G-code 参数名是 `BED_LEVEL`（不是 `AUTO_BED_LEVELING`，也不是 `TASK_BED_LEVELING`）。L42 内部字段名 `'auto_bed_leveling'` 与 G-code 参数名 `BED_LEVEL` 不同，这是 Snapmaker 的命名不一致
+**解决方案**：options key 从 `auto_bed_leveling`/`task_bed_leveling` → `bed_level`（v5.8.3），`klippy_apis.py` 转 `.upper()` 后生成 `BED_LEVEL="1"`，匹配 `print_task_config.py` L965 的 `gcmd.get_int('BED_LEVEL')`。已验证通过 ✅
+
+---
+
+#93 ✅
+**现象**：WebUI 摄像头照片不更新，点击摄像头按钮后 monitor.jpg 始终是同一张图
+**根因**：`camera.start_monitor` 参数缺失。通过逆向 OrcaSlicer Flutter Web (`main.dart.js` L131485-131487) 发现，OrcaSlicer 传参 `{ domain: "lan", interval: 0, expect_pw: true }`，而 Bridge 只传了 `{ req_id: reqId }`。`repeater.py` 的 `_handle_camera_timelapse_request` 通过 MQTT 转发到设备端闭源 lmd 进程，缺少 `domain` 参数导致 lmd 不响应
+**解决方案**：`camera.start_monitor` 参数改为 `{ domain: "lan", interval: 0, expect_pw: true }`（v5.9.0），`camera.stop_monitor` 参数改为 `{ domain: "lan" }`。已验证通过 ✅
+
+---
+
+#94 ✅
+**现象**：WebUI Control 模块温度/风扇/速度等信息不自动更新，点模块刷新按钮无效，只有点顶栏刷新（location.reload）才更新
+**根因**：1. `refreshCtrl()` 是空函数，没有实现主动查询；2. BambuStudio WebView 环境可能限制 WS `notify_status_update` 推送，导致 `upd()` 不被触发
+**解决方案**：1. 实现 `refreshCtrl()` → 调用 `queryStatus()` 通过 `printer.objects.query` 主动查询；2. 添加 2 秒定时轮询 `setInterval(queryStatus, 2000)` 作为 WS 推送的后备（v5.9.0）。已验证通过 ✅
+
+---
+
+#95 ✅
+**现象**：Model Fan 点 50% 和 100% 都是 100% 风速；Cavity Fan 点 100% 只显示 1%。速度倍率正常
+**根因**：v5.10.0 改用定制端点后风扇参数范围错误。1. `main_fan`：传 `{speed: Math.round(pct*2.55)}`（0-255），但 Klipper `_handle_control_main_fan`（fan.py L148-153）期望 `S` 范围 0-100，超过 100 被 clamp。50%→128→clamp 100%，100%→255→clamp 100%。2. `generic_fan`：传 `{speed: pct/100}`（0-1 浮点），但 Moonraker `klippy_apis.py` L233 用 `get_int('speed', 0)` 取整，1.0→1。Klipper `_handle_control_generic_fan`（fan_generic.py L25-30）做 `1/100=0.01`，100% 只显示 1%
+**解决方案**：`setFan()` 两个分支都改为直接传 `pct`（0-100 整数百分比），匹配 Klipper 端 `S` 参数的 0-100 范围（v5.10.1）
+
+---
+
+#96 ✅
+**现象**：打印确认框只显示设备上的耗材信息，无法知道 gcode 需要什么耗材，也无法自动匹配物理槽位
+**根因**：`showPrintDialog` 只接收 `print_task.json` 数据（设备端耗材），未获取 gcode 元数据中的 `filament_type`/`filament_used_mm`/`filament_colour`，无法建立 gcode 槽位→物理槽位的映射
+**解决方案**：1. `onPendingPrint`/`printFile` 先通过 `bridgeGET('/server/files/metadata?filename=xxx')` 获取 gcode 元数据；2. `showPrintDialog(name, task, meta)` 新增 meta 参数，解析 `filament_type`（可能是分号分隔字符串需 split）、`filament_used_mm`、`filament_colour`；3. 自动按 `filament_type` 大小写不敏感匹配物理槽位；4. `doPrint()` 构建 `extruder_map_table: [[logical,physical],...]` 仅含使用槽位；5. server.js 两个端点解析 JSON 字符串参数传入 options（v5.12.0）
+
+---
+
+#97 ✅
+**现象**：`bridgePOST` 传递数组参数时，`String([[0,1],[1,0]])` 变成 `"0,1,1,0"` 无法还原结构
+**根因**：`bridgePOST` 将 body 转为 query string，对复杂类型只做 `String(v)`，丢失数组结构
+**解决方案**：对 `extruder_map_table` 先 `JSON.stringify(mapTable)` 再传入，server.js 端用 `JSON.parse(req.query.extruder_map_table)` 还原（v5.12.0）
+
+---
+
+#98 ✅
+**现象**：`extruder_map_table` 参数传入 Klipper 后不被识别，`SET_PRINT_TASK_PARAMETERS` 收不到映射表
+**根因**：`klippy_apis.py` L333-335 将 options key 转 `.upper()` 后拼成 G-code 参数，`extruder_map_table` → `EXTRUDER_MAP_TABLE`，但 `print_task_config.py` L963 期望的参数名是 `MAP_TABLE`，不是 `EXTRUDER_MAP_TABLE`
+**解决方案**：server.js 中将 `options.extruder_map_table` 改为 `options.map_table`，这样 `.upper()` 后变成 `MAP_TABLE`，匹配 Klipper 期望的参数名（v5.12.1）
+
+---
+
+#99 ✅
+**现象**：耗材类型 "Snapmaker PETG" 与 "Generic PETG" 匹配失败，`===` 严格比较不通过
+**根因**：耗材类型字符串包含品牌前缀（如 "Snapmaker PETG"、"Generic PETG HF"），直接 `===` 比较无法匹配同类型不同品牌的耗材
+**解决方案**：`extractFilType()` 函数从类型字符串中提取核心关键词（遍历 `FILAMENT_TYPES` 数组做 `indexOf` 匹配），"Snapmaker PETG" → "PETG"，"Generic PETG HF" → "PETG"（v5.14.0）
+
+---
+
+#100 ✅
+**现象**：BambuStudio WebView 中点击 About 页面链接无法跳转到外部浏览器，`window.open()` 和 `<a target="_blank">` 均被拦截
+**根因**：1. BambuStudio `PrinterWebView`（wxWebView/WebKit）拦截 `window.open` 和 `<a target="_blank">`；2. `bridgeGET` 对含 query string 的路径直接追加 `.js`，导致 `/api/bridge/open_external?url=xxx.js` 而非 `/api/bridge/open_external.js?url=xxx`，Express 路由匹配失败
+**解决方案**：1. Bridge 服务端新增 `/api/bridge/open_external.js` JSONP 端点，使用 `child_process.exec` 调用系统默认浏览器；2. 修复 `bridgeGET`：当 path 含 `?` 时用 `path.replace('?', '.js?')` 将 `.js` 插到 `?` 前面，而非追加到末尾。安全限制：只允许 `http://` 或 `https://` 开头的 URL（v5.16.0）

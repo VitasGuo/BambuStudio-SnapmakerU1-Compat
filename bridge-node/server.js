@@ -7,7 +7,7 @@ const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 
-const BRIDGE_VERSION = "5.8.1";
+const BRIDGE_VERSION = "5.16.0";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -391,10 +391,13 @@ app.get("/api/bridge/confirm_print.js", async (req, res) => {
     return;
   }
   const options = {
-    auto_bed_leveling: req.query.auto_bed_leveling === "1" ? 1 : 0,
+    bed_level: req.query.auto_bed_leveling === "1" ? 1 : 0,
     flow_calibrate: req.query.flow_calibrate === "1" ? 1 : 0,
     time_lapse_camera: req.query.time_lapse_camera === "1" ? 1 : 0,
   };
+  if (req.query.extruder_map_table) {
+    try { options.map_table = JSON.parse(req.query.extruder_map_table); } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); }
+  }
   const filename = pendingPrintFile;
   pendingPrintFile = "";
   log("INFO", `Confirm print (JSONP): start_local_print path=${filename} options=${JSON.stringify(options)}`);
@@ -423,10 +426,13 @@ app.get("/api/bridge/start_print.js", async (req, res) => {
     return;
   }
   const options = {
-    auto_bed_leveling: req.query.auto_bed_leveling === "1" ? 1 : 0,
+    bed_level: req.query.auto_bed_leveling === "1" ? 1 : 0,
     flow_calibrate: req.query.flow_calibrate === "1" ? 1 : 0,
     time_lapse_camera: req.query.time_lapse_camera === "1" ? 1 : 0,
   };
+  if (req.query.extruder_map_table) {
+    try { options.map_table = JSON.parse(req.query.extruder_map_table); } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); }
+  }
   log("INFO", `start_print (JSONP): start_local_print path=${path} options=${JSON.stringify(options)}`);
   try {
     const result = await callMoonrakerJsonRpc("server.files.start_local_print", {
@@ -451,15 +457,55 @@ app.get("/api/bridge/cancel_pending.js", (req, res) => {
   res.send(`${cb}(${JSON.stringify({ cancelled: true })});`);
 });
 
+app.get("/api/bridge/check_update.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const r = await fetch("https://api.github.com/repos/VitasGuo/BambuStudio-SnapmakerU1-Compat/releases/latest", {
+      headers: { "User-Agent": "BambuStudio-Bridge" },
+      timeout: 8000,
+    });
+    if (!r.ok) throw new Error(`GitHub API ${r.status}`);
+    const data = await r.json();
+    const latest = (data.tag_name || "").replace(/^v/, "");
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ latest, current: BRIDGE_VERSION, url: data.html_url || "" })});`);
+  } catch (e) {
+    log("WARN", `check_update failed: ${e.message}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ error: e.message })});`);
+  }
+});
+
+app.get("/api/bridge/open_external.js", (req, res) => {
+  const cb = req.query.cb || "callback";
+  const url = req.query.url;
+  if (!url || !/^https?:\/\//i.test(url)) {
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ error: "Invalid URL" })});`);
+    return;
+  }
+  const { exec } = require("child_process");
+  const cmd = process.platform === "win32" ? `start "" "${url}"` : process.platform === "darwin" ? `open "${url}"` : `xdg-open "${url}"`;
+  exec(cmd, (err) => {
+    res.type("application/javascript");
+    if (err) {
+      log("WARN", `open_external failed: ${err.message}`);
+      res.send(`${cb}(${JSON.stringify({ error: err.message })});`);
+    } else {
+      log("INFO", `Opened external URL: ${url}`);
+      res.send(`${cb}(${JSON.stringify({ success: true })});`);
+    }
+  });
+});
+
 async function ensureCamMonitor() {
   const now = Date.now();
   if (camMonitorActive && now - camMonitorLastCall < CAM_MONITOR_INTERVAL) return;
   camMonitorLastCall = now;
   try {
-    const reqId = Date.now();
-    await callMoonrakerJsonRpc("camera.start_monitor", { req_id: reqId });
+    const result = await callMoonrakerJsonRpc("camera.start_monitor", { domain: "lan", interval: 0, expect_pw: true });
     camMonitorActive = true;
-    log("INFO", "camera.start_monitor sent via server-side RPC, monitor active");
+    log("INFO", `camera.start_monitor response: ${JSON.stringify(result)}`);
   } catch (e) {
     log("WARN", `camera.start_monitor failed: ${e.message}`);
   }
@@ -517,12 +563,17 @@ app.get("/api/bridge/cam_start_monitor.js", async (req, res) => {
     return;
   }
   try {
-    const reqId = Date.now();
-    await callMoonrakerJsonRpc("camera.start_monitor", { req_id: reqId });
+    const result = await callMoonrakerJsonRpc("camera.start_monitor", { domain: "lan", interval: 0, expect_pw: true });
     camMonitorLastCall = Date.now();
-    log("INFO", "camera.start_monitor sent via JSONP endpoint");
+    let camUrl = null;
+    if (result && result.url) {
+      camUrl = `http://${printerConfig.host}:${printerConfig.port}/server${result.url}`;
+      log("INFO", `camera.start_monitor got URL: ${camUrl}`);
+    } else {
+      log("INFO", `camera.start_monitor response: ${JSON.stringify(result)}`);
+    }
     res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: true })});`);
+    res.send(`${cb}(${JSON.stringify({ ok: true, url: camUrl })});`);
   } catch (e) {
     log("ERROR", `cam_start_monitor error: ${e.message}`);
     res.type("application/javascript");
@@ -538,8 +589,7 @@ app.get("/api/bridge/cam_stop_monitor.js", async (req, res) => {
     return;
   }
   try {
-    const reqId = Date.now();
-    await callMoonrakerJsonRpc("camera.stop_monitor", { req_id: reqId });
+    await callMoonrakerJsonRpc("camera.stop_monitor", { domain: "lan" });
     camMonitorActive = false;
     camMonitorLastCall = 0;
     log("INFO", "camera.stop_monitor sent via JSONP endpoint");

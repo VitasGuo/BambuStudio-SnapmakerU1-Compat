@@ -6,10 +6,10 @@ $attemptFile = Join-Path $repoDir "git_push_attempts.txt"
 $successFile = Join-Path $repoDir "git_push_success.txt"
 
 Set-Location $repoDir
-Write-Output "当前目录: $(Get-Location)"
+Write-Output "Current directory: $(Get-Location)"
 
 if (Test-Path $successFile) {
-    Write-Output "Git push 已成功完成，跳过执行"
+    Write-Output "Git push already completed successfully, skipping"
     exit 0
 }
 
@@ -20,13 +20,13 @@ if (Test-Path $attemptFile) {
 }
 
 if ($attemptCount -gt $maxAttempts) {
-    Write-Output "12次尝试均失败，网络问题持续"
+    Write-Output "12 attempts failed, network issue persists"
     Remove-Item -Path $attemptFile -Force -ErrorAction SilentlyContinue
     exit 1
 }
 
 Set-Content -Path $attemptFile -Value $attemptCount
-Write-Output "开始第 $attemptCount 次尝试"
+Write-Output "Starting attempt $attemptCount"
 
 try {
     $output = & git push 2>&1
@@ -36,27 +36,27 @@ try {
     $exitCode = 1
 }
 
-Write-Output "Git push 输出: $output"
+Write-Output "Git push output: $output"
 
 if ($exitCode -eq 0) {
-    Write-Output "Git push 成功，共尝试 $attemptCount 次"
+    Write-Output "Git push succeeded after $attemptCount attempts"
     Set-Content -Path $successFile -Value $attemptCount
     Remove-Item -Path $attemptFile -Force -ErrorAction SilentlyContinue
     
     try {
         schtasks /Delete /TN $taskName /F
-        Write-Output "定时任务已删除"
+        Write-Output "Scheduled task deleted"
     } catch {
-        Write-Output "删除定时任务时出错: $_"
+        Write-Output "Error deleting scheduled task: $_"
     }
     exit 0
 }
 
 $errorMessage = $output | Out-String
 if ($errorMessage -match "Connection reset|Could not connect|timeout|timed out|网络错误|连接重置|连接失败|超时") {
-    Write-Output "第 $attemptCount 次尝试失败，网络错误，继续等待下次执行"
+    Write-Output "Attempt $attemptCount failed, network error, will retry next time"
     exit 0
 }
 
-Write-Output "第 $attemptCount 次尝试失败，错误: $errorMessage"
+Write-Output "Attempt $attemptCount failed, error: $errorMessage"
 exit 1
