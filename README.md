@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.7.3
+# Snapmaker U1 BambuStudio 兼容包 v5.8.1
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -191,6 +191,17 @@ A: 重新运行 `install.bat`。
 
 ## 版本历史
 
+- **v5.8.1** (2026-05-27) - 修复打印选项布尔值 + 摄像头服务端监控 + 顶栏版本号
+  - 修复 start_local_print JSON-RPC 方法名 (start_local_print -> server.files.start_local_print)
+  - 修复打印选项布尔值问题 (true/false -> 1/0)，解决 unable to parse True 错误
+  - 挤出流量校准和 Timelapse 已确认正常工作
+  - 热床调平参数名待研究 (AUTO_BED_LEVELING 可能需要改为 TASK_BED_LEVELING)
+  - 摄像头改为服务端调用 camera.start_monitor，添加 stale 检测
+  - WebUI 顶栏显示 Bridge 版本号
+- **v5.8.0** (2026-05-27) - 修复 JSON-RPC 方法名 + 摄像头服务端监控 + 顶栏 IP
+  - 修复打印选项 "Method not found" 错误
+  - 摄像头改用服务端 JSONP 端点触发监控
+  - WebUI 顶栏显示打印机 IP 和 Bridge 版本号
 - **v5.7.3** (2026-05-26) - 安装脚本增强 + WebUI 离线检测 + Flow Cal 修复
   - Node.js 检测增强：多路径搜索 + 自动下载 LTS 安装引导
   - VBS 启动器改用 node.exe 完整路径，确保开机自启可靠
