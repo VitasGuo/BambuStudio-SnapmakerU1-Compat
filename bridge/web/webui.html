@@ -196,6 +196,8 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-u
 <div class="topbar">
 <span class="dev-name">U1</span>
 <span class="dev-status" id="connStatus">Loading...</span>
+<span class="dev-ip" id="devIp" style="font-size:13px;color:var(--text3);margin-left:4px"></span>
+<span id="devVer" style="font-size:12px;color:var(--text3);margin-left:8px;background:var(--bg);padding:2px 8px;border-radius:4px"></span>
 <span class="spacer"></span>
 <svg class="wifi-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
 <button class="topbar-refresh" onclick="location.reload()" title="Refresh Page"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg></button>
@@ -569,31 +571,70 @@ function switchTab(tab){
   if(tab==='debug') loadDebugLogs();
 }
 
+var camRpcId=null;
+function camRpc(method){
+if(ws&&ws.readyState===1){
+var id=Date.now();
+camRpcId=id;
+ws.send(JSON.stringify({jsonrpc:"2.0",method:method,params:{req_id:id},id:id}));
+console.log('[Cam] RPC sent: '+method+', id='+id);
+}else{
+console.warn('[Cam] RPC failed: WS not ready, method='+method);
+}
+}
+function camStartMonitor(){
+bridgeGET('/api/bridge/cam_start_monitor',function(d){
+if(d&&d.ok){console.log('[Cam] start_monitor ok (server-side)');}
+else if(d&&d.error){console.warn('[Cam] start_monitor error:',d.error);}
+});
+}
+function camStopMonitor(){
+bridgeGET('/api/bridge/cam_stop_monitor',function(d){
+if(d&&d.ok){console.log('[Cam] stop_monitor ok (server-side)');}
+else if(d&&d.error){console.warn('[Cam] stop_monitor error:',d.error);}
+});
+}
 function toggleCam(){
 camOn=!camOn;
 if(camOn){
 if(camProbing){camOn=false;showCamErr(t('detecting'),'');return;}
 if(!camAvail){camOn=false;showCamErr(t('cam_unavail'),'');return;}
 $('camPlay').style.display='none';$('camOffText').style.display='none';$('camErr').style.display='none';
-camErrCount=0;pollCam();
-camPollId=setInterval(pollCam,500);
+camErrCount=0;
+camStartMonitor();
+pollCam();
+camPollId=setInterval(pollCam,1000);
 }else{
 if(camPollId){clearInterval(camPollId);camPollId=null;}
+camStopMonitor();
 $('camImg').src='';$('camImg').style.display='none';$('camPlay').style.display='flex';$('camOffText').style.display='block';$('camOffText').textContent=camAvail?t('cam_off'):t('cam_unavail');$('camErr').style.display='none';
 }
 }
-var camBlobUrl=null;
+var camBlobUrl=null,camLastSize=0,camStaleCount=0;
 function pollCam(){
+var url='/api/bridge/cam_snapshot?_t='+Date.now();
 var img=new Image();
 img.onload=function(){
 if(camBlobUrl)URL.revokeObjectURL(camBlobUrl);
-camBlobUrl=img.src;
-$('camImg').src=img.src;
+camBlobUrl=url;
+$('camImg').src=url;
 $('camImg').style.display='block';
 camFrameOk();
 };
-img.onerror=function(){camFrameErr();};
-img.src='/server/files/camera/monitor.jpg?_t='+Date.now();
+img.onerror=function(){
+var img2=new Image();
+var url2='/server/files/camera/monitor.jpg?_t='+Date.now();
+img2.onload=function(){
+if(camBlobUrl)URL.revokeObjectURL(camBlobUrl);
+camBlobUrl=url2;
+$('camImg').src=url2;
+$('camImg').style.display='block';
+camFrameOk();
+};
+img2.onerror=function(){camFrameErr();};
+img2.src=url2;
+};
+img.src=url;
 }
 function camFrameOk(){camErrCount=0;}
 function camFrameErr(){camErrCount++;if(camErrCount>=5){if(camPollId){clearInterval(camPollId);camPollId=null;}camOn=false;showCamErr(t('cam_unavail'),'');}}
@@ -728,22 +769,20 @@ auto_bed_leveling:document.getElementById('optLevel').checked,
 flow_calibrate:document.getElementById('optFlow').checked,
 time_lapse_camera:document.getElementById('optTimelapse').checked
 };
+console.log('[Print] opts:',JSON.stringify(opts),'pendingFilePath:',pendingFilePath);
 bridgeGET('/api/bridge/pending_print',function(d){
 if(d&&d.filename){
+console.log('[Print] pending_print path, filename:',d.filename);
 bridgePOST('/api/bridge/confirm_print',opts,function(r){
 if(r&&r.error){alert(t('print_failed')+': '+r.error);btn.disabled=false;btn.textContent=t('start_print');}
 else{closePrintModal();switchJobTab(0);}
 });
 }else{
-var script='SDCARD_PRINT_FILE_WITH_PARAMETERS FILENAME="'+pendingFilePath+'"';
-for(var k in opts){script+=' '+k.toUpperCase()+'='+(opts[k]?'1':'0');}
-if(ws&&ws.readyState===1){
-ws.send(JSON.stringify({jsonrpc:"2.0",method:"printer.gcode.script",params:{script:script},id:Date.now()}));
-bridgePOST('/api/bridge/cancel_pending',null);
-closePrintModal();switchJobTab(0);
-}else{
-alert(t('ws_not_connected'));btn.disabled=false;btn.textContent=t('start_print');
-}
+console.log('[Print] start_local_print path, file:',pendingFilePath);
+bridgePOST('/api/bridge/start_print',{path:pendingFilePath,auto_bed_leveling:opts.auto_bed_leveling?1:0,flow_calibrate:opts.flow_calibrate?1:0,time_lapse_camera:opts.time_lapse_camera?1:0},function(r){
+if(r&&r.error){alert(t('print_failed')+': '+r.error);btn.disabled=false;btn.textContent=t('start_print');}
+else{closePrintModal();switchJobTab(0);}
+});
 }
 });
 }
@@ -793,7 +832,7 @@ if(ws&&ws.readyState<=1)return;
 try{
 ws=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+'/websocket');
 ws.onopen=function(){console.log('[Bridge] WS connected');$('connStatus').textContent=t('online');_wsFailCount=0;showOfflineBar(false);ws.send(JSON.stringify({jsonrpc:"2.0",method:"printer.objects.subscribe",params:{objects:{toolhead:null,extruder:null,extruder1:null,extruder2:null,extruder3:null,heater_bed:null,print_stats:null,system_stats:null,display_status:null,fan:null,"fan_generic cavity_fan":null,"filament_feed left":null,"filament_feed right":null,filament_parameters:null,gcode_move:null,"led cavity_led":null}},id:1}));bridgeGET('/api/bridge/pending_print',function(d){if(d&&d.filename)onPendingPrint(d.filename);});};
-ws.onmessage=function(e){var m=JSON.parse(e.data);if(m.method==='notify_status_update')upd(m.params[0]);if(m.method==='notify_proc_stat_update')updSys(m.params[0]);if(m.method==='notify_bridge_event'){var evt=m.params[0],data=m.params[1]||{};if(evt==='pending_print'&&data.filename)onPendingPrint(data.filename);}if(m.result&&m.result.status)upd(m.result.status);};
+ws.onmessage=function(e){var m=JSON.parse(e.data);if(m.method==='notify_status_update')upd(m.params[0]);if(m.method==='notify_proc_stat_update')updSys(m.params[0]);if(m.method==='notify_bridge_event'){var evt=m.params[0],data=m.params[1]||{};if(evt==='pending_print'&&data.filename)onPendingPrint(data.filename);}if(m.result&&m.result.status)upd(m.result.status);if(m.id&&m.id===camRpcId){if(m.error){console.error('[Cam] RPC error:',m.error);showCamErr(t('cam_unavail'),'RPC: '+m.error.message);}else{console.log('[Cam] RPC ok, id='+m.id);}camRpcId=null;}};
 ws.onclose=function(){console.warn('[Bridge] WS closed, reconnecting in 3s');$('connStatus').textContent=t('reconnecting');_wsFailCount++;if(_wsFailCount>=3)showOfflineBar(true);rt=setTimeout(connect,3000);};
 ws.onerror=function(e){console.error('[Bridge] WS error:',e);$('connStatus').textContent=t('ws_error');};
 }catch(e){_wsFailCount++;if(_wsFailCount>=3)showOfflineBar(true);rt=setTimeout(connect,3000);}
@@ -885,7 +924,7 @@ try{$('fil'+i).querySelector('.fil-num').style.background=colors[i];}catch(e){}
 
 function updSys(d){}
 
-(function(){var img=new Image();img.onload=function(){camAvail=true;camProbing=false;$('camOffText').textContent=t('cam_off');};img.onerror=function(){camAvail=false;camProbing=false;$('camOffText').textContent=t('cam_unavail');};img.src='/server/files/camera/monitor.jpg?_probe='+Date.now();})();
+(function(){var img=new Image();img.onload=function(){camAvail=true;camProbing=false;$('camOffText').textContent=t('cam_off');};img.onerror=function(){var img2=new Image();img2.onload=function(){camAvail=true;camProbing=false;$('camOffText').textContent=t('cam_off');};img2.onerror=function(){camAvail=false;camProbing=false;$('camOffText').textContent=t('cam_unavail');};img2.src='/server/files/camera/monitor.jpg?_probe='+Date.now();};img.src='/api/bridge/cam_snapshot?_probe='+Date.now();})();
 
 (function(){
 $('connStatus').textContent=t('detecting');
@@ -894,6 +933,15 @@ s.src='/api/bridge/init-data.js';
 s.onerror=function(){$('connStatus').textContent='Script load failed from '+location.origin;};
 document.head.appendChild(s);
 })();
+
+bridgeGET('/api/bridge/config',function(d){
+if(d&&d.printer_host){
+$('devIp').textContent=d.printer_host+':'+(d.printer_port||80);
+}
+if(d&&d.version){
+$('devVer').textContent='v'+d.version;
+}
+});
 
 setLang(curLang);
 connect();

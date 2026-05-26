@@ -6,11 +6,11 @@ if ($args -contains "-y" -or $args -contains "--yes" -or $args -contains "-AutoC
     $AutoConfirm = $true
 }
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.7.6 Reinstaller"
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.8.1 Reinstaller"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.7.6 - Reinstall" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.8.1 - Reinstall" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -94,16 +94,7 @@ if ($portProc) {
         }
     }
 } else {
-    $bridgeProc = Get-Process -Name "node" -ErrorAction SilentlyContinue
-    if ($bridgeProc) {
-        foreach ($bp in $bridgeProc) {
-            try { Stop-Process -Id $bp.Id -Force -ErrorAction SilentlyContinue; $stopped = $true } catch {}
-        }
-        if ($stopped) { Write-Host "  Stopped node process(es)" -ForegroundColor Green }
-    }
-}
-if (-not $stopped -and -not $portProc) {
-    Write-Host "  No Bridge process running (OK)" -ForegroundColor DarkGray
+    Write-Host "  No Bridge process on port 13628 (OK)" -ForegroundColor DarkGray
 }
 
 Write-Host "  [3/10] Removing old profiles..." -ForegroundColor White

@@ -7,7 +7,7 @@ const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 
-const BRIDGE_VERSION = "5.7.6";
+const BRIDGE_VERSION = "5.8.1";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -28,6 +28,9 @@ const WEB_DIR = fs.existsSync(path.join(__dirname, "web", "webui.html"))
 
 let printerConfig = { host: "", port: 80, apikey: "", mode: "webui" };
 let pendingPrintFile = "";
+let camMonitorActive = false;
+let camMonitorLastCall = 0;
+const CAM_MONITOR_INTERVAL = 30000;
 const bridgeWsClients = new Set();
 
 function loadConfig() {
@@ -98,6 +101,10 @@ function notifyWebui(event, data = {}) {
 }
 
 async function sendGcode(script) {
+  return callMoonrakerJsonRpc("printer.gcode.script", { script });
+}
+
+async function callMoonrakerJsonRpc(method, params = {}) {
   const baseUrl = getBaseUrl();
   if (!baseUrl) throw new Error("No printer configured");
 
@@ -113,9 +120,9 @@ async function sendGcode(script) {
       moonrakerWs.send(
         JSON.stringify({
           jsonrpc: "2.0",
-          method: "printer.gcode.script",
-          params: { script },
-          id: 1,
+          method: method,
+          params: params,
+          id: Date.now(),
         })
       );
     });
@@ -127,9 +134,9 @@ async function sendGcode(script) {
       try {
         const resp = JSON.parse(data.toString());
         if (resp.error) {
-          reject(new Error(resp.error.message || "G-code error"));
+          reject(new Error(resp.error.message || "JSON-RPC error"));
         } else {
-          resolve(resp);
+          resolve(resp.result);
         }
       } catch (e) {
         reject(e);
@@ -236,6 +243,17 @@ app.get("/api/bridge/config", (req, res) => {
     printer_port: printerConfig.port,
     has_apikey: !!printerConfig.apikey,
   });
+});
+
+app.get("/api/bridge/config.js", (req, res) => {
+  const cb = req.query.cb || "callback";
+  res.type("application/javascript");
+  res.send(`${cb}(${JSON.stringify({
+    version: BRIDGE_VERSION,
+    printer_host: printerConfig.host,
+    printer_port: printerConfig.port,
+    has_apikey: !!printerConfig.apikey,
+  })});`);
 });
 
 app.get("/api/bridge/status", async (req, res) => {
@@ -373,24 +391,54 @@ app.get("/api/bridge/confirm_print.js", async (req, res) => {
     return;
   }
   const options = {
-    auto_bed_leveling: req.query.auto_bed_leveling === "1",
-    flow_calibrate: req.query.flow_calibrate === "1",
-    time_lapse_camera: req.query.time_lapse_camera === "1",
+    auto_bed_leveling: req.query.auto_bed_leveling === "1" ? 1 : 0,
+    flow_calibrate: req.query.flow_calibrate === "1" ? 1 : 0,
+    time_lapse_camera: req.query.time_lapse_camera === "1" ? 1 : 0,
   };
   const filename = pendingPrintFile;
   pendingPrintFile = "";
-  let script = `SDCARD_PRINT_FILE_WITH_PARAMETERS FILENAME="${filename}"`;
-  for (const [k, v] of Object.entries(options)) {
-    script += ` ${k.toUpperCase()}=${v ? "1" : "0"}`;
-  }
-  log("INFO", `Confirm print (JSONP): ${script}`);
+  log("INFO", `Confirm print (JSONP): start_local_print path=${filename} options=${JSON.stringify(options)}`);
   try {
-    await sendGcode(script);
-    log("INFO", `Print started: ${filename}`);
+    const result = await callMoonrakerJsonRpc("server.files.start_local_print", {
+      path: filename,
+      options: options,
+      print_plate: 1,
+    });
+    log("INFO", `server.files.start_local_print result: ${JSON.stringify(result)}`);
     res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ started: true, filename })});`);
+    res.send(`${cb}(${JSON.stringify({ started: true, filename, result })});`);
   } catch (e) {
-    log("ERROR", `Confirm print error: ${e.message}`);
+    log("ERROR", `server.files.start_local_print error: ${e.message}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ error: e.message })});`);
+  }
+});
+
+app.get("/api/bridge/start_print.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  const path = req.query.path;
+  if (!path) {
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ error: "path_required" })});`);
+    return;
+  }
+  const options = {
+    auto_bed_leveling: req.query.auto_bed_leveling === "1" ? 1 : 0,
+    flow_calibrate: req.query.flow_calibrate === "1" ? 1 : 0,
+    time_lapse_camera: req.query.time_lapse_camera === "1" ? 1 : 0,
+  };
+  log("INFO", `start_print (JSONP): start_local_print path=${path} options=${JSON.stringify(options)}`);
+  try {
+    const result = await callMoonrakerJsonRpc("server.files.start_local_print", {
+      path: path,
+      options: options,
+      print_plate: 1,
+    });
+    log("INFO", `server.files.start_local_print result: ${JSON.stringify(result)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ started: true, path, result })});`);
+  } catch (e) {
+    log("ERROR", `server.files.start_local_print error: ${e.message}`);
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify({ error: e.message })});`);
   }
@@ -401,6 +449,107 @@ app.get("/api/bridge/cancel_pending.js", (req, res) => {
   pendingPrintFile = "";
   res.type("application/javascript");
   res.send(`${cb}(${JSON.stringify({ cancelled: true })});`);
+});
+
+async function ensureCamMonitor() {
+  const now = Date.now();
+  if (camMonitorActive && now - camMonitorLastCall < CAM_MONITOR_INTERVAL) return;
+  camMonitorLastCall = now;
+  try {
+    const reqId = Date.now();
+    await callMoonrakerJsonRpc("camera.start_monitor", { req_id: reqId });
+    camMonitorActive = true;
+    log("INFO", "camera.start_monitor sent via server-side RPC, monitor active");
+  } catch (e) {
+    log("WARN", `camera.start_monitor failed: ${e.message}`);
+  }
+}
+
+let camLastSize = 0;
+let camStaleCount = 0;
+
+app.get("/api/bridge/cam_snapshot", async (req, res) => {
+  if (!printerConfig.host) return res.status(400).json({ error: "no_printer_configured" });
+  await ensureCamMonitor();
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl}/server/files/camera/monitor.jpg?_t=${Date.now()}`;
+  try {
+    const r = await fetch(url, {
+      method: "GET",
+      headers: moonrakerHeaders(),
+      timeout: MOONRAKER_TIMEOUT,
+    });
+    if (!r.ok) {
+      log("DEBUG", `cam_snapshot: Moonraker returned ${r.status}`);
+      return res.status(r.status).json({ error: `moonraker_${r.status}` });
+    }
+    const body = Buffer.from(await r.arrayBuffer());
+    if (body.length === camLastSize) {
+      camStaleCount++;
+    } else {
+      camStaleCount = 0;
+    }
+    camLastSize = body.length;
+    res.set({
+      "Content-Type": "image/jpeg",
+      "Content-Length": body.length,
+      "Cache-Control": "no-cache, no-store, must-revalidate",
+      "Pragma": "no-cache",
+      "Expires": "0",
+      "X-Bridge-Cam-Size": body.length,
+      "X-Bridge-Cam-Stale": camStaleCount,
+    });
+    if (camStaleCount > 0 && camStaleCount % 10 === 0) {
+      log("WARN", `cam_snapshot: same size ${body.length}b for ${camStaleCount} consecutive requests, monitor may not be active`);
+    }
+    return res.send(body);
+  } catch (e) {
+    log("ERROR", `cam_snapshot error: ${e.message}`);
+    return res.status(502).json({ error: e.message });
+  }
+});
+
+app.get("/api/bridge/cam_start_monitor.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  if (!printerConfig.host) {
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ error: "no_printer_configured" })});`);
+    return;
+  }
+  try {
+    const reqId = Date.now();
+    await callMoonrakerJsonRpc("camera.start_monitor", { req_id: reqId });
+    camMonitorLastCall = Date.now();
+    log("INFO", "camera.start_monitor sent via JSONP endpoint");
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true })});`);
+  } catch (e) {
+    log("ERROR", `cam_start_monitor error: ${e.message}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ error: e.message })});`);
+  }
+});
+
+app.get("/api/bridge/cam_stop_monitor.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  if (!printerConfig.host) {
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ error: "no_printer_configured" })});`);
+    return;
+  }
+  try {
+    const reqId = Date.now();
+    await callMoonrakerJsonRpc("camera.stop_monitor", { req_id: reqId });
+    camMonitorActive = false;
+    camMonitorLastCall = 0;
+    log("INFO", "camera.stop_monitor sent via JSONP endpoint");
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true })});`);
+  } catch (e) {
+    log("ERROR", `cam_stop_monitor error: ${e.message}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ error: e.message })});`);
+  }
 });
 
 app.get("/api/bridge/debug/logs.js", (req, res) => {
