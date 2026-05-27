@@ -520,6 +520,11 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-u
 </div>
 
 <div class="about-section">
+<h3 data-i18n="about_ai">Development Assistant</h3>
+<div style="font-size:13px;color:var(--text2);line-height:1.8" data-i18n="about_ai_text">This project was developed with the assistance of ByteDance's Solo, using Zhipu AI's GLM-5.1.</div>
+</div>
+
+<div class="about-section">
 <h3 data-i18n="about_license">Open Source License</h3>
 <div style="font-size:13px;color:var(--text2);line-height:1.8">
 <p data-i18n="about_license_text">This project is licensed under AGPL-3.0. It references or incorporates code from the following open-source projects:</p>
@@ -645,7 +650,8 @@ about_tips:'Tips',about_tip1:'Filament colors in the dialog are labels from the 
 about_github:'View on GitHub',about_update_hint:'Check GitHub for the latest version and updates',
 about_repo_url:'Repository URL:',
 update_checking:'Checking for updates...',update_check_fail:'Update check failed',update_available:'New version v{ver} available!',update_manual:'Please visit the repository URL above to download',update_latest:'You are on the latest version',
-about_author:'Author',about_license:'Open Source License',about_license_text:'This project is licensed under AGPL-3.0. It references or incorporates code from the following open-source projects:'
+about_author:'Author',about_ai:'Development Assistant',about_ai_text:'This project was developed with the assistance of ByteDance\'s Solo, using Zhipu AI\'s GLM-5.1.',
+about_license:'Open Source License',about_license_text:'This project is licensed under AGPL-3.0. It references or incorporates code from the following open-source projects:'
 },
 zh:{
 camera:'监控',control:'控制',print_job:'打印任务',filament:'耗材',
@@ -682,7 +688,8 @@ about_tips:'提示',about_tip1:'确认框中的耗材颜色是切片软件设置
 about_github:'在 GitHub 上查看',about_update_hint:'前往 GitHub 获取最新版本和更新',
 about_repo_url:'仓库地址：',
 update_checking:'正在检查更新...',update_check_fail:'更新检查失败',update_available:'发现新版本 v{ver}！',update_manual:'请访问上方仓库地址下载更新',update_latest:'当前已是最新版本',
-about_author:'作者',about_license:'开源协议',about_license_text:'本项目基于 AGPL-3.0 协议开源。参考或使用了以下开源项目的代码：'
+about_author:'作者',about_ai:'开发助手',about_ai_text:'本项目使用字节跳动旗下的 Solo，配合智谱的 GLM-5.1 开发。',
+about_license:'开源协议',about_license_text:'本项目基于 AGPL-3.0 协议开源。参考或使用了以下开源项目的代码：'
 }
 };
 function t(k){return(I18N[curLang]||I18N.en)[k]||I18N.en[k]||k;}
