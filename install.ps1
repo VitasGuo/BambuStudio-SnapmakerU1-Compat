@@ -1,11 +1,11 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.16.0 Installer"
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.16.1 Installer"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.16.0" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.16.1" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 

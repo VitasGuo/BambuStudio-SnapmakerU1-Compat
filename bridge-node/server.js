@@ -7,7 +7,7 @@ const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 
-const BRIDGE_VERSION = "5.16.0";
+const BRIDGE_VERSION = "5.16.1";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -117,14 +117,16 @@ async function callMoonrakerJsonRpc(method, params = {}) {
     }, 10000);
 
     moonrakerWs.on("open", () => {
-      moonrakerWs.send(
-        JSON.stringify({
-          jsonrpc: "2.0",
-          method: method,
-          params: params,
-          id: Date.now(),
-        })
-      );
+      const msg = JSON.stringify({
+        jsonrpc: "2.0",
+        method: method,
+        params: params,
+        id: Date.now(),
+      });
+      if (method === "server.files.start_local_print") {
+        log("INFO", `JSON-RPC send: ${method} params=${JSON.stringify(params)}`);
+      }
+      moonrakerWs.send(msg);
     });
 
     moonrakerWs.on("message", (data) => {
@@ -390,28 +392,31 @@ app.get("/api/bridge/confirm_print.js", async (req, res) => {
     res.send(`${cb}(${JSON.stringify({ error: "no_pending_print" })});`);
     return;
   }
-  const options = {
-    bed_level: req.query.auto_bed_leveling === "1" ? 1 : 0,
-    flow_calibrate: req.query.flow_calibrate === "1" ? 1 : 0,
-    time_lapse_camera: req.query.time_lapse_camera === "1" ? 1 : 0,
-  };
+  const bedLevel = req.query.auto_bed_leveling === "1" ? 1 : 0;
+  const flowCal = req.query.flow_calibrate === "1" ? 1 : 0;
+  const timelapse = req.query.time_lapse_camera === "1" ? 1 : 0;
+  let mapTable = [];
   if (req.query.extruder_map_table) {
-    try { options.map_table = JSON.parse(req.query.extruder_map_table); } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); }
+    try { mapTable = JSON.parse(req.query.extruder_map_table); } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); }
   }
   const filename = pendingPrintFile;
   pendingPrintFile = "";
-  log("INFO", `Confirm print (JSONP): start_local_print path=${filename} options=${JSON.stringify(options)}`);
+  log("INFO", `Confirm print: filename=${filename} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)}`);
   try {
-    const result = await callMoonrakerJsonRpc("server.files.start_local_print", {
-      path: filename,
-      options: options,
-      print_plate: 1,
-    });
-    log("INFO", `server.files.start_local_print result: ${JSON.stringify(result)}`);
+    for (const [configExt, mapExt] of mapTable) {
+      await sendGcode(`SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=${configExt} MAP_EXTRUDER=${mapExt}`);
+    }
+    if (mapTable.length > 0) {
+      const usedExtruders = [...new Set(mapTable.map(([_, m]) => m))].sort();
+      await sendGcode(`SET_PRINT_USED_EXTRUDERS EXTRUDERS=${usedExtruders.join(',')}`);
+    }
+    await sendGcode(`SET_PRINT_PREFERENCES BED_LEVEL=${bedLevel} FLOW_CALIBRATE=${flowCal} TIME_LAPSE_CAMERA=${timelapse}`);
+    const result = await callMoonrakerJsonRpc("printer.print.start", { filename: filename });
+    log("INFO", `printer.print.start result: ${JSON.stringify(result)}`);
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify({ started: true, filename, result })});`);
   } catch (e) {
-    log("ERROR", `server.files.start_local_print error: ${e.message}`);
+    log("ERROR", `confirm_print error: ${e.message}`);
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify({ error: e.message })});`);
   }
@@ -425,26 +430,29 @@ app.get("/api/bridge/start_print.js", async (req, res) => {
     res.send(`${cb}(${JSON.stringify({ error: "path_required" })});`);
     return;
   }
-  const options = {
-    bed_level: req.query.auto_bed_leveling === "1" ? 1 : 0,
-    flow_calibrate: req.query.flow_calibrate === "1" ? 1 : 0,
-    time_lapse_camera: req.query.time_lapse_camera === "1" ? 1 : 0,
-  };
+  const bedLevel = req.query.auto_bed_leveling === "1" ? 1 : 0;
+  const flowCal = req.query.flow_calibrate === "1" ? 1 : 0;
+  const timelapse = req.query.time_lapse_camera === "1" ? 1 : 0;
+  let mapTable = [];
   if (req.query.extruder_map_table) {
-    try { options.map_table = JSON.parse(req.query.extruder_map_table); } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); }
+    try { mapTable = JSON.parse(req.query.extruder_map_table); } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); }
   }
-  log("INFO", `start_print (JSONP): start_local_print path=${path} options=${JSON.stringify(options)}`);
+  log("INFO", `start_print: path=${path} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)}`);
   try {
-    const result = await callMoonrakerJsonRpc("server.files.start_local_print", {
-      path: path,
-      options: options,
-      print_plate: 1,
-    });
-    log("INFO", `server.files.start_local_print result: ${JSON.stringify(result)}`);
+    for (const [configExt, mapExt] of mapTable) {
+      await sendGcode(`SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=${configExt} MAP_EXTRUDER=${mapExt}`);
+    }
+    if (mapTable.length > 0) {
+      const usedExtruders = [...new Set(mapTable.map(([_, m]) => m))].sort();
+      await sendGcode(`SET_PRINT_USED_EXTRUDERS EXTRUDERS=${usedExtruders.join(',')}`);
+    }
+    await sendGcode(`SET_PRINT_PREFERENCES BED_LEVEL=${bedLevel} FLOW_CALIBRATE=${flowCal} TIME_LAPSE_CAMERA=${timelapse}`);
+    const result = await callMoonrakerJsonRpc("printer.print.start", { filename: path });
+    log("INFO", `printer.print.start result: ${JSON.stringify(result)}`);
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify({ started: true, path, result })});`);
   } catch (e) {
-    log("ERROR", `server.files.start_local_print error: ${e.message}`);
+    log("ERROR", `start_print error: ${e.message}`);
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify({ error: e.message })});`);
   }

@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 更新日期: 2026-05-27 (v5.16.0)
+## 更新日期: 2026-05-27 (v5.16.1)
 
 ---
 
@@ -31,12 +31,39 @@
 8. **v5.14.0 耗材匹配核心类型提取 + 自定义下拉框 + About 页面增强**：extractFilType 关键词匹配、颜色圆点下拉、作者/开源协议
 9. **v5.15.0 耗材颜色相近匹配 + GitHub 版本更新检测 + 仓库 URL 纯文本**：同类型颜色距离排序、GitHub Releases API 版本对比、WebView 外部链接改为纯文本
 10. **v5.16.0 外部链接跳转修复**：通过 Bridge 服务端 `open_external` 端点调用系统默认浏览器，解决 WebView 拦截 `window.open` 的问题
+11. **v5.16.1 耗材映射修复（严重 bug）**：改用 OrcaSlicer 分步打印方式（SET_PRINT_EXTRUDER_MAP → SET_PRINT_USED_EXTRUDERS → SET_PRINT_PREFERENCES → printer.print.start），修复 `SDCARD_PRINT_FILE_WITH_PARAMETERS` 的 `MAP_TABLE` 不更新 `reprint_info` 导致映射不生效的问题。同时修复 `SET_PRINT_USED_EXTRUDERS` 参数格式（发送逗号分隔索引列表而非数量）
 
 ### 📝 下一步计划
-1. 验证耗材自动匹配是否正常工作（类型优先+颜色相近）
-2. 验证 map_table 参数传递到 Klipper 后是否正确解析
-3. 验证 GitHub 版本更新检测是否正常工作
-4. 继续对齐 OrcaSlicer 功能（挤出头取出/放回等）
+1. 验证 GitHub 版本更新检测是否正常工作
+2. 继续对齐 OrcaSlicer 功能（挤出头取出/放回等）
+
+---
+
+## v5.16.1 耗材映射修复（严重 bug）
+
+### 问题
+用户选择第二个挤出头（黑色PETG），但实际打印时使用了第一个挤出头（橙色PETG）。Fluidd 控制台显示 `extruder -> extruder`，确认 T0 命令未被映射到物理挤出头 1
+
+### 根因
+`SDCARD_PRINT_FILE_WITH_PARAMETERS` 调用 `cmd_SET_PRINT_TASK_PARAMETERS`（print_task_config.py L1038），该函数只更新 `extruder_map_table`，**没有同步更新 `reprint_info`**。而 `virtual_sdcard.py` L2107 在处理 T0 命令时读取的是 `reprint_info["extruder_map_table"]`，导致映射不生效
+
+### 修复
+改为 OrcaSlicer 的分步打印方式（逆向分析 `main.dart.js` L36935/L131518 确认）：
+1. `SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=0 MAP_EXTRUDER=1` — 同时更新 `extruder_map_table` 和 `reprint_info`
+2. `SET_PRINT_USED_EXTRUDERS EXTRUDERS=0,1` — 标记使用的物理挤出头索引（逗号分隔列表）
+3. `SET_PRINT_PREFERENCES BED_LEVEL=1 FLOW_CALIBRATE=1 TIME_LAPSE_CAMERA=1` — 设置打印选项
+4. `printer.print.start` — 开始打印（只传 filename，不带 options）
+
+### 附带修复
+- `SET_PRINT_USED_EXTRUDERS` 参数格式：从 `EXTRUDERS=${usedExtruders.length}`（数量）改为 `EXTRUDERS=${usedExtruders.join(',')}`（逗号分隔索引列表），匹配 Klipper `cmd_SET_PRINT_USED_EXTRUDERS` 的解析逻辑（`extruders_str.split(',')`）
+- `filament_used_mm` 不可靠：改用 `filament_type` 判断 gcode 槽位是否使用
+
+### 修改文件
+- `bridge-node/server.js` — confirm_print 和 start_print 端点改为分步方式 + SET_PRINT_USED_EXTRUDERS 参数修复 + 版本号 5.16.1
+- `bridge/web/webui.html` — mapTable 构建逻辑修复（改用 filament_type）+ 版本号 5.16.1
+- `bridge-node/package.json` — 版本号 5.16.1
+- `install.ps1` / `reinstall.ps1` / `uninstall.ps1` — v5.16.1
+- `README.md` — v5.16.1
 
 ---
 

@@ -712,7 +712,7 @@ function switchTab(tab){
   $('debug-content').style.display=tab==='debug'?'flex':'none';
   $('about-content').style.display=tab==='about'?'block':'none';
   if(tab==='debug') loadDebugLogs();
-  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.16.0';checkUpdate();}
+  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.16.1';checkUpdate();}
 }
 
 var camRpcId=null;
@@ -1082,9 +1082,9 @@ flow_calibrate:document.getElementById('optFlow').checked,
 time_lapse_camera:document.getElementById('optTimelapse').checked
 };
 var mapTable=[];
-var gFilUsed=gcodeMeta?gcodeMeta.filament_used_mm:[];
+var gFilTypesForMap=gcodeMeta?(typeof gcodeMeta.filament_type==='string'?gcodeMeta.filament_type.split(';'):gcodeMeta.filament_type):[];
 for(var i=0;i<4;i++){
-if(gFilUsed&&gFilUsed[i]&&gFilUsed[i]>0){
+if(gFilTypesForMap&&gFilTypesForMap[i]){
 mapTable.push([i,filamentMap[i]]);
 }
 }
