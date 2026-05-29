@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 更新日期: 2026-05-27 (v5.16.1)
+## 更新日期: 2026-05-30 (v5.18.0)
 
 ---
 
@@ -32,6 +32,10 @@
 9. **v5.15.0 耗材颜色相近匹配 + GitHub 版本更新检测 + 仓库 URL 纯文本**：同类型颜色距离排序、GitHub Releases API 版本对比、WebView 外部链接改为纯文本
 10. **v5.16.0 外部链接跳转修复**：通过 Bridge 服务端 `open_external` 端点调用系统默认浏览器，解决 WebView 拦截 `window.open` 的问题
 11. **v5.16.1 耗材映射修复（严重 bug）**：改用 OrcaSlicer 分步打印方式（SET_PRINT_EXTRUDER_MAP → SET_PRINT_USED_EXTRUDERS → SET_PRINT_PREFERENCES → printer.print.start），修复 `SDCARD_PRINT_FILE_WITH_PARAMETERS` 的 `MAP_TABLE` 不更新 `reprint_info` 导致映射不生效的问题。同时修复 `SET_PRINT_USED_EXTRUDERS` 参数格式（发送逗号分隔索引列表而非数量）
+12. **v5.18.0 CIEDE2000 颜色匹配**：耗材颜色匹配算法从 RGB 欧几里得距离升级为 CIEDE2000（Lab 色彩空间），对齐 OrcaSlicer 原生实现。逆向分析 OrcaSlicer Flutter Web 确认耗材映射流程已完全对齐
+
+### ❌ 已知限制
+1. **设备面板直接打印 BambuStudio gcode**：U1 设备触摸面板直接打印 BambuStudio 生成的 gcode 时提示"未识别的gcode类型"（闭源触摸屏固件检查 EXECUTABLE_BLOCK 内容），只能通过 WebUI 打印。见 traps.md #103
 
 ### 📝 下一步计划
 1. 验证 GitHub 版本更新检测是否正常工作
@@ -39,10 +43,33 @@
 
 ---
 
-## v5.16.1 耗材映射修复（严重 bug）
+## v5.18.0 CIEDE2000 颜色匹配 + OrcaSlicer 逆向分析
 
-### 问题
-用户选择第二个挤出头（黑色PETG），但实际打印时使用了第一个挤出头（橙色PETG）。Fluidd 控制台显示 `extruder -> extruder`，确认 T0 命令未被映射到物理挤出头 1
+### 改进
+1. **CIEDE2000 颜色匹配**：耗材颜色匹配算法从 RGB 欧几里得距离升级为 CIEDE2000（Lab 色彩空间），对齐 OrcaSlicer 原生实现（逆向分析 `main.dart.js` L144042-L144098 确认 OrcaSlicer 使用 CIEDE2000）
+2. **OrcaSlicer 逆向分析完成**：完整追踪打印确认流程，确认耗材映射实现已对齐
+3. **设备面板 gcode 限制记录**：确认 BambuStudio gcode 无法在设备面板直接打印，记录为固件限制
+
+### OrcaSlicer 打印确认流程（逆向分析结果）
+1. `SET_PRINT_FILAMENT_CONFIG` — 在耗材编辑页面单独调用，不在打印确认流程中
+2. `SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=x MAP_EXTRUDER=y` — 设置映射
+3. `SET_PRINT_USED_EXTRUDERS EXTRUDERS=0,1` — 标记使用的物理挤出头索引
+4. `SET_PRINT_PREFERENCES BED_LEVEL=1 FLOW_CALIBRATE=1 TIME_LAPSE_CAMERA=1` — 设置打印选项
+5. `printer.print.start` — 开始打印（只传 filename）
+
+### 关键发现
+- OrcaSlicer **不使用** `SET_PRINT_TASK_PARAMETERS` 和 `SDCARD_PRINT_FILE_WITH_PARAMETERS`
+- `SET_PRINT_FILAMENT_CONFIG` 是耗材编辑页面的功能，不是打印确认流程的一部分
+- OrcaSlicer 使用 CIEDE2000 颜色差异算法（Lab 色彩空间），而非 RGB 欧几里得距离
+- OrcaSlicer 通过 `printer.objects.query` 查询 `print_task_config` 获取设备耗材配置
+
+### 修改文件
+- `bridge/web/webui.html` — `colorDist()` 从 RGB 欧几里得距离升级为 CIEDE2000 + 版本号 5.18.0
+- `bridge-node/server.js` — 版本号 5.18.0
+- `bridge-node/package.json` — 版本号 5.18.0
+- `install.ps1` / `reinstall.ps1` / `uninstall.ps1` — v5.18.0
+- `README.md` — v5.18.0 + 设备面板直接打印限制说明
+- `traps.md` — #103 设备面板不识别 BambuStudio gcode + #104 颜色匹配精度不足
 
 ### 根因
 `SDCARD_PRINT_FILE_WITH_PARAMETERS` 调用 `cmd_SET_PRINT_TASK_PARAMETERS`（print_task_config.py L1038），该函数只更新 `extruder_map_table`，**没有同步更新 `reprint_info`**。而 `virtual_sdcard.py` L2107 在处理 T0 命令时读取的是 `reprint_info["extruder_map_table"]`，导致映射不生效

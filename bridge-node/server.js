@@ -7,7 +7,7 @@ const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 
-const BRIDGE_VERSION = "5.16.1";
+const BRIDGE_VERSION = "5.18.0";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -399,10 +399,21 @@ app.get("/api/bridge/confirm_print.js", async (req, res) => {
   if (req.query.extruder_map_table) {
     try { mapTable = JSON.parse(req.query.extruder_map_table); } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); }
   }
+  let filamentConfig = [];
+  if (req.query.filament_config) {
+    try { filamentConfig = JSON.parse(req.query.filament_config); } catch (e) { log("WARN", `filament_config parse error: ${e.message}`); }
+  }
   const filename = pendingPrintFile;
   pendingPrintFile = "";
-  log("INFO", `Confirm print: filename=${filename} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)}`);
+  log("INFO", `Confirm print: filename=${filename} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)} filament_config=${filamentConfig.length} slots`);
   try {
+    for (const fc of filamentConfig) {
+      await sendGcode(`SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='${fc.idx}' FILAMENT_TYPE='${fc.type}' FILAMENT_SUBTYPE='${fc.subtype}' FILAMENT_COLOR_RGBA='${fc.color || 'FFFFFFFF'}' SAVE='1' VENDOR='${fc.vendor}'`);
+    }
+    if (filamentConfig.length > 0) {
+      const filTypeList = filamentConfig.map(fc => `'${fc.type}'`).join(',');
+      await sendGcode(`SET_PRINT_TASK_PARAMETERS FILAMENT_TYPE=[${filTypeList}]`);
+    }
     for (const [configExt, mapExt] of mapTable) {
       await sendGcode(`SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=${configExt} MAP_EXTRUDER=${mapExt}`);
     }
@@ -437,8 +448,19 @@ app.get("/api/bridge/start_print.js", async (req, res) => {
   if (req.query.extruder_map_table) {
     try { mapTable = JSON.parse(req.query.extruder_map_table); } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); }
   }
-  log("INFO", `start_print: path=${path} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)}`);
+  let filamentConfig = [];
+  if (req.query.filament_config) {
+    try { filamentConfig = JSON.parse(req.query.filament_config); } catch (e) { log("WARN", `filament_config parse error: ${e.message}`); }
+  }
+  log("INFO", `start_print: path=${path} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)} filament_config=${filamentConfig.length} slots`);
   try {
+    for (const fc of filamentConfig) {
+      await sendGcode(`SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='${fc.idx}' FILAMENT_TYPE='${fc.type}' FILAMENT_SUBTYPE='${fc.subtype}' FILAMENT_COLOR_RGBA='${fc.color || 'FFFFFFFF'}' SAVE='1' VENDOR='${fc.vendor}'`);
+    }
+    if (filamentConfig.length > 0) {
+      const filTypeList = filamentConfig.map(fc => `'${fc.type}'`).join(',');
+      await sendGcode(`SET_PRINT_TASK_PARAMETERS FILAMENT_TYPE=[${filTypeList}]`);
+    }
     for (const [configExt, mapExt] of mapTable) {
       await sendGcode(`SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=${configExt} MAP_EXTRUDER=${mapExt}`);
     }
@@ -675,6 +697,43 @@ async function handleUploadWithConfirm(req, res) {
     return proxyToMoonraker(req, res, "/api/files/local");
   }
 
+function patchGcodeLayout(content) {
+  const headerStart = content.indexOf("; HEADER_BLOCK_START");
+  const headerEnd = content.indexOf("; HEADER_BLOCK_END");
+  const configStart = content.indexOf("; CONFIG_BLOCK_START");
+  const configEnd = content.indexOf("; CONFIG_BLOCK_END");
+  const thumbStart = content.indexOf("; THUMBNAIL_BLOCK_START");
+  const thumbEnd = content.indexOf("; THUMBNAIL_BLOCK_END");
+  const execStart = content.indexOf("; EXECUTABLE_BLOCK_START");
+  const execEnd = content.indexOf("; EXECUTABLE_BLOCK_END");
+
+  if (configStart === -1 || execStart === -1 || configStart > execStart) return null;
+
+  const headerBlock = headerStart >= 0 && headerEnd >= 0 ? content.substring(headerStart, headerEnd + "; HEADER_BLOCK_END".length) : "";
+  const configBlock = configStart >= 0 && configEnd >= 0 ? content.substring(configStart, configEnd + "; CONFIG_BLOCK_END".length) : "";
+  const thumbBlock = thumbStart >= 0 && thumbEnd >= 0 ? content.substring(thumbStart, thumbEnd + "; THUMBNAIL_BLOCK_END".length) : "";
+  const execBlock = execStart >= 0 && execEnd >= 0 ? content.substring(execStart, execEnd + "; EXECUTABLE_BLOCK_END".length) : "";
+
+  if (!execBlock || !configBlock) return null;
+
+  let beforeHeader = headerStart > 0 ? content.substring(0, headerStart) : "";
+  let afterExecEnd = execEnd >= 0 ? content.substring(execEnd + "; EXECUTABLE_BLOCK_END".length) : "";
+  let betweenBlocks = "";
+
+  if (headerEnd >= 0 && configStart >= 0 && configStart > headerEnd) {
+    betweenBlocks = content.substring(headerEnd + "; HEADER_BLOCK_END".length, configStart);
+  }
+
+  let result = beforeHeader;
+  if (headerBlock) result += headerBlock + "\n";
+  if (thumbBlock) result += thumbBlock + "\n";
+  result += execBlock + "\n";
+  result += configBlock;
+  result += afterExecEnd;
+
+  return result;
+}
+
   try {
     const formidable = require("formidable");
     const form = new formidable.IncomingForm({ maxFileSize: 500 * 1024 * 1024 });
@@ -694,7 +753,15 @@ async function handleUploadWithConfirm(req, res) {
     const printFlag = String(fields.print?.[0] || "false").toLowerCase() === "true";
     log("INFO", `Upload file: ${file.originalFilename}, print_flag=${printFlag}`);
 
-    const fileContent = fs.readFileSync(file.filepath);
+    let fileContent = fs.readFileSync(file.filepath);
+    const isGcode = /\.gcode$/i.test(file.originalFilename);
+    if (isGcode) {
+      const patched = patchGcodeLayout(fileContent.toString("utf-8"));
+      if (patched) {
+        fileContent = Buffer.from(patched, "utf-8");
+        log("INFO", `G-code layout patched: CONFIG_BLOCK moved to end for ${file.originalFilename}`);
+      }
+    }
     const FD = require("form-data");
     const formData = new FD();
     formData.append("file", fileContent, { filename: file.originalFilename });

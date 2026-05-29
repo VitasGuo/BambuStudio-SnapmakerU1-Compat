@@ -11,7 +11,7 @@
 #1 跨厂商继承不支持 | #2 filament_list 加载顺序 | #3 PowerShell JSON 格式错误 | #4 AppConfig filaments 缓存 | #5 compatible_printers_condition | #6 厂商匹配检查 | #7 删除 models 段 | #8 Copy-Item 嵌套 | #9 user/default 残留 | #10 conf 写入时机 | #11 filament_vendor 缺失 | #20 只看 @U1 不够 | #21 Orca GitHub 过时
 
 ### G-code 与打印流程
-#12 换色温度不够停机 | #13 auxiliary_fan=0 | #14 enable_pre_heating=0 | #15 preheat delta 符号 | #16 ooze_prevention 与擦料塔互斥 | #22 retract_length_toolchange | #23 Support PLA-PETG 继承错误 | #24 required_nozzle_HRC | #55 G-code 布尔参数格式
+#12 换色温度不够停机 | #13 auxiliary_fan=0 | #14 enable_pre_heating=0 | #15 preheat delta 符号 | #16 ooze_prevention 与擦料塔互斥 | #22 retract_length_toolchange | #23 Support PLA-PETG 继承错误 | #24 required_nozzle_HRC | #55 G-code 布尔参数格式 | #103 设备面板不识别 BambuStudio gcode
 
 ### 耗材参数
 #17 跨材料基类参数缺失 | #18 Snapmaker 基础耗材缺覆盖 | #19 filament_type 缺失
@@ -29,7 +29,7 @@
 #37 webcams/list 返回空 | #39 MJPEG 流代理不工作 | #46 U1 用 snapshot 轮询 | #65 代理破坏二进制 JPEG | #67 Express ETag 缓存 | #85 camera.start_monitor 必须走 WS | #90 摄像头监控需服务端触发 | #93 摄像头参数缺失（domain）
 
 ### WebUI 前端
-#34 Flutter Web DOM 不可读 | #38 SET_LED 缺 WHITE | #40 filament_feed 无类型 | #66 WS 竞态条件 | #78 Fluidd SW 拦截 fetch | #79 WebView 阻止 fetch/XHR | #82 event.stopPropagation | #83 gcode() 不返回值 | #84 EXTRUDER vs INDEX | #95 风扇控制参数范围 | #99 耗材类型品牌前缀 | #100 WebView 外部链接拦截 | #101 MAP_TABLE 不更新 reprint_info | #102 SET_PRINT_USED_EXTRUDERS 参数格式
+#34 Flutter Web DOM 不可读 | #38 SET_LED 缺 WHITE | #40 filament_feed 无类型 | #66 WS 竞态条件 | #78 Fluidd SW 拦截 fetch | #79 WebView 阻止 fetch/XHR | #82 event.stopPropagation | #83 gcode() 不返回值 | #84 EXTRUDER vs INDEX | #95 风扇控制参数范围 | #99 耗材类型品牌前缀 | #100 WebView 外部链接拦截 | #101 MAP_TABLE 不更新 reprint_info | #102 SET_PRINT_USED_EXTRUDERS 参数格式 | #104 颜色匹配精度不足
 
 ### 安装与部署
 #32 系统无 Python | #33 Fluidd hosted 模式 | #35 CWD 指向已删目录 | #36 curl 下载失败 | #42 Bridge 依赖原目录 | #43 Program Files 权限 | #44 需手动启动 | #45 VBS 权限 | #60 Python 嵌入式限制 | #68 formidable 构造函数 | #69 bridge/web 未复制 | #74 undici 未声明 | #75 node-fetch 不兼容 undici | #76 undici 不导出 Blob | #77 旧进程未重启 | #80 mDNS 端口错误 | #81 VBS 裸 node 命令
@@ -772,3 +772,28 @@
 **现象**：`SET_PRINT_USED_EXTRUDERS EXTRUDERS=1` 在某些场景下标记错误的挤出头。例如 mapTable=`[[0,0]]` 时发送 `EXTRUDERS=1`（数量），Klipper 解析为 `used_extruders=[1]`（索引），标记物理挤出头 1 而非 0
 **根因**：`cmd_SET_PRINT_USED_EXTRUDERS`（print_task_config.py L738-741）用 `extruders_str.split(',')` 解析参数为索引列表 `[int(value) for value in extruders_str.split(',')]`，期望逗号分隔的挤出头索引（如 `"0,1"`），而非数量（如 `"1"` 或 `"2"`）。当只有一个索引时 `"1"` 恰好被解析为 `[1]`，在 mapTable=`[[0,1]]` 场景下结果正确，但在 mapTable=`[[0,0]]` 场景下 `usedExtruders.length=1` 发送 `EXTRUDERS=1`，Klipper 解析为索引 1 而非 0
 **解决方案**：`usedExtruders.length`（数量）→ `usedExtruders.join(',')`（逗号分隔索引列表），如 `EXTRUDERS=0,1` 或 `EXTRUDERS=0`（v5.16.1）
+
+---
+
+#103 ❌ BambuStudio 固有限制
+**现象**：BambuStudio 生成的 gcode 文件在 Snapmaker U1 设备触摸面板上直接打印时提示"未识别的gcode类型"，但通过 WebUI 打印确认框可以正常打印
+**根因**：设备面板闭源触摸屏固件在直接打印 gcode 时检查文件中的 EXECUTABLE_BLOCK 内容。BambuStudio 生成的 EXECUTABLE_BLOCK 包含某些特征（如 EXCLUDE_OBJECT 定义、FEATURE→TYPE 关键字差异等）导致不被识别。通过多轮对比测试确认：
+1. HEADER 标识符无关（改成 BambuStudio 标识的 OrcaSlicer 文件仍可识别）
+2. CONFIG_BLOCK 位置是关键（OrcaSlicer 在末尾，BambuStudio 在开头）——Moonraker `parse_filament_type` 只搜索 `footer_data`（文件末尾 1 MiB），BambuStudio 的 CONFIG_BLOCK 在开头无法被解析
+3. 即使 CONFIG 移到末尾，BambuStudio 的 EXECUTABLE_BLOCK 内容仍被设备面板拒绝
+4. OrcaSlicer HEADER+THUMB+CONFIG + BambuStudio EXEC → 不识别，确认问题在 EXECUTABLE_BLOCK
+**解决方案**：
+1. `patchGcodeLayout()` 在 Bridge 上传 gcode 时自动重组文件结构（CONFIG_BLOCK 移到末尾）→ 修复 WebUI 耗材信息解析 ✅
+2. 通过 WebUI 打印确认框使用 OrcaSlicer 分步方式（SET_PRINT_EXTRUDER_MAP → SET_PRINT_USED_EXTRUDERS → SET_PRINT_PREFERENCES → printer.print.start）→ 耗材映射正确 ✅
+3. 设备面板直接打印 BambuStudio gcode 仍不识别——闭源触摸屏固件检查 EXECUTABLE_BLOCK，无法从外部修复 ❌
+4. **结论**：BambuStudio gcode 只能通过 WebUI 打印，不支持设备面板直接打印。此为设备固件限制，非兼容包 bug
+
+---
+
+#104 ✅
+**现象**：耗材颜色匹配不准确，同类型多个物理槽位时颜色相近的匹配效果差。例如橙色和红色在 RGB 空间距离较近但视觉差异明显
+**根因**：`colorDist()` 使用 RGB 欧几里得距离计算颜色差异，RGB 空间不是感知均匀的——人眼对绿色变化更敏感，对蓝色变化较不敏感。OrcaSlicer 使用 CIEDE2000 算法（Lab 色彩空间），这是工业标准的感知均匀颜色差异计算方法（逆向分析 `main.dart.js` L144042-L144098 确认）
+**解决方案**：将 `colorDist()` 从 RGB 欧几里得距离升级为 CIEDE2000 算法（v5.18.0）：
+1. `rgbToLab(r,g,b)`：sRGB → 线性 RGB → XYZ → CIELAB 转换
+2. `ciede2000(lab1,lab2)`：CIEDE2000 ΔE 计算（含 C'、h'、SL、SC、SH、RT 旋转项）
+3. `colorDist(a,b)` 改为调用 `ciede2000(rgbToLab(...), rgbToLab(...))`

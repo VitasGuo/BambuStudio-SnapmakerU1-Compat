@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.16.1
+# Snapmaker U1 BambuStudio 兼容包 v5.18.0
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -171,6 +171,7 @@ Snapmaker U1 (Moonraker + Klipper)
 - **G-code 兼容性**：U1 使用 Klipper 固件，G-code 包含 Snapmaker 专有命令
 - **多色打印**：BambuStudio 支持多色切片，U1 的 4 工具头换色机制可正常工作
 - **耗材选择**：在 BambuStudio 中手动选择与 U1 工具头实际装载一致的耗材预设
+- **⚠️ 设备面板直接打印限制**：BambuStudio 生成的 gcode 文件在 U1 设备触摸面板上直接打印时会提示"未识别的gcode类型"。这是设备闭源触摸屏固件检查 gcode EXECUTABLE_BLOCK 内容导致的，非兼容包 bug。请通过 WebUI 打印确认框打印（耗材映射和打印选项均正常工作）
 
 ---
 
@@ -195,7 +196,15 @@ A: 重新运行 `install.bat`。
 
 ## 版本历史
 
-- **v5.8.1** (2026-05-27) - 修复打印选项布尔值 + 摄像头服务端监控 + 顶栏版本号
+- **v5.18.0** (2026-05-30) - CIEDE2000 颜色匹配 + OrcaSlicer 逆向分析
+  - 耗材颜色匹配算法从 RGB 欧几里得距离升级为 CIEDE2000（Lab 色彩空间），对齐 OrcaSlicer 原生实现
+  - 逆向分析 OrcaSlicer Flutter Web 打印确认流程，确认耗材映射实现已对齐
+  - 记录设备面板直接打印 BambuStudio gcode 不识别的固件限制（traps.md #103）
+- **v5.16.1** (2026-05-27) - 修复耗材映射不生效严重 bug
+  - 改用 OrcaSlicer 分步打印方式（SET_PRINT_EXTRUDER_MAP → SET_PRINT_USED_EXTRUDERS → SET_PRINT_PREFERENCES → printer.print.start）
+  - 修复 SET_PRINT_USED_EXTRUDERS 参数格式（发送逗号分隔索引列表而非数量）
+  - 添加 SET_PRINT_FILAMENT_CONFIG 命令对齐 OrcaSlicer 格式
+- **v5.16.0** (2026-05-27) - 外部链接跳转修复
   - 修复 start_local_print JSON-RPC 方法名 (start_local_print -> server.files.start_local_print)
   - 修复打印选项布尔值问题 (true/false -> 1/0)，解决 unable to parse True 错误
   - 挤出流量校准和 Timelapse 已确认正常工作
