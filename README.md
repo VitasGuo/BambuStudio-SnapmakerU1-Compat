@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.18.0
+# Snapmaker U1 BambuStudio 兼容包 v5.18.1
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 

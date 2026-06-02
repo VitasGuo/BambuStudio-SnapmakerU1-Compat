@@ -11,7 +11,7 @@
 #1 跨厂商继承不支持 | #2 filament_list 加载顺序 | #3 PowerShell JSON 格式错误 | #4 AppConfig filaments 缓存 | #5 compatible_printers_condition | #6 厂商匹配检查 | #7 删除 models 段 | #8 Copy-Item 嵌套 | #9 user/default 残留 | #10 conf 写入时机 | #11 filament_vendor 缺失 | #20 只看 @U1 不够 | #21 Orca GitHub 过时
 
 ### G-code 与打印流程
-#12 换色温度不够停机 | #13 auxiliary_fan=0 | #14 enable_pre_heating=0 | #15 preheat delta 符号 | #16 ooze_prevention 与擦料塔互斥 | #22 retract_length_toolchange | #23 Support PLA-PETG 继承错误 | #24 required_nozzle_HRC | #55 G-code 布尔参数格式 | #103 设备面板不识别 BambuStudio gcode
+#12 换色温度不够停机 | #13 auxiliary_fan=0 | #14 enable_pre_heating=0 | #15 preheat delta 符号 | #16 ooze_prevention 与擦料塔互斥 | #22 retract_length_toolchange | #23 Support PLA-PETG 继承错误 | #24 required_nozzle_HRC | #55 G-code 布尔参数格式 | #103 设备面板不识别 BambuStudio gcode | #105 打印层进度不显示
 
 ### 耗材参数
 #17 跨材料基类参数缺失 | #18 Snapmaker 基础耗材缺覆盖 | #19 filament_type 缺失
@@ -797,3 +797,10 @@
 1. `rgbToLab(r,g,b)`：sRGB → 线性 RGB → XYZ → CIELAB 转换
 2. `ciede2000(lab1,lab2)`：CIEDE2000 ΔE 计算（含 C'、h'、SL、SC、SH、RT 旋转项）
 3. `colorDist(a,b)` 改为调用 `ciede2000(rgbToLab(...), rgbToLab(...))`
+
+---
+
+#105 ✅
+**现象**：WebUI 打印进度只显示百分比（如 "45%"），不能显示当前是哪一层（如 "56/125 layers"）。`jobLayer` 始终显示 "0/0"
+**根因**：BambuStudio 兼容包的机器配置 `fdm_machine_common.json` 中 `layer_change_gcode` 为空字符串 `""`，导致生成的 gcode 中缺少逐层 `SET_PRINT_STATS_INFO` 命令。Klipper `print_stats.info.current_layer` 始终为 0。对比 OrcaSlicer gcode：每层变化时插入 `SET_PRINT_STATS_INFO TOTAL_LAYER=125 CURRENT_LAYER=N`。WebUI 代码（L1209）已正确读取 `ps.info.current_layer` 和 `ps.info.total_layer`，只是 Klipper 端没有数据
+**解决方案**：`layer_change_gcode` 从 `""` 改为 `"SET_PRINT_STATS_INFO TOTAL_LAYER={total_layer_count} CURRENT_LAYER={layer_num}"`（v5.18.1）。注意：此修改只影响新生成的 gcode，已上传的旧 gcode 需要重新切片

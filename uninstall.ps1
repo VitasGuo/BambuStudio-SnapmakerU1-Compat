@@ -1,7 +1,7 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.18.0 Uninstaller"
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.18.1 Uninstaller"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
@@ -162,33 +162,13 @@ if (Test-Path $bridgeConfigDir) {
     Write-Host "  Bridge APPDATA not found, skipping" -ForegroundColor DarkGray
 }
 
-Write-Host "  [5/7] Clearing BambuStudio cache..." -ForegroundColor White
+Write-Host "  [5/7] Clearing BambuStudio system cache..." -ForegroundColor White
 $cacheDir = "$env:APPDATA\BambuStudioBeta\system\Snapmaker"
 $cacheVendor = "$env:APPDATA\BambuStudioBeta\system\Snapmaker.json"
 if (Test-Path $cacheDir) { Remove-Item $cacheDir -Recurse -Force }
 if (Test-Path $cacheVendor) { Remove-Item $cacheVendor -Force }
-
-$userBaseDir = "$env:APPDATA\BambuStudioBeta\user"
-if (Test-Path $userBaseDir) {
-    $userDirs = Get-ChildItem $userBaseDir -Directory -ErrorAction SilentlyContinue
-    foreach ($userDir in $userDirs) {
-        $machineDir = Join-Path $userDir.FullName "machine"
-        $filamentDir = Join-Path $userDir.FullName "filament"
-        foreach ($scanDir in @($machineDir, $filamentDir)) {
-            if (-not (Test-Path $scanDir)) { continue }
-            $snapmakerUserFiles = Get-ChildItem $scanDir -Filter "*.json" -ErrorAction SilentlyContinue | Where-Object {
-                $content = Get-Content $_.FullName -Raw -ErrorAction SilentlyContinue
-                $content -match "Snapmaker" -or $_.Name -match "Snapmaker" -or $_.Name -match "@U1"
-            }
-            if ($snapmakerUserFiles) {
-                foreach ($f in $snapmakerUserFiles) {
-                    Remove-Item $f.FullName -Force
-                }
-            }
-        }
-    }
-}
-Write-Host "  [OK] Cache cleared" -ForegroundColor Green
+Write-Host "  [OK] System cache cleared" -ForegroundColor Green
+Write-Host "  Note: User custom presets are preserved" -ForegroundColor DarkGray
 
 Write-Host "  [6/7] Cleaning BambuStudio.conf..." -ForegroundColor White
 $confPath = "$env:APPDATA\BambuStudioBeta\BambuStudio.conf"
@@ -209,15 +189,6 @@ if (Test-Path $confPath) {
             }
         }
 
-        if ($conf.models) {
-            $modelList = @($conf.models)
-            $cleanedModels = @($modelList | Where-Object { $_.vendor -ne 'Snapmaker' })
-            if ($cleanedModels.Count -ne $modelList.Count) {
-                $conf.models = $cleanedModels
-                $changed = $true
-            }
-        }
-
         if ($conf.nozzle_volume_types) {
             $keysToRemove = @($conf.nozzle_volume_types.PSObject.Properties | Where-Object { $_.Name -match 'Snapmaker' })
             foreach ($key in $keysToRemove) {
@@ -226,58 +197,16 @@ if (Test-Path $confPath) {
             }
         }
 
-        if ($conf.presets) {
-            if ($conf.presets.machine -match 'Snapmaker') {
-                $conf.presets.machine = 'Bambu Lab A1 0.4 nozzle'
-                $changed = $true
-            }
-            if ($conf.presets.process -match 'Snapmaker') {
-                $conf.presets.process = '0.20 Standard @Bambu Lab A1 0.4 nozzle'
-                $changed = $true
-            }
-            if ($conf.presets.filaments) {
-                $presetFilaments = @($conf.presets.filaments)
-                $cleanedPresetFilaments = @($presetFilaments | Where-Object {
-                    $_ -notmatch '@U1' -and $_ -notmatch 'Snapmaker'
-                })
-                if ($cleanedPresetFilaments.Count -eq 0) {
-                    $cleanedPresetFilaments = @("Bambu PLA Basic @BBL A1 0.4 nozzle")
-                }
-                if ($cleanedPresetFilaments.Count -ne $presetFilaments.Count -or $cleanedPresetFilaments[0] -ne $presetFilaments[0]) {
-                    $conf.presets.filaments = $cleanedPresetFilaments
-                    $changed = $true
-                }
-            }
-        }
-
         if ($changed) {
             Copy-Item $confPath "$confPath.bak" -Force
             $jsonOutput = $conf | ConvertTo-Json -Depth 10
             [System.IO.File]::WriteAllText($confPath, $jsonOutput, [System.Text.UTF8Encoding]::new($false))
-            Write-Host "  [OK] Cleaned all Snapmaker references (backup: .bak)" -ForegroundColor Green
+            Write-Host "  [OK] Cleaned Snapmaker cache entries (backup: .bak)" -ForegroundColor Green
         } else {
-            Write-Host "  [--] No Snapmaker references found" -ForegroundColor DarkGray
+            Write-Host "  [--] No Snapmaker cache entries found" -ForegroundColor DarkGray
         }
     } catch {
-        Write-Host "  [!] JSON parse failed, using regex fallback..." -ForegroundColor Yellow
-        try {
-            $confContent = [System.IO.File]::ReadAllText($confPath, [System.Text.UTF8Encoding]::new($false))
-            if ($confContent -match "Snapmaker") {
-                $confContent = $confContent -replace '\s*\{\s*"model":\s*"Snapmaker U1",\s*"nozzle_diameter":\s*"[^"]*",\s*"vendor":\s*"Snapmaker"\s*\},?', ''
-                $confContent = $confContent -replace '"Snapmaker U1 \([^)]+\)":\s*"[^"]*",?\s*', ''
-                $confContent = $confContent -replace '"machine":\s*"Snapmaker U1 \([^)]+\)"', '"machine": "Bambu Lab A1 0.4 nozzle"'
-                $confContent = $confContent -replace '"process":\s*"[^"]*@Snapmaker U1[^"]*"', '"process": "0.20 Standard @Bambu Lab A1 0.4 nozzle"'
-            }
-            $confContent = $confContent -replace '(?m)^\s*"[^"]*@U1"\s*,?\s*$', ''
-            $confContent = $confContent -replace '(?m)^\s*"Snapmaker (PLA|PLA Basic|PLA Matte|PLA Silk|PLA SnapSpeed|PLA-CF|PETG|PETG HF|ABS|TPU|TPU 90A|TPU 95A HF)[^"]*"\s*,?\s*$', ''
-            $confContent = $confContent -replace ',(\s*\])', '$1'
-            $confContent = $confContent -replace ',(\s*\})', '$1'
-            $confContent = $confContent -replace '(\r?\n){3,}', "`n`n"
-            [System.IO.File]::WriteAllText($confPath, $confContent, [System.Text.UTF8Encoding]::new($false))
-            Write-Host "  [OK] Cleaned via regex fallback" -ForegroundColor Yellow
-        } catch {
-            Write-Host "  [X] Both JSON and regex cleanup failed" -ForegroundColor Red
-        }
+        Write-Host "  [!] Failed to parse BambuStudio.conf, skipping (user data preserved)" -ForegroundColor Yellow
     }
 } else {
     Write-Host "  [--] BambuStudio.conf not found" -ForegroundColor DarkGray

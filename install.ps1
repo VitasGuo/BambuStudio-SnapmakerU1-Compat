@@ -1,7 +1,7 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.18.0 Installer"
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.18.1 Installer"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
@@ -77,28 +77,12 @@ if (Test-Path $cacheVendor) {
     Remove-Item $cacheVendor -Force
 }
 
-Write-Host "  [3/9] Clearing Snapmaker filament presets..." -ForegroundColor White
+Write-Host "  [3/9] Preserving user custom presets..." -ForegroundColor White
 $userDir = "$env:APPDATA\BambuStudioBeta\user"
-$userCleanedCount = 0
 if (Test-Path $userDir) {
-    $userSubDirs = Get-ChildItem $userDir -Directory -ErrorAction SilentlyContinue
-    foreach ($subDir in $userSubDirs) {
-        $filamentDir = Join-Path $subDir.FullName "filament"
-        if (-not (Test-Path $filamentDir)) { continue }
-        $snapmakerFiles = Get-ChildItem $filamentDir -Filter "*.json" -ErrorAction SilentlyContinue | Where-Object {
-            $_.Name -match "Snapmaker" -or $_.Name -match "@U1"
-        }
-        foreach ($f in $snapmakerFiles) {
-            Remove-Item $f.FullName -Force
-            Write-Host "  Removed: $($subDir.Name)\filament\$($f.Name)" -ForegroundColor DarkGray
-            $userCleanedCount++
-        }
-    }
-}
-if ($userCleanedCount -gt 0) {
-    Write-Host "  Cleared $userCleanedCount Snapmaker filament preset(s)" -ForegroundColor Green
+    Write-Host "  User presets directory found (preserved)" -ForegroundColor Green
 } else {
-    Write-Host "  No Snapmaker filament presets found (OK)" -ForegroundColor DarkGray
+    Write-Host "  No user presets directory (OK)" -ForegroundColor DarkGray
 }
 
 Write-Host "  [4/9] Cleaning filament cache in BambuStudio.conf..." -ForegroundColor White

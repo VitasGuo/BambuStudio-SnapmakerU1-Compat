@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 更新日期: 2026-05-30 (v5.18.0)
+## 更新日期: 2026-05-30 (v5.18.1)
 
 ---
 
@@ -33,6 +33,7 @@
 10. **v5.16.0 外部链接跳转修复**：通过 Bridge 服务端 `open_external` 端点调用系统默认浏览器，解决 WebView 拦截 `window.open` 的问题
 11. **v5.16.1 耗材映射修复（严重 bug）**：改用 OrcaSlicer 分步打印方式（SET_PRINT_EXTRUDER_MAP → SET_PRINT_USED_EXTRUDERS → SET_PRINT_PREFERENCES → printer.print.start），修复 `SDCARD_PRINT_FILE_WITH_PARAMETERS` 的 `MAP_TABLE` 不更新 `reprint_info` 导致映射不生效的问题。同时修复 `SET_PRINT_USED_EXTRUDERS` 参数格式（发送逗号分隔索引列表而非数量）
 12. **v5.18.0 CIEDE2000 颜色匹配**：耗材颜色匹配算法从 RGB 欧几里得距离升级为 CIEDE2000（Lab 色彩空间），对齐 OrcaSlicer 原生实现。逆向分析 OrcaSlicer Flutter Web 确认耗材映射流程已完全对齐
+13. **v5.18.1 打印层进度显示**：修复机器配置 `layer_change_gcode` 为空导致 gcode 中缺少逐层 `SET_PRINT_STATS_INFO` 命令，WebUI 打印进度无法显示当前层数
 
 ### ❌ 已知限制
 1. **设备面板直接打印 BambuStudio gcode**：U1 设备触摸面板直接打印 BambuStudio 生成的 gcode 时提示"未识别的gcode类型"（闭源触摸屏固件检查 EXECUTABLE_BLOCK 内容），只能通过 WebUI 打印。见 traps.md #103
@@ -40,6 +41,42 @@
 ### 📝 下一步计划
 1. 验证 GitHub 版本更新检测是否正常工作
 2. 继续对齐 OrcaSlicer 功能（挤出头取出/放回等）
+
+---
+
+## v5.18.1 打印层进度显示
+
+### 问题
+WebUI 打印进度只显示百分比，不能显示当前是哪一层（如 "56/125 layers"）。`jobLayer` 始终显示 "0/0"。
+
+### 根因
+BambuStudio 兼容包的机器配置 `fdm_machine_common.json` 中 `layer_change_gcode` 为空字符串，导致生成的 gcode 中缺少逐层 `SET_PRINT_STATS_INFO` 命令。Klipper `print_stats.info.current_layer` 始终为 0。
+
+对比 OrcaSlicer gcode：每层变化时插入 `SET_PRINT_STATS_INFO TOTAL_LAYER=125 CURRENT_LAYER=N`，WebUI 代码已正确读取 `ps.info.current_layer` 和 `ps.info.total_layer`。
+
+### 修复
+`layer_change_gcode` 从 `""` 改为 `"SET_PRINT_STATS_INFO TOTAL_LAYER={total_layer_count} CURRENT_LAYER={layer_num}"`
+
+### 修改文件
+- `Snapmaker/machine/fdm_machine_common.json` — 添加 `layer_change_gcode`
+- `bridge-node/server.js` — 版本号 5.18.1
+- `bridge-node/package.json` — 版本号 5.18.1
+- `bridge/web/webui.html` — 版本号 5.18.1
+- `install.ps1` / `reinstall.ps1` / `uninstall.ps1` — v5.18.1 + 保护用户自定义预设
+- `README.md` — v5.18.1
+
+### 安装脚本修复：保护用户自定义预设
+install/reinstall/uninstall 三个脚本之前会删除 `BambuStudioBeta\user` 目录中文件名含 `Snapmaker` 或 `@U1` 的耗材预设，导致用户自定义耗材被误删。reinstall 还会重置 `BambuStudio.conf` 中的 `presets` 为 Bambu 默认值。
+
+修复原则：只清理系统缓存（`system\Snapmaker`），不碰用户目录（`user\`），不重置用户预设选择（`conf.presets`）
+- **install.ps1** Step 3：从"删除用户 Snapmaker/@U1 耗材文件"改为"保留用户目录不动"
+- **reinstall.ps1** Step 4：同上
+- **reinstall.ps1** Step 5：从"深度清理 conf（重置 presets/models + regex fallback）"改为"只刷新 conf.filaments 缓存列表 + nozzle_volume_types"
+- **uninstall.ps1** Step 5：从"删除用户 Snapmaker/@U1 耗材+机器文件"改为"保留用户目录不动"
+- **uninstall.ps1** Step 6：从"重置 presets/models + regex fallback"改为"只清理 conf.filaments 缓存列表 + nozzle_volume_types"
+
+### 注意
+此修改只影响新生成的 gcode，已上传的旧 gcode 需要重新切片才能显示层数
 
 ---
 
