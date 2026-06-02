@@ -108,27 +108,6 @@ install/reinstall/uninstall 三个脚本之前会删除 `BambuStudioBeta\user` �
 - `README.md` — v5.18.0 + 设备面板直接打印限制说明
 - `traps.md` — #103 设备面板不识别 BambuStudio gcode + #104 颜色匹配精度不足
 
-### 根因
-`SDCARD_PRINT_FILE_WITH_PARAMETERS` 调用 `cmd_SET_PRINT_TASK_PARAMETERS`（print_task_config.py L1038），该函数只更新 `extruder_map_table`，**没有同步更新 `reprint_info`**。而 `virtual_sdcard.py` L2107 在处理 T0 命令时读取的是 `reprint_info["extruder_map_table"]`，导致映射不生效
-
-### 修复
-改为 OrcaSlicer 的分步打印方式（逆向分析 `main.dart.js` L36935/L131518 确认）：
-1. `SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=0 MAP_EXTRUDER=1` — 同时更新 `extruder_map_table` 和 `reprint_info`
-2. `SET_PRINT_USED_EXTRUDERS EXTRUDERS=0,1` — 标记使用的物理挤出头索引（逗号分隔列表）
-3. `SET_PRINT_PREFERENCES BED_LEVEL=1 FLOW_CALIBRATE=1 TIME_LAPSE_CAMERA=1` — 设置打印选项
-4. `printer.print.start` — 开始打印（只传 filename，不带 options）
-
-### 附带修复
-- `SET_PRINT_USED_EXTRUDERS` 参数格式：从 `EXTRUDERS=${usedExtruders.length}`（数量）改为 `EXTRUDERS=${usedExtruders.join(',')}`（逗号分隔索引列表），匹配 Klipper `cmd_SET_PRINT_USED_EXTRUDERS` 的解析逻辑（`extruders_str.split(',')`）
-- `filament_used_mm` 不可靠：改用 `filament_type` 判断 gcode 槽位是否使用
-
-### 修改文件
-- `bridge-node/server.js` — confirm_print 和 start_print 端点改为分步方式 + SET_PRINT_USED_EXTRUDERS 参数修复 + 版本号 5.16.1
-- `bridge/web/webui.html` — mapTable 构建逻辑修复（改用 filament_type）+ 版本号 5.16.1
-- `bridge-node/package.json` — 版本号 5.16.1
-- `install.ps1` / `reinstall.ps1` / `uninstall.ps1` — v5.16.1
-- `README.md` — v5.16.1
-
 ---
 
 ## v5.16.0 外部链接跳转修复

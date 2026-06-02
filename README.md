@@ -132,10 +132,12 @@ BambuStudio
   │    │  Bridge (localhost:13628)                 │
   │    │  3. 上传文件到 Moonraker (不带 print)     │
   │    │  4. 弹出原生打印确认对话框                 │
-  │    │     - 耗材选择 (4 extruder)               │
+  │    │     - 耗材映射 (gcode→物理槽位)            │
   │    │     - 自动调平 / 流量校准 / 延时摄影       │
-  │    │  5. 确认后发送 SDCARD_PRINT_FILE_WITH_    │
-  │    │     PARAMETERS (WebSocket)                │
+  │    │  5. 确认后发送分步打印命令                  │
+  │    │     (SET_PRINT_EXTRUDER_MAP →              │
+  │    │      SET_PRINT_PREFERENCES →               │
+  │    │      printer.print.start)                  │
   │    └──────────────────────────────────────────┘
   │
   │ 6. Device 标签页 → WebUI / Fluidd
@@ -196,6 +198,9 @@ A: 重新运行 `install.bat`。
 
 ## 版本历史
 
+- **v5.18.1** (2026-05-30) - 打印层进度 + 保护用户自定义预设
+  - 添加 `layer_change_gcode` 生成逐层 `SET_PRINT_STATS_INFO` 命令，WebUI 打印进度可显示当前层数
+  - 安装脚本不再删除用户自定义耗材预设，不再重置 `BambuStudio.conf` 中的预设选择
 - **v5.18.0** (2026-05-30) - CIEDE2000 颜色匹配 + OrcaSlicer 逆向分析
   - 耗材颜色匹配算法从 RGB 欧几里得距离升级为 CIEDE2000（Lab 色彩空间），对齐 OrcaSlicer 原生实现
   - 逆向分析 OrcaSlicer Flutter Web 打印确认流程，确认耗材映射实现已对齐
@@ -205,12 +210,7 @@ A: 重新运行 `install.bat`。
   - 修复 SET_PRINT_USED_EXTRUDERS 参数格式（发送逗号分隔索引列表而非数量）
   - 添加 SET_PRINT_FILAMENT_CONFIG 命令对齐 OrcaSlicer 格式
 - **v5.16.0** (2026-05-27) - 外部链接跳转修复
-  - 修复 start_local_print JSON-RPC 方法名 (start_local_print -> server.files.start_local_print)
-  - 修复打印选项布尔值问题 (true/false -> 1/0)，解决 unable to parse True 错误
-  - 挤出流量校准和 Timelapse 已确认正常工作
-  - 热床调平参数名待研究 (AUTO_BED_LEVELING 可能需要改为 TASK_BED_LEVELING)
-  - 摄像头改为服务端调用 camera.start_monitor，添加 stale 检测
-  - WebUI 顶栏显示 Bridge 版本号
+  - 通过 Bridge 服务端 `open_external` 端点调用系统默认浏览器，解决 WebView 拦截 `window.open` 的问题
 - **v5.8.0** (2026-05-27) - 修复 JSON-RPC 方法名 + 摄像头服务端监控 + 顶栏 IP
   - 修复打印选项 "Method not found" 错误
   - 摄像头改用服务端 JSONP 端点触发监控

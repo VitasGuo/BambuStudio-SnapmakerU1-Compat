@@ -98,7 +98,7 @@
 #9 ✅
 **现象**：卸载后重装仍显示旧 Snapmaker 用户预设副本
 **根因**：`%APPDATA%\BambuStudioBeta\user\default` 中的副本不随 system 目录清理
-**解决方案**：install/uninstall 脚本扫描 `user\default` 删除含 "Snapmaker" 或 "@U1" 的 JSON
+**解决方案**：install/reinstall/uninstall 脚本只清理系统缓存（`system\Snapmaker`），不删除用户目录中的文件，保护用户自定义耗材预设
 
 ---
 
