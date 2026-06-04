@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.18.1 (2026-05-30)
+## 当前版本: v5.19.0 (2026-06-03)
 
 ---
 
@@ -19,11 +19,12 @@
 - About 页面（使用说明 + 版本更新检测）
 
 ### ✅ 打印流程（对齐 OrcaSlicer）
-1. `SET_PRINT_FILAMENT_CONFIG` — 设置耗材配置（类型/颜色/品牌）
-2. `SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=x MAP_EXTRUDER=y` — 设置映射
-3. `SET_PRINT_USED_EXTRUDERS EXTRUDERS=0,1` — 标记使用的物理挤出头
-4. `SET_PRINT_PREFERENCES BED_LEVEL=1 FLOW_CALIBRATE=1 TIME_LAPSE_CAMERA=1` — 设置打印选项
-5. `printer.print.start` — 开始打印
+1. `SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=x MAP_EXTRUDER=y` — 设置映射
+2. `SET_PRINT_USED_EXTRUDERS EXTRUDERS=0,1` — 标记使用的物理挤出头
+3. `SET_PRINT_PREFERENCES BED_LEVEL=1 FLOW_CALIBRATE=1 TIME_LAPSE_CAMERA=1` — 设置打印选项
+4. `printer.print.start` — 开始打印
+
+> 注：不使用 `SET_PRINT_FILAMENT_CONFIG`（会覆盖设备物理耗材信息）和 `SET_PRINT_TASK_PARAMETERS`（MAP_TABLE 不更新 reprint_info）。见 traps.md #101、#106
 
 ### ✅ 耗材匹配
 - 类型优先匹配（extractFilType 提取核心关键词）
@@ -41,6 +42,10 @@
 ---
 
 ## 版本历史
+
+### v5.19.0 (2026-06-03) — 修复耗材信息被覆盖
+- 移除打印流程中的 `SET_PRINT_FILAMENT_CONFIG` 和 `SET_PRINT_TASK_PARAMETERS FILAMENT_TYPE=[...]`，不再用 gcode 耗材信息覆盖设备物理耗材信息（traps.md #106）
+- 打印流程完全对齐 OrcaSlicer：SET_PRINT_EXTRUDER_MAP → SET_PRINT_USED_EXTRUDERS → SET_PRINT_PREFERENCES → printer.print.start
 
 ### v5.18.1 (2026-05-30) — 打印层进度 + 保护用户预设
 - 添加 `layer_change_gcode` 生成逐层 `SET_PRINT_STATS_INFO`，WebUI 显示当前层数

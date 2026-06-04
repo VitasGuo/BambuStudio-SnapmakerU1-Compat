@@ -719,7 +719,7 @@ function switchTab(tab){
   $('debug-content').style.display=tab==='debug'?'flex':'none';
   $('about-content').style.display=tab==='about'?'block':'none';
   if(tab==='debug') loadDebugLogs();
-  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.18.1';checkUpdate();}
+  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.19.0';checkUpdate();}
 }
 
 var camRpcId=null;
@@ -1097,30 +1097,17 @@ if(gFilTypesForMap&&gFilTypesForMap[i]){
 mapTable.push([i,filamentMap[i]]);
 }
 }
-var filamentConfig=[];
-var gFilVendors=gcodeMeta&&gcodeMeta.filament_vendor?(typeof gcodeMeta.filament_vendor==='string'?gcodeMeta.filament_vendor.split(';'):gcodeMeta.filament_vendor):[];
-var gFilColorsFC=gcodeMeta&&gcodeMeta.filament_colour?(typeof gcodeMeta.filament_colour==='string'?gcodeMeta.filament_colour.split(';'):gcodeMeta.filament_colour):[];
-for(var i=0;i<4;i++){
-var ft=gFilTypesForMap[i]||'';
-if(ft){
-var fv=gFilVendors[i]||'Generic';
-var fc=gFilColorsFC[i]||'#FFFFFFFF';
-fc=fc.replace('#','');
-if(fc.length===6)fc+='FF';
-filamentConfig.push({idx:i,vendor:fv,type:extractFilType(ft),subtype:'generic',soft:0,color:fc.toUpperCase()});
-}
-}
-console.log('[Print] opts:',JSON.stringify(opts),'filamentMap:',JSON.stringify(filamentMap),'mapTable:',JSON.stringify(mapTable),'filamentConfig:',JSON.stringify(filamentConfig),'pendingFilePath:',pendingFilePath);
+console.log('[Print] opts:',JSON.stringify(opts),'filamentMap:',JSON.stringify(filamentMap),'mapTable:',JSON.stringify(mapTable),'pendingFilePath:',pendingFilePath);
 bridgeGET('/api/bridge/pending_print',function(d){
 if(d&&d.filename){
 console.log('[Print] pending_print path, filename:',d.filename);
-bridgePOST('/api/bridge/confirm_print',Object.assign({},opts,{extruder_map_table:JSON.stringify(mapTable),filament_config:JSON.stringify(filamentConfig)}),function(r){
+bridgePOST('/api/bridge/confirm_print',Object.assign({},opts,{extruder_map_table:JSON.stringify(mapTable)}),function(r){
 if(r&&r.error){alert(t('print_failed')+': '+r.error);btn.disabled=false;btn.textContent=t('start_print');}
 else{closePrintModal();switchJobTab(0);}
 });
 }else{
 console.log('[Print] start_local_print path, file:',pendingFilePath);
-bridgePOST('/api/bridge/start_print',{path:pendingFilePath,auto_bed_leveling:opts.auto_bed_leveling?1:0,flow_calibrate:opts.flow_calibrate?1:0,time_lapse_camera:opts.time_lapse_camera?1:0,extruder_map_table:JSON.stringify(mapTable),filament_config:JSON.stringify(filamentConfig)},function(r){
+bridgePOST('/api/bridge/start_print',{path:pendingFilePath,auto_bed_leveling:opts.auto_bed_leveling?1:0,flow_calibrate:opts.flow_calibrate?1:0,time_lapse_camera:opts.time_lapse_camera?1:0,extruder_map_table:JSON.stringify(mapTable)},function(r){
 if(r&&r.error){alert(t('print_failed')+': '+r.error);btn.disabled=false;btn.textContent=t('start_print');}
 else{closePrintModal();switchJobTab(0);}
 });

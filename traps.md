@@ -23,7 +23,7 @@
 #28 WebView 不注入 API Key | #29 网络插件签名验证 | #30 /moonraker/ 前缀不工作 | #31 /ws 路径错误 | #62 Express 5 {*path} 数组 | #63 /access/token 拦截 | #64 热床温度不显示 | #70 中间件顺序 | #71 只转发 content-type | #72 Fluidd SPA 404 | #73 WS 缺错误处理 | #94 温度不自动更新
 
 ### 打印确认流程
-#47 print_stats 初始查询缺失 | #48 切片不触发确认 | #49 confirm_print 参数解析 | #51 start_local_print 不支持 HTTP | #52 WebUI 未加载通知丢失 | #53 gcode/script HTTP 不可用 | #54 无安全检测 | #56 print_host 被覆盖 | #57 gcode() 用不存在的 HTTP | #58 用户预设覆盖 print_host | #59 python-multipart 缺失 | #61 弹窗体验 | #89 布尔值回归 | #91 JSON-RPC 方法名错误 | #92 热床调平参数名（BED_LEVEL） | #96 耗材匹配缺失 | #97 bridgePOST 数组参数 | #101 MAP_TABLE 不更新 reprint_info | #102 SET_PRINT_USED_EXTRUDERS 参数格式
+#47 print_stats 初始查询缺失 | #48 切片不触发确认 | #49 confirm_print 参数解析 | #51 start_local_print 不支持 HTTP | #52 WebUI 未加载通知丢失 | #53 gcode/script HTTP 不可用 | #54 无安全检测 | #56 print_host 被覆盖 | #57 gcode() 用不存在的 HTTP | #58 用户预设覆盖 print_host | #59 python-multipart 缺失 | #61 弹窗体验 | #89 布尔值回归 | #91 JSON-RPC 方法名错误 | #92 热床调平参数名（BED_LEVEL） | #96 耗材匹配缺失 | #97 bridgePOST 数组参数 | #101 MAP_TABLE 不更新 reprint_info | #102 SET_PRINT_USED_EXTRUDERS 参数格式 | #106 耗材信息被 gcode 覆盖
 
 ### 摄像头（重点）
 #37 webcams/list 返回空 | #39 MJPEG 流代理不工作 | #46 U1 用 snapshot 轮询 | #65 代理破坏二进制 JPEG | #67 Express ETag 缓存 | #85 camera.start_monitor 必须走 WS | #90 摄像头监控需服务端触发 | #93 摄像头参数缺失（domain）
@@ -804,3 +804,10 @@
 **现象**：WebUI 打印进度只显示百分比（如 "45%"），不能显示当前是哪一层（如 "56/125 layers"）。`jobLayer` 始终显示 "0/0"
 **根因**：BambuStudio 兼容包的机器配置 `fdm_machine_common.json` 中 `layer_change_gcode` 为空字符串 `""`，导致生成的 gcode 中缺少逐层 `SET_PRINT_STATS_INFO` 命令。Klipper `print_stats.info.current_layer` 始终为 0。对比 OrcaSlicer gcode：每层变化时插入 `SET_PRINT_STATS_INFO TOTAL_LAYER=125 CURRENT_LAYER=N`。WebUI 代码（L1209）已正确读取 `ps.info.current_layer` 和 `ps.info.total_layer`，只是 Klipper 端没有数据
 **解决方案**：`layer_change_gcode` 从 `""` 改为 `"SET_PRINT_STATS_INFO TOTAL_LAYER={total_layer_count} CURRENT_LAYER={layer_num}"`（v5.18.1）。注意：此修改只影响新生成的 gcode，已上传的旧 gcode 需要重新切片
+
+---
+
+#106 ✅
+**现象**：通过 WebUI 打印确认框映射耗材后，设备面板上的耗材颜色/类型信息被覆盖为 gcode 中声明的值（如设备上蓝色 PLA 变成 gcode 预设的红色 PLA）
+**根因**：打印流程中发送 `SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='i' FILAMENT_TYPE='PLA' ... SAVE='1' VENDOR='Generic'`，用 gcode 元数据中的耗材信息（来自 BambuStudio 预设）覆盖了设备上物理耗材的实际信息。`SAVE='1'` 使覆盖持久化。OrcaSlicer 的打印确认流程不使用 `SET_PRINT_FILAMENT_CONFIG`（仅在耗材编辑页面单独调用），也不使用 `SET_PRINT_TASK_PARAMETERS FILAMENT_TYPE=[...]`
+**解决方案**：从打印确认流程中移除 `SET_PRINT_FILAMENT_CONFIG` 和 `SET_PRINT_TASK_PARAMETERS FILAMENT_TYPE=[...]`（v5.19.0）。设备已通过 `print_task.json` 知道自己的物理耗材信息，`SET_PRINT_EXTRUDER_MAP` 已建立映射关系，无需用 gcode 的耗材信息覆盖设备配置

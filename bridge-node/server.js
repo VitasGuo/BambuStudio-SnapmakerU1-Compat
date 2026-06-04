@@ -7,7 +7,7 @@ const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 
-const BRIDGE_VERSION = "5.18.1";
+const BRIDGE_VERSION = "5.19.0";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -399,21 +399,10 @@ app.get("/api/bridge/confirm_print.js", async (req, res) => {
   if (req.query.extruder_map_table) {
     try { mapTable = JSON.parse(req.query.extruder_map_table); } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); }
   }
-  let filamentConfig = [];
-  if (req.query.filament_config) {
-    try { filamentConfig = JSON.parse(req.query.filament_config); } catch (e) { log("WARN", `filament_config parse error: ${e.message}`); }
-  }
   const filename = pendingPrintFile;
   pendingPrintFile = "";
-  log("INFO", `Confirm print: filename=${filename} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)} filament_config=${filamentConfig.length} slots`);
+  log("INFO", `Confirm print: filename=${filename} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)}`);
   try {
-    for (const fc of filamentConfig) {
-      await sendGcode(`SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='${fc.idx}' FILAMENT_TYPE='${fc.type}' FILAMENT_SUBTYPE='${fc.subtype}' FILAMENT_COLOR_RGBA='${fc.color || 'FFFFFFFF'}' SAVE='1' VENDOR='${fc.vendor}'`);
-    }
-    if (filamentConfig.length > 0) {
-      const filTypeList = filamentConfig.map(fc => `'${fc.type}'`).join(',');
-      await sendGcode(`SET_PRINT_TASK_PARAMETERS FILAMENT_TYPE=[${filTypeList}]`);
-    }
     for (const [configExt, mapExt] of mapTable) {
       await sendGcode(`SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=${configExt} MAP_EXTRUDER=${mapExt}`);
     }
@@ -448,19 +437,8 @@ app.get("/api/bridge/start_print.js", async (req, res) => {
   if (req.query.extruder_map_table) {
     try { mapTable = JSON.parse(req.query.extruder_map_table); } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); }
   }
-  let filamentConfig = [];
-  if (req.query.filament_config) {
-    try { filamentConfig = JSON.parse(req.query.filament_config); } catch (e) { log("WARN", `filament_config parse error: ${e.message}`); }
-  }
-  log("INFO", `start_print: path=${path} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)} filament_config=${filamentConfig.length} slots`);
+  log("INFO", `start_print: path=${path} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)}`);
   try {
-    for (const fc of filamentConfig) {
-      await sendGcode(`SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='${fc.idx}' FILAMENT_TYPE='${fc.type}' FILAMENT_SUBTYPE='${fc.subtype}' FILAMENT_COLOR_RGBA='${fc.color || 'FFFFFFFF'}' SAVE='1' VENDOR='${fc.vendor}'`);
-    }
-    if (filamentConfig.length > 0) {
-      const filTypeList = filamentConfig.map(fc => `'${fc.type}'`).join(',');
-      await sendGcode(`SET_PRINT_TASK_PARAMETERS FILAMENT_TYPE=[${filTypeList}]`);
-    }
     for (const [configExt, mapExt] of mapTable) {
       await sendGcode(`SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=${configExt} MAP_EXTRUDER=${mapExt}`);
     }
