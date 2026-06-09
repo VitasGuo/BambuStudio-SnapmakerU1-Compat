@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.18.1
+# Snapmaker U1 BambuStudio 兼容包 v5.28.3
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -70,9 +70,13 @@
 | 文件 | 说明 |
 |------|------|
 | `bridge-node/server.js` | Express HTTP/WebSocket 代理服务器 |
+| `bridge-node/slice_agent.js` | AI Lab 核心：G-code 优化引擎 + Workspace 系统 |
 | `bridge-node/dialog.js` | 跨平台原生打印确认对话框 |
 | `bridge-node/package.json` | Node.js 依赖声明 |
+| `bridge-node/workspace/` | AI Agent Workspace（Soul/Knowledge/Skills/Memory Markdown） |
 | `bridge/web/webui.html` | WebUI 设备控制面板 |
+| `bridge/web/ailab.css` | AI Lab 样式 |
+| `bridge/web/ailab.js` | AI Lab 前端逻辑 |
 
 ### 目录结构
 
@@ -88,11 +92,20 @@ BambuStudio-SnapmakerU1-Compat/
 │   └── filament/                   # 耗材预设
 ├── bridge-node/                    # Bridge 服务器（Node.js）
 │   ├── server.js                   # 核心服务器
+│   ├── slice_agent.js              # AI Lab 优化引擎
 │   ├── dialog.js                   # 原生对话框
-│   └── package.json                # 依赖声明
+│   ├── package.json                # 依赖声明
+│   └── workspace/                  # AI Agent Workspace
+│       ├── soul.md                 # Agent 身份与原则
+│       ├── knowledge.md            # 领域知识
+│       ├── memory.md               # 经验记忆
+│       ├── skills/                 # 技能文件
+│       └── tools/                  # 工具文件
 └── bridge/                         # WebUI 资源
     └── web/
         ├── webui.html              # 设备控制面板
+        ├── ailab.css               # AI Lab 样式
+        ├── ailab.js                # AI Lab 前端逻辑
         └── dist/                   # Fluidd 前端（可选）
 ```
 
@@ -159,6 +172,7 @@ Snapmaker U1 (Moonraker + Klipper)
 | 打印控制 | ✅ 开始/暂停/恢复/取消 | ✅ 完整 Klipper |
 | 中英文 | ✅ | ❌ |
 | 调试日志 | ✅ Debug 面板 | ❌ |
+| AI 实验室 | ✅ G-code 优化 + 打印问答 | ❌ |
 
 ---
 
@@ -193,6 +207,18 @@ A: v5.18.1 已修复此问题，安装脚本不再删除用户自定义预设。
 
 ## 版本历史
 
+- **v5.28.3** (2026-06-10) - 修复 replace_speed 速度单位转换（mm/s→mm/min）
+- **v5.28.2** (2026-06-10) - 修复打印机下载 + explorer 报错 + log is not defined
+- **v5.28.1** (2026-06-10) - 打印机 gcode 下载进度条
+- **v5.28.0** (2026-06-10) - G-code 对比预览 LCS Diff 算法 + 优化报告 MD + patchGcode 修复
+- **v5.27.0** (2026-06-08) - AI Lab 拆分为独立文件（ailab.css+ailab.js）+ G-code Word式对比预览
+- **v5.26.0** (2026-06-08) - 打印助手全局化 + G-code 对比预览
+- **v5.25.0** (2026-06-08) - AI Lab 聚焦 G-code 优化（移除AI切片/高级切片）
+- **v5.24.0** (2026-06-08) - AI Lab 功能完善（优化上传、问答渲染增强）
+- **v5.23.0** (2026-06-08) - AI Lab 三大功能方向（G-code优化/打印问答/高级切片）
+- **v5.22.0** (2026-06-08) - G-code 质量对齐 OrcaSlicer
+- **v5.21.0** (2026-06-08) - Workspace Markdown 系统
+- **v5.20.0** (2026-06-08) - AI 实验室模块
 - **v5.19.0** (2026-06-03) - 修复耗材信息被 gcode 覆盖
 - **v5.18.1** (2026-05-30) - 打印层进度 + 保护用户自定义预设
 - **v5.18.0** (2026-05-30) - CIEDE2000 颜色匹配 + OrcaSlicer 逆向分析

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <title>BambuStudio Bridge</title>
+<link rel="stylesheet" href="ailab.css?v=5.28.2">
 <style>
 :root{--bg:#f0f2f5;--panel:#fff;--panel2:#f5f5f5;--border:#e0e0e0;--primary:#2196f3;--primary-light:#64b5f6;--danger:#f44336;--success:#4caf50;--warn:#ff9800;--text:#333;--text2:#666;--text3:#999;--radius:10px}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -245,6 +246,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-u
 <div class="nav-item active" data-tab="device" onclick="switchTab('device')" title="Device"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg><span data-i18n="device">Device</span></div>
 <div class="nav-item" data-tab="fluidd" onclick="switchTab('fluidd')" title="Fluidd Console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="16,9 11,14 16,19"/><line x1="8" y1="18" x2="8" y2="18"/></svg><span data-i18n="fluidd_console">Console</span></div>
 <div class="nav-item" data-tab="debug" onclick="switchTab('debug')" title="Debug Logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg><span data-i18n="debug_logs">Debug</span></div>
+<div class="nav-item" data-tab="ailab" onclick="switchTab('ailab')" title="AI Lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6v6H9z"/><path d="M3 9h6v6H3z"/><path d="M15 9h6v6h-6z"/><path d="M9 15h6v6H9z"/></svg><span>AI Lab</span></div>
 <div class="nav-item" data-tab="about" onclick="switchTab('about')" title="About"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><span data-i18n="about">About</span></div>
 </div>
 </div>
@@ -550,6 +552,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-u
 </div>
 </div>
 </div>
+<div id="ailab-content" style="display:none;width:100%;height:100%;overflow:hidden;"></div>
 
 <script>
 document.addEventListener('click',function(e){
@@ -585,7 +588,7 @@ s.onerror=function(){delete window[cbName];cb(null);};
 document.head.appendChild(s);
 }
 function bridgeGET(path,cb){
-if(path.indexOf('/api/bridge/')===0){
+if(path.indexOf('/api/bridge/')===0||path.indexOf('/api/ai/')===0){
 var jsPath=path.indexOf('?')>=0?path.replace('?','.js?'):path+'.js';
 loadJS(jsPath,cb);
 }else{
@@ -718,8 +721,10 @@ function switchTab(tab){
   $('fluidd-content').style.display=tab==='fluidd'?'block':'none';
   $('debug-content').style.display=tab==='debug'?'flex':'none';
   $('about-content').style.display=tab==='about'?'block':'none';
+  $('ailab-content').style.display=tab==='ailab'?'block':'none';
   if(tab==='debug') loadDebugLogs();
   if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.19.0';checkUpdate();}
+  if(tab==='ailab') aiLoadConfig();
 }
 
 var camRpcId=null;
@@ -1280,6 +1285,9 @@ function toggleDebugAuto(){
   if(dbgAutoInterval){clearInterval(dbgAutoInterval);dbgAutoInterval=null;$('dbgAutoBtn').textContent='Auto: OFF';$('dbgAutoBtn').style.color='#0f8bff';}
   else{dbgAutoInterval=setInterval(loadDebugLogs,2000);$('dbgAutoBtn').textContent='Auto: ON';$('dbgAutoBtn').style.color='#4caf50';loadDebugLogs();}
 }
+
 </script>
+<script src="ailab.js?v=5.28.3"></script>
 </body>
 </html>
+

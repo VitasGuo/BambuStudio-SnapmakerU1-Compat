@@ -2,6 +2,7 @@
 Thumbs.db
 *.log
 *.pyc
+.trae/
 bridge/web/dist/
 bridge/bridge_config.json
 bridge/python/
@@ -10,3 +11,6 @@ bridge-node/dist/
 bridge-node/package-lock.json
 bridge-node/test_*.js
 bridge-node/test*.js
+bridge-node/diff_check*.js
+bridge-node/voxelflow.exe
+bridge-node/voxelflow

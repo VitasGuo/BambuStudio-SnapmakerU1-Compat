@@ -6,8 +6,9 @@ const os = require("os");
 const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
+const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.19.0";
+const BRIDGE_VERSION = "5.28.3";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -27,6 +28,7 @@ const WEB_DIR = fs.existsSync(path.join(__dirname, "web", "webui.html"))
   : path.join(PROJECT_DIR, "bridge", "web");
 
 let printerConfig = { host: "", port: 80, apikey: "", mode: "webui" };
+let aiConfig = { provider: "", model: "", apiKey: "", customBaseUrl: "" };
 let pendingPrintFile = "";
 let camMonitorActive = false;
 let camMonitorLastCall = 0;
@@ -38,6 +40,7 @@ function loadConfig() {
     try {
       const data = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
       printerConfig = { ...printerConfig, ...data };
+      if (data.aiConfig) aiConfig = { ...aiConfig, ...data.aiConfig };
     } catch (e) {
       log("ERROR", `Failed to load config: ${e.message}`);
     }
@@ -45,7 +48,7 @@ function loadConfig() {
 }
 
 function saveConfig() {
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify(printerConfig, null, 2), "utf-8");
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ ...printerConfig, aiConfig }, null, 2), "utf-8");
 }
 
 function getBaseUrl() {
@@ -236,6 +239,18 @@ app.get("/snapmaker.png", (req, res) => {
   const imgPath = path.join(WEB_DIR, "snapmaker.png");
   if (fs.existsSync(imgPath)) return res.sendFile(imgPath);
   res.status(404).send("Not found");
+});
+
+// AI Lab static assets
+app.get("/ailab.css", (req, res) => {
+  const p = path.join(WEB_DIR, "ailab.css");
+  if (fs.existsSync(p)) return res.sendFile(p);
+  res.status(404).end();
+});
+app.get("/ailab.js", (req, res) => {
+  const p = path.join(WEB_DIR, "ailab.js");
+  if (fs.existsSync(p)) return res.sendFile(p);
+  res.status(404).end();
 });
 
 app.get("/api/bridge/config", (req, res) => {
@@ -506,6 +521,30 @@ app.get("/api/bridge/open_external.js", (req, res) => {
   });
 });
 
+// 打开本地文件夹
+app.get("/api/ai/open_folder.js", (req, res) => {
+  const cb = req.query.cb || "callback";
+  const target = req.query.target; // workspace | gcode | stl
+  let dir;
+  switch (target) {
+    case "gcode": dir = sliceAgent.GCODE_DIR(); break;
+    case "stl": dir = sliceAgent.STL_DIR(); break;
+    default: dir = sliceAgent.WORKSPACE_DIR(); break;
+  }
+  const { exec } = require("child_process");
+  const cmd = process.platform === "win32" ? `explorer "${dir}"` : process.platform === "darwin" ? `open "${dir}"` : `xdg-open "${dir}"`;
+  exec(cmd, (err, stdout, stderr) => {
+    res.type("application/javascript");
+    // Windows explorer 返回 exit code 1 即使成功打开，所以只检查 stderr
+    const failed = (err && process.platform !== "win32") || (err && stderr);
+    if (failed) {
+      res.send(`${cb}(${JSON.stringify({ error: err.message })});`);
+    } else {
+      res.send(`${cb}(${JSON.stringify({ success: true, path: dir })});`);
+    }
+  });
+});
+
 async function ensureCamMonitor() {
   const now = Date.now();
   if (camMonitorActive && now - camMonitorLastCall < CAM_MONITOR_INTERVAL) return;
@@ -722,7 +761,7 @@ function patchGcodeLayout(content) {
       });
     });
 
-    const file = files.file?.[0];
+    const file = files.gcode?.[0];
     if (!file) {
       log("WARN", "Upload has no file field");
       return res.status(400).json({ error: "no_file_field" });
@@ -864,6 +903,492 @@ async function proxyToMoonraker(req, res, targetPath) {
     return res.status(502).json({ error: e.message });
   }
 }
+
+// ─── AI Lab Endpoints ───
+function aiErrMsg(e) { return e.message || (e.cause && (e.cause.message || e.cause.code || String(e.cause))) || String(e); }
+
+app.get("/api/ai/config.js", (req, res) => {
+  const cb = req.query.cb || "callback";
+  const ws = sliceAgent.loadWorkspace();
+
+  // 从 soul.md 提取身份信息
+  const soulMd = ws["soul.md"] || "";
+  const nameMatch = soulMd.match(/\*\*名称\*\*:\s*(.+)/);
+  const roleMatch = soulMd.match(/\*\*角色\*\*:\s*(.+)/);
+  const goalMatch = soulMd.match(/研究.*?—\s*(.+)/);
+
+  // 从 skills/ 目录提取技能列表
+  const skills = ws.skills ? Object.entries(ws.skills).map(([f, content]) => {
+    const nameMatch = content.match(/##\s*\w+\s*—\s*(.+)/);
+    const idMatch = f.replace(".md", "");
+    return {
+      id: idMatch,
+      name: nameMatch ? nameMatch[1].trim() : idMatch,
+      desc: content.split("\n").find(l => l.startsWith("### 描述"))?.replace("### 描述", "").trim() || "",
+      status: "active",
+    };
+  }) : [];
+
+  // 从 tools/ 目录提取工具列表
+  const tools = ws.tools ? Object.entries(ws.tools).map(([f, content]) => {
+    const nameMatch = content.match(/#\s+.+—\s*(.+)/);
+    const idMatch = f.replace(".md", "");
+    return {
+      id: idMatch,
+      name: nameMatch ? nameMatch[1].trim() : idMatch,
+      desc: content.split("\n").find(l => l.startsWith("## 描述"))?.replace("## 描述", "").trim() || "",
+      status: "active",
+    };
+  }) : [];
+
+  // 从 memory.md 提取统计
+  const memoryMd = ws["memory.md"] || "";
+  const experienceCount = (memoryMd.match(/### \[/g) || []).length;
+  const knownIssues = [];
+  const issueRegex = /### #(\d+)\s+(.+)/g;
+  let issueMatch;
+  while ((issueMatch = issueRegex.exec(memoryMd)) !== null) {
+    knownIssues.push({ id: parseInt(issueMatch[1]), title: issueMatch[2].trim() });
+  }
+
+  res.type("application/javascript");
+  res.send(`${cb}(${JSON.stringify({
+    aiConfig: { provider: aiConfig.provider, model: aiConfig.model, customBaseUrl: aiConfig.customBaseUrl, hasKey: !!aiConfig.apiKey },
+    providers: Object.fromEntries(Object.entries(sliceAgent.AI_PROVIDERS).map(([k, v]) => [k, { name: v.name, defaultModel: v.defaultModel, availableModels: v.availableModels, isLocal: !!v.isLocal, isCustom: !!v.isCustom }])),
+    cliAvailable: sliceAgent.VOXELFLOW_BIN !== "voxelflow" || require("child_process").spawnSync("voxelflow", ["--version"], { timeout: 3000 }).status === 0,
+    cliBinary: sliceAgent.VOXELFLOW_BIN,
+    workspace: {
+      soul: {
+        name: nameMatch ? nameMatch[1].trim() : "VoxelFlow AI",
+        version: "1.0",
+        role: roleMatch ? roleMatch[1].trim() : "FDM 3D打印 AI切片引擎",
+        goal: goalMatch ? goalMatch[1].trim() : "研究LLM辅助切片可行性",
+      },
+      knowledge: ws["knowledge.md"] ? { sections: (ws["knowledge.md"].match(/^## \d+\. .+$/gm) || []).map(s => s.replace(/^## \d+\. /, "")) } : [],
+      skills,
+      tools,
+      memory: {
+        description: "项目上下文 + 切片经验 + 用户偏好 + 已知问题",
+        experienceCount,
+        knownIssues,
+      },
+    },
+  })});`);
+});
+
+app.get("/api/ai/save_config.js", (req, res) => {
+  const cb = req.query.cb || "callback";
+  if (req.query.provider) aiConfig.provider = req.query.provider;
+  if (req.query.model) aiConfig.model = req.query.model;
+  if (req.query.apiKey) aiConfig.apiKey = req.query.apiKey;
+  if (req.query.customBaseUrl) aiConfig.customBaseUrl = req.query.customBaseUrl;
+  saveConfig();
+  log("INFO", `AI config saved: provider=${aiConfig.provider} model=${aiConfig.model}`);
+  res.type("application/javascript");
+  res.send(`${cb}(${JSON.stringify({ ok: true })});`);
+});
+
+// POST version — API Key in body, not URL
+app.post("/api/ai/save_config", express.json(), (req, res) => {
+  const body = req.body || {};
+  if (body.provider) aiConfig.provider = body.provider;
+  if (body.model) aiConfig.model = body.model;
+  if (body.apiKey) aiConfig.apiKey = body.apiKey;
+  if (body.customBaseUrl) aiConfig.customBaseUrl = body.customBaseUrl;
+  saveConfig();
+  log("INFO", `AI config saved: provider=${aiConfig.provider} model=${aiConfig.model}`);
+  res.json({ ok: true });
+});
+
+app.get("/api/ai/test_connection.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const testConfig = {
+      provider: req.query.provider || aiConfig.provider,
+      model: req.query.model || aiConfig.model,
+      apiKey: req.query.apiKey || aiConfig.apiKey,
+      customBaseUrl: req.query.customBaseUrl || aiConfig.customBaseUrl,
+    };
+    const result = await sliceAgent.testAiConnection(testConfig);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify(result)});`);
+  } catch (e) {
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+// POST version — API Key in body, not URL
+app.post("/api/ai/test_connection", express.json(), async (req, res) => {
+  try {
+    const body = req.body || {};
+    const testConfig = {
+      provider: body.provider || aiConfig.provider,
+      model: body.model || aiConfig.model,
+      apiKey: body.apiKey || aiConfig.apiKey,
+      customBaseUrl: body.customBaseUrl || aiConfig.customBaseUrl,
+    };
+    const result = await sliceAgent.testAiConnection(testConfig);
+    res.json(result);
+  } catch (e) {
+    res.json({ ok: false, error: aiErrMsg(e) });
+  }
+});
+
+app.post("/api/ai/upload_model", async (req, res) => {
+  try {
+    const formidable = require("formidable");
+    const form = new formidable.IncomingForm({ maxFileSize: 500 * 1024 * 1024 });
+    const [fields, files] = await new Promise((resolve, reject) => {
+      form.parse(req, (err, fields, files) => {
+        if (err) reject(err);
+        else resolve([fields, files]);
+      });
+    });
+    const file = files.file?.[0];
+    if (!file) return res.status(400).json({ error: "no_file" });
+    const buffer = fs.readFileSync(file.filepath);
+    const info = sliceAgent.saveModelFile(file.originalFilename, buffer);
+    log("INFO", `AI Lab: model uploaded: ${info.originalName} (${info.size} bytes) → ${info.id}`);
+    try { fs.unlinkSync(file.filepath); } catch (_) {}
+    res.json({ ok: true, model: info });
+  } catch (e) {
+    log("ERROR", `AI Lab upload error: ${aiErrMsg(e)}`);
+    res.status(500).json({ error: aiErrMsg(e) });
+  }
+});
+
+app.get("/api/ai/analyze.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const modelId = req.query.model_id;
+    const info = sliceAgent.getStlInfo(modelId);
+    if (!info) throw new Error("Model not found: " + modelId);
+    const analysis = await sliceAgent.analyzeModel(info.path);
+    log("INFO", `AI Lab: model analyzed: ${modelId}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, analysis })});`);
+  } catch (e) {
+    log("ERROR", `AI Lab analyze error: ${aiErrMsg(e)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+app.get("/api/ai/suggest_params.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const analysis = req.query.analysis ? JSON.parse(req.query.analysis) : null;
+    if (!analysis) throw new Error("analysis parameter required");
+    const params = await sliceAgent.suggestParameters(analysis, aiConfig, null);
+    log("INFO", `AI Lab: params suggested: layer_height=${params.layer_height} walls=${params.walls} infill=${params.infill}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, params })});`);
+  } catch (e) {
+    log("ERROR", `AI Lab suggest_params error: ${aiErrMsg(e)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+app.get("/api/ai/ai_slice.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const modelId = req.query.model_id;
+    const analysis = req.query.analysis ? JSON.parse(req.query.analysis) : null;
+    const params = req.query.params ? JSON.parse(req.query.params) : {};
+    if (!analysis) throw new Error("analysis parameter required");
+    // 查找模型文件路径
+    const modelInfo = modelId ? sliceAgent.getStlInfo(modelId) : null;
+    const modelPath = modelInfo ? modelInfo.path : null;
+    const result = await sliceAgent.generateGcodeFromAnalysis(analysis, params, aiConfig, modelPath);
+    log("INFO", `AI Lab: AI slice done: ${modelId} → ${result.gcodeName} (${result.stats?.layers || '?'} layers, ${result.lines} lines)`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, ...result })});`);
+  } catch (e) {
+    log("ERROR", `AI Lab ai_slice error: ${aiErrMsg(e)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+app.get("/api/ai/review_gcode.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const gcodeName = req.query.gcode_name;
+    const gcodePath = sliceAgent.getGcodePath(gcodeName);
+    if (!gcodePath) throw new Error("G-code not found: " + gcodeName);
+    const content = fs.readFileSync(gcodePath, "utf-8");
+    const stats = sliceAgent.extractGcodeStats(content);
+    const review = await sliceAgent.reviewGcode(stats, aiConfig, null, null);
+    log("INFO", `AI Lab: gcode reviewed: ${gcodeName} score=${review.overall_score} risk=${review.risk_level}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, review, stats })});`);
+  } catch (e) {
+    log("ERROR", `AI Lab review_gcode error: ${aiErrMsg(e)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+app.get("/api/ai/patch_gcode.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const gcodeName = req.query.gcode_name;
+    const patchPlan = req.query.patch_plan ? JSON.parse(req.query.patch_plan) : [];
+    const result = sliceAgent.patchGcode(gcodeName, patchPlan);
+    log("INFO", `AI Lab: gcode patched: ${gcodeName} patches=${result.patches_applied}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, result })});`);
+  } catch (e) {
+    log("ERROR", `AI Lab patch_gcode error: ${aiErrMsg(e)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+app.get("/api/ai/download/:name", (req, res) => {
+  const gcodeName = req.params.name;
+  const gcodePath = sliceAgent.getGcodePath(gcodeName);
+  if (!gcodePath) return res.status(404).json({ error: "G-code not found" });
+  res.download(gcodePath, gcodeName);
+});
+
+app.get("/api/ai/read_gcode.js", (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const gcodeName = req.query.gcode_name;
+    if (!gcodeName) throw new Error("gcode_name parameter required");
+    const gcodePath = sliceAgent.getGcodePath(gcodeName);
+    if (!gcodePath) throw new Error("G-code not found: " + gcodeName);
+    const maxLines = parseInt(req.query.max_lines) || 500;
+    const content = fs.readFileSync(gcodePath, "utf-8");
+    const lines = content.split("\n");
+    const totalLines = lines.length;
+    const shown = lines.slice(0, maxLines).join("\n");
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, total_lines: totalLines, shown_lines: Math.min(maxLines, totalLines), content: shown })});`);
+  } catch (e) {
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+app.get("/api/ai/upload_to_printer.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    if (!printerConfig.host) throw new Error("No printer configured");
+    const gcodeName = req.query.gcode_name;
+    const gcodePath = sliceAgent.getGcodePath(gcodeName);
+    if (!gcodePath) throw new Error("G-code not found: " + gcodeName);
+    const fileContent = fs.readFileSync(gcodePath);
+    const FD = require("form-data");
+    const formData = new FD();
+    formData.append("file", fileContent, { filename: gcodeName });
+    const uploadResp = await fetch(`${getBaseUrl()}/server/files/upload`, {
+      method: "POST",
+      headers: { ...moonrakerHeaders(), ...formData.getHeaders() },
+      body: formData,
+    });
+    const respData = await uploadResp.json();
+    if (uploadResp.status === 200 || uploadResp.status === 201) {
+      const uploadedPath = respData?.result?.item?.path || gcodeName;
+      log("INFO", `AI Lab: gcode uploaded to printer: ${uploadedPath}`);
+      res.type("application/javascript");
+      res.send(`${cb}(${JSON.stringify({ ok: true, path: uploadedPath })});`);
+    } else {
+      throw new Error(`Upload failed: ${uploadResp.status} ${JSON.stringify(respData)}`);
+    }
+  } catch (e) {
+    log("ERROR", `AI Lab upload_to_printer error: ${aiErrMsg(e)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+app.get("/api/ai/list_gcode.js", (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const files = sliceAgent.listGcodeFiles();
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, files })});`);
+  } catch (e) {
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+app.get("/api/ai/optimize_gcode.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const gcodeName = req.query.gcode_name;
+    if (!gcodeName) throw new Error("gcode_name parameter required");
+    const result = await sliceAgent.optimizeGcode(gcodeName, aiConfig);
+    log("INFO", `AI Lab: gcode optimized: ${gcodeName} patches=${result.patches_applied || 0}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, ...result })});`);
+  } catch (e) {
+    log("ERROR", `AI Lab optimize_gcode error: ${aiErrMsg(e)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+app.get("/api/ai/print_qa.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const question = req.query.question;
+    if (!question) throw new Error("question parameter required");
+    const context = req.query.context || "";
+    const answer = await sliceAgent.printQA(question, context, aiConfig);
+    log("INFO", `AI Lab: print QA: "${question.slice(0, 50)}..."`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, answer })});`);
+  } catch (e) {
+    log("ERROR", `AI Lab print_qa error: ${aiErrMsg(e)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+app.get("/api/ai/advanced_slice.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const modelId = req.query.model_id;
+    const analysis = req.query.analysis ? JSON.parse(req.query.analysis) : null;
+    if (!analysis) throw new Error("analysis parameter required");
+    const modelInfo = modelId ? sliceAgent.getStlInfo(modelId) : null;
+    const modelPath = modelInfo ? modelInfo.path : null;
+    const result = await sliceAgent.advancedSlice(modelPath, analysis, aiConfig);
+    log("INFO", `AI Lab: advanced slice done: ${modelId} → ${result.gcodeName}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, result })});`);
+  } catch (e) {
+    log("ERROR", `AI Lab advanced_slice error: ${aiErrMsg(e)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+// Upload G-code file for optimization
+app.post("/api/ai/upload_gcode", async (req, res) => {
+  try {
+    const formidable = require("formidable");
+    const form = new formidable.IncomingForm({ maxFileSize: 500 * 1024 * 1024 });
+    const [fields, files] = await new Promise((resolve, reject) => {
+      form.parse(req, (err, fields, files) => {
+        if (err) reject(err);
+        else resolve([fields, files]);
+      });
+    });
+    const file = files.gcode?.[0] || files.file?.[0];
+    if (!file) return res.status(400).json({ error: "no_file" });
+    const buffer = fs.readFileSync(file.filepath);
+    const gcodeName = sliceAgent.saveGcodeFile(file.originalFilename, buffer);
+    log("INFO", `AI Lab: gcode uploaded for optimization: ${gcodeName}`);
+    try { fs.unlinkSync(file.filepath); } catch (_) {}
+    res.json({ ok: true, gcode_name: gcodeName });
+  } catch (e) {
+    log("ERROR", `AI Lab upload_gcode error: ${aiErrMsg(e)}`);
+    res.status(500).json({ error: aiErrMsg(e) });
+  }
+});
+
+// List G-code files from printer (Moonraker)
+app.get("/api/ai/list_printer_gcode.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    if (!printerConfig.host) {
+      res.type("application/javascript");
+      res.send(`${cb}(${JSON.stringify({ ok: false, error: "No printer configured" })});`);
+      return;
+    }
+    const resp = await fetch(`${getBaseUrl()}/server/files/list?root=gcodes`, {
+      headers: moonrakerHeaders(),
+    });
+    const data = await resp.json();
+    const items = (data.result || []).filter(f => f.path?.match(/\.gcode$/i));
+    const files = items.map(f => ({
+      name: f.path.replace(/^.*\//, ""),
+      path: f.path,
+      size: f.size ? (f.size / 1024).toFixed(1) + "KB" : "?",
+    }));
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, files })});`);
+  } catch (e) {
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+// Fetch G-code from printer for optimization
+// Download progress tracker
+let fetchProgress = { active: false, bytesReceived: 0, bytesTotal: 0, status: "idle", error: null, gcodeName: null };
+
+app.get("/api/ai/fetch_printer_gcode_progress.js", (req, res) => {
+  const cb = req.query.cb || "callback";
+  res.type("application/javascript");
+  res.send(`${cb}(${JSON.stringify({ ok: true, ...fetchProgress })});`);
+});
+
+app.get("/api/ai/fetch_printer_gcode.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const filePath = req.query.path;
+    if (!filePath) throw new Error("path parameter required");
+    if (!printerConfig.host) throw new Error("No printer configured");
+    // Download from Moonraker — encode path segments for URLs with spaces/CJK
+    const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
+    const resp = await fetch(`${getBaseUrl()}/server/files/gcodes/${encodedPath}`, {
+      headers: moonrakerHeaders(),
+    });
+    if (!resp.ok) throw new Error(`Moonraker download failed: ${resp.status} ${await resp.text().catch(()=>"")}`);
+
+    const contentLength = parseInt(resp.headers.get("content-length") || "0");
+    fetchProgress = { active: true, bytesReceived: 0, bytesTotal: contentLength, status: "downloading", error: null, gcodeName: null };
+
+    // Download with progress — use arrayBuffer() (compatible with all Node.js versions)
+    const arrayBuf = await resp.arrayBuffer();
+    const buffer = Buffer.from(arrayBuf);
+    const received = buffer.length;
+    fetchProgress.bytesReceived = received;
+    fetchProgress.bytesTotal = contentLength || received;
+
+    const fileName = filePath.replace(/^.*\//, "");
+    const gcodeName = sliceAgent.saveGcodeFile(fileName, buffer);
+    fetchProgress = { active: false, bytesReceived: received, bytesTotal: contentLength || received, status: "done", error: null, gcodeName };
+    log("INFO", `AI Lab: fetched printer gcode: ${filePath} → ${gcodeName} (${(received/1024).toFixed(1)}KB)`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, gcode_name: gcodeName })});`);
+  } catch (e) {
+    fetchProgress = { active: false, bytesReceived: 0, bytesTotal: 0, status: "error", error: aiErrMsg(e), gcodeName: null };
+    log("ERROR", `AI Lab fetch_printer_gcode error: ${aiErrMsg(e)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+// Open gcode folder in system file explorer
+app.get("/api/ai/open_gcode_folder.js", (req, res) => {
+  const cb = req.query.cb || "callback";
+  const { exec } = require("child_process");
+  const gcodeDir = (sliceAgent.GCODE_DIR && sliceAgent.GCODE_DIR()) || path.join(osAppData, "ai-lab", "gcode");
+  // Ensure directory exists
+  if (!fs.existsSync(gcodeDir)) fs.mkdirSync(gcodeDir, { recursive: true });
+  const cmd = process.platform === "win32" ? `explorer "${gcodeDir}"` : process.platform === "darwin" ? `open "${gcodeDir}"` : `xdg-open "${gcodeDir}"`;
+  exec(cmd, (err) => {
+    res.type("application/javascript");
+    // Windows explorer always returns exit code 1 even on success — treat as success if directory exists
+    if (err && process.platform !== "win32") {
+      log("WARN", `open_gcode_folder failed: ${err.message}`);
+      res.send(`${cb}(${JSON.stringify({ ok: false, error: err.message })});`);
+    } else {
+      res.send(`${cb}(${JSON.stringify({ ok: true, path: gcodeDir })});`);
+    }
+  });
+});
+
+// ─── End AI Lab Endpoints ───
 
 app.post("/api/files/local", handleUploadWithConfirm);
 
@@ -1015,6 +1540,9 @@ wss.on("connection", (ws) => {
 });
 
 loadConfig();
+sliceAgent.setAppDataDir(path.join(APPDATA_DIR, "ai-lab"));
+sliceAgent.setRawPathCache(new Map());
+sliceAgent.setLogFn(log);
 log("INFO", `BambuStudio Bridge v${BRIDGE_VERSION} starting on port ${DEFAULT_PORT}`);
 log("INFO", `Web dir: ${WEB_DIR}`);
 log("INFO", `Config: ${CONFIG_FILE}`);

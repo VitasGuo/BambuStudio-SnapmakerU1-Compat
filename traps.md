@@ -811,3 +811,91 @@
 **现象**：通过 WebUI 打印确认框映射耗材后，设备面板上的耗材颜色/类型信息被覆盖为 gcode 中声明的值（如设备上蓝色 PLA 变成 gcode 预设的红色 PLA）
 **根因**：打印流程中发送 `SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER='i' FILAMENT_TYPE='PLA' ... SAVE='1' VENDOR='Generic'`，用 gcode 元数据中的耗材信息（来自 BambuStudio 预设）覆盖了设备上物理耗材的实际信息。`SAVE='1'` 使覆盖持久化。OrcaSlicer 的打印确认流程不使用 `SET_PRINT_FILAMENT_CONFIG`（仅在耗材编辑页面单独调用），也不使用 `SET_PRINT_TASK_PARAMETERS FILAMENT_TYPE=[...]`
 **解决方案**：从打印确认流程中移除 `SET_PRINT_FILAMENT_CONFIG` 和 `SET_PRINT_TASK_PARAMETERS FILAMENT_TYPE=[...]`（v5.19.0）。设备已通过 `print_task.json` 知道自己的物理耗材信息，`SET_PRINT_EXTRUDER_MAP` 已建立映射关系，无需用 gcode 的耗材信息覆盖设备配置
+
+---
+
+#107 ✅
+**现象**：AI Lab 页面一片空白，问答助手浮动按钮也不显示
+**根因**：webui.html 清理旧 AI Lab HTML 时（Node.js 脚本删除 L230-288、L538-706、L1543-1967），误删了 `<div id="ailab-content">` 空容器（原来在 L538-706 范围内）。ailab.js 的 `initAILab()` IIFE 中 `document.getElementById('ailab-content')` 返回 null → 直接 return，所有 HTML 注入和 QA Fab/Popup 创建都被跳过
+**解决方案**：在 `about-content` 和 `<script>` 之间补回 `<div id="ailab-content" style="display:none;width:100%;height:100%;overflow:hidden;"></div>`（v5.27.0）
+
+---
+
+#108 ✅
+**现象**：reinstall 后 AI Lab 仍一片空白，问答助手浮标不显示。浏览器控制台 ailab.js 和 ailab.css 加载 404
+**根因**：server.js 没有 `express.static(WEB_DIR)`，仅对 `/`、`/snapmaker.png`、`/fluidd/*` 做了显式路由。`/ailab.css` 和 `/ailab.js` 请求落到 `app.all("/{*path}")` catch-all 代理，被转发到 Moonraker 打印机返回无用响应
+**解决方案**：在 `/snapmaker.png` 路由后添加 `ailab.css` 和 `ailab.js` 的显式路由（参照 voxelflow 模式用 `app.get("/ailab.css", ...)`，不用 `express.static(WEB_DIR)` 避免干扰 API 路由）（v5.27.0）
+
+---
+
+#109 ✅
+**现象**：G-code 优化三大问题 — ①本地文件下拉框为空；②上传文件后没反应，点击优化提示"请选择gcode文件"；③打印机选文件后点击优化同样提示"请选择gcode文件"
+**根因**：
+1. `aiOptSwitchTab('local')` 只切换面板可见性，未调用 `aiListGcodeFiles()` 加载文件列表
+2. 上传 FormData 字段名不匹配：前端 `formData.append('gcode', file)` vs server `files.file?.[0]`，server 收不到文件返回 `{error: "no_file"}`
+3. `optimize_gcode` 响应嵌套：server `{ok: true, result}` → 前端读 `r.optimized_gcode_name` 为 undefined（应在 `r.result.optimized_gcode_name`）；`applied_ops` 字段名应为 `applied_operations`
+4. 打印机 fetch 异步下载未完成时用户过早点击优化按钮
+**解决方案**：
+1. `aiOptSwitchTab` 中 `source==='local'` 时调用 `aiListGcodeFiles()`
+2. server `files.file?.[0]` → `files.gcode?.[0]`；前端加 loading 状态和 file input reset
+3. server `{ok: true, result}` → `{ok: true, ...result}` flatten；前端 `applied_ops` → `applied_operations`
+4. `aiOptFetchAndPreview` 下载期间 disable 优化按钮显示"下载中..."，完成后恢复（v5.27.0）
+
+---
+
+#110 ✅
+**现象**：G-code 优化对 U1 真实多色打印文件破坏性严重 — `PRINT_START`、`SM_PRINT_AUTO_FEED`、`SM_PRINT_FLOW_CALIBRATE`、`DEFECT_DETECTION_START` 等 U1 专有命令被 `replace_start_gcode` 暴力替换为通用 `G28/M82/M109`，导致耗材自动进料、流量校准、缺陷检测功能丢失
+**根因**：`optimizeGcode` 中 `replace_start_gcode` 操作找到 `;LAYER:0` 或首个含 E 值的 G1 行后，将之前所有内容替换为硬编码的 U1_START_GCODE 模板。但 U1 切片器（VoxelFlow）生成的 start gcode 包含大量专有命令（PRINT_START/SM_PRINT_*/DEFECT_*），这些命令是 U1 打印流程必需的
+**解决方案**：在 `optimizeGcode` 中检测 gcode 是否包含 U1 专有命令（`PRINT_START`/`SM_PRINT_AUTO_FEED`/`SM_PRINT_FLOW_CALIBRATE`/`DEFECT_DETECTION`），若包含则跳过 `replace_start_gcode` 和 `replace_end_gcode`，只保留安全的优化操作（温度/速度/风扇/回抽/腔体风扇等）（v5.27.0）
+
+---
+
+#111 ✅
+**现象**：G-code 优化对比预览中，只要有一行被插入，插入行之后的所有行都被标记为"差异"（红色/绿色），即使内容完全相同。例如优化只在第 100 行插入了一行，第 100-2000 行全部显示为差异
+**根因**：`aiOptLoadOptimized` 使用朴素逐行对比（`origLines[i] !== optLines[i]`），按索引逐行比较。当有一行插入时，优化后文件的所有后续行索引偏移 1，导致从插入点开始所有行都被判定为"不同"
+**解决方案**：替换为 LCS（最长公共子序列）diff 算法（v5.28.0）：
+1. `aiOptComputeDiff`：标准 DP 构建 LCS 表 + 回溯生成 diff 条目（equal/delete/insert/change）
+2. 连续 delete+insert 合并为 change（语义更准确）
+3. >3000 行降级到 `aiOptHashDiff`（前瞻匹配块级 diff，避免 O(n²) 内存）
+4. diff 信息栏从"差异: N 处"改为"差异: N 处 (X 新增, Y 删除, Z 修改)"
+
+---
+
+#112 ✅
+**现象**：G-code 优化声称执行了 `replace_speed`（F30000→F25000）和 `modify_temperature`（统一至 210°C/60°C），但实际 gcode 中 F30000 出现次数完全未变，温度值（178°C、138°C、228°C、80°C）也原样保留。5 项优化操作中仅 1 项（add_retract）实际生效
+**根因**：
+1. `replace_speed`：AI 返回的 `original_speed` 可能缺少 `F` 前缀（如 `"30000"` 而非 `"F30000"`），直接用 `new RegExp(original_speed)` 构建正则匹配不到 `F30000`
+2. `modify_temperature`：正则 `/M104 S(\d+)/` 只匹配 `M104 S228` 格式，但 Orca gcode 中参数顺序不固定（如 `M104 T0 S140`、`M109 T0 S138`），正则匹配不到；层计数用 `lines[i].includes('Layer')` 匹配 `Layer` 关键词，但 Orca 层标记是 `;LAYER:N` 格式，大小写不匹配
+3. `add_layer_markers`/`add_e_reset`：Orca gcode 已通过 `before_layer_change_gcode` 包含 SET_PRINT_STATS_INFO 和 G92 E0，但操作不检查是否已存在就重复插入
+**解决方案**（v5.28.0）：
+1. `replace_speed`：自动补全 F 前缀（`original_speed.startsWith('F') ? original_speed : 'F' + original_speed`）；添加负向前瞻 `(?!\\d)` 避免部分匹配；空值检查
+2. `modify_temperature`：改用 `\bS\d+\b` 匹配任意位置的 S 参数（兼容 `M104 T0 S140` 和 `M104 S228`）；层计数改用 `/^;LAYER:\d+/` 正则；新增 `new_bed_temp` 支持热床温度替换
+3. `add_layer_markers`：插入前检查下一行是否已包含 `SET_PRINT_STATS_INFO`，已存在则跳过
+4. `add_e_reset`：统计已有 G92 E0 的层数占比，≥80% 则跳过整个操作
+
+---
+
+#113 ✅
+**现象**：G-code 优化失败，报错 `log is not defined`。AI Lab 前端显示"优化失败: log is not defined"
+**根因**：slice_agent.js 中 `optimizeGcode` 函数的 `add_layer_markers`/`add_e_reset` 操作调用了 `log("INFO", ...)` 和 `log("WARN", ...)`，但 slice_agent.js 中没有定义 `log` 函数。`log` 只在 server.js 中定义，slice_agent.js 作为独立模块无法访问
+**解决方案**：在 slice_agent.js 中新增 `log()` 函数和 `setLogFn(fn)` 注入机制（v5.28.1）：
+1. 默认使用 `console.log/warn/error` 输出日志
+2. server.js 启动时调用 `sliceAgent.setLogFn(log)` 注入统一日志函数
+3. 导出 `setLogFn` 供 server.js 调用
+
+---
+
+#114 ✅
+**现象**：打印机 gcode 下载失败，API 返回 `{"ok":false,"error":"resp.body.getReader is not a function"}`
+**根因**：v5.28.1 中 `fetch_printer_gcode` 使用了 `resp.body.getReader()` 流式读取下载进度，但 Node.js 内置 `fetch` 的 `resp.body` 是 Node.js Web Stream，不支持浏览器风格的 `getReader()` 方法。在 Node.js 18/20 中 `getReader()` 不可用
+**解决方案**（v5.28.2）：改用 `resp.arrayBuffer()` 一次性下载整个文件，下载完成后更新 `fetchProgress` 状态。虽然无法实时追踪下载进度（进度条只会在下载完成时从 0% 跳到 100%），但兼容所有 Node.js 版本。进度条仍保留，用于显示"下载中..."状态
+
+---
+
+#115 ✅
+**现象**：G-code 优化 `replace_speed` 操作始终未生效。Dragon_Textured_PLA 优化中 AI 计划将 F30000 替换为 F27000，但 gcode 中 F30000 出现 12258 次全部未变。6 项操作中仅 1 项（add_retract）实际生效
+**根因**：AI 返回的速度值使用 mm/s 单位（如 `"500"` 或 `"450"`），代码自动补全 F 前缀后变成 `F500`/`F450`，而 gcode 中实际速度是 `F30000`（mm/min 单位，= 500 mm/s × 60）。正则 `F500` 无法匹配 `F30000`。G-code 的 F 参数始终是 mm/min 单位，但 AI（特别是通用 LLM）倾向于使用 mm/s 这个更直观的单位
+**解决方案**（v5.28.3）：
+1. `replace_speed` 中添加 mm/s → mm/min 自动转换：如果 F 值 < 1000（典型打印速度 16-500 mm/s 对应 960-30000 mm/min，< 1000 几乎不可能是 mm/min），视为 mm/s 并乘以 60
+2. 改善 AI prompt：在 `optimize_gcode.md` 和 `optimizeGcode` 的 `taskInstructions` 中明确标注"G-code 速度单位为 mm/min（不是 mm/s）"，给出换算示例（F30000 = 500 mm/s）
+3. 添加匹配结果日志：成功时记录匹配次数，失败时记录 WARN
