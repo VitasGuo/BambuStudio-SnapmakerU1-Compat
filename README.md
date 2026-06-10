@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.28.3
+# Snapmaker U1 BambuStudio 兼容包 v5.29.3
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -207,6 +207,8 @@ A: v5.18.1 已修复此问题，安装脚本不再删除用户自定义预设。
 
 ## 版本历史
 
+- **v5.29.3** (2026-06-10) - G-code 转换 EXEC 块完善（温度/清洗流程/格式检测修复）
+- **v5.29.0** (2026-06-10) - G-code 转换功能（BambuStudio→OrcaSlicer 兼容）+ 上传字段名修复
 - **v5.28.3** (2026-06-10) - 修复 replace_speed 速度单位转换（mm/s→mm/min）
 - **v5.28.2** (2026-06-10) - 修复打印机下载 + explorer 报错 + log is not defined
 - **v5.28.1** (2026-06-10) - 打印机 gcode 下载进度条

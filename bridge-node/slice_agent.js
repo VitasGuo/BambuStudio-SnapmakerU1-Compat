@@ -1454,7 +1454,15 @@ function listGcodeFiles() {
         const filePath = path.join(dir, f);
         try {
           const stat = fs.statSync(filePath);
-          results.push({ filename: f, size: stat.size, modified: stat.mtime, dir });
+          // Detect format by layer marker style: BambuStudio uses "; FEATURE:", OrcaSlicer uses ";TYPE:"
+          // This is the most reliable differentiator — both may contain PRINT_START and U1 proprietary commands
+          let format = "unknown";
+          try {
+            const head = fs.readFileSync(filePath, "utf-8", { start: 0, end: 32768 });
+            if (head.includes("; FEATURE:")) format = "bambu";
+            else if (head.includes(";TYPE:")) format = "orca";
+          } catch (_) {}
+          results.push({ filename: f, size: stat.size, modified: stat.mtime, dir, format });
         } catch (_) {}
       }
     } catch (_) {}
@@ -2480,6 +2488,354 @@ async function printQA(question, context, aiConfig) {
   return content;
 }
 
+// ─── G-code 格式转换（BambuStudio → OrcaSlicer 兼容） ───
+
+function convertGcode(gcodeName) {
+  const gcodePath = getGcodePath(gcodeName);
+  if (!gcodePath) throw new Error(`G-code not found: ${gcodeName}`);
+
+  let content = fs.readFileSync(gcodePath, "utf-8");
+
+  // Parse block structure
+  const headerStart = content.indexOf("; HEADER_BLOCK_START");
+  const headerEnd = content.indexOf("; HEADER_BLOCK_END");
+  const configStart = content.indexOf("; CONFIG_BLOCK_START");
+  const configEnd = content.indexOf("; CONFIG_BLOCK_END");
+  const thumbStart = content.indexOf("; THUMBNAIL_BLOCK_START");
+  const thumbEnd = content.indexOf("; THUMBNAIL_BLOCK_END");
+  const execStart = content.indexOf("; EXECUTABLE_BLOCK_START");
+  const execEnd = content.indexOf("; EXECUTABLE_BLOCK_END");
+
+  // Check if this looks like a BambuStudio gcode (has blocks)
+  if (headerStart === -1 || execStart === -1) {
+    throw new Error("Not a valid BambuStudio gcode file (missing HEADER/EXEC blocks)");
+  }
+
+  // Check if already OrcaSlicer format by layer marker style
+  // BambuStudio uses "; FEATURE:", OrcaSlicer uses ";TYPE:" — this is the most reliable differentiator
+  if (content.includes(";TYPE:")) {
+    throw new Error("该文件已是 OrcaSlicer 格式（包含 ;TYPE: 层标记），无需转换。请选择 BambuStudio 生成的 G-code 文件进行转换。");
+  }
+  if (!content.includes("; FEATURE:")) {
+    throw new Error("该文件既不包含 BambuStudio 层标记（; FEATURE:）也不包含 OrcaSlicer 层标记（;TYPE:），无法识别格式。");
+  }
+
+  const headerBlock = headerStart >= 0 && headerEnd >= 0
+    ? content.substring(headerStart, headerEnd + "; HEADER_BLOCK_END".length) : "";
+  const configBlock = configStart >= 0 && configEnd >= 0
+    ? content.substring(configStart, configEnd + "; CONFIG_BLOCK_END".length) : "";
+  const thumbBlock = thumbStart >= 0 && thumbEnd >= 0
+    ? content.substring(thumbStart, thumbEnd + "; THUMBNAIL_BLOCK_END".length) : "";
+  const execBlock = execStart >= 0 && execEnd >= 0
+    ? content.substring(execStart, execEnd + "; EXECUTABLE_BLOCK_END".length) : "";
+
+  // Extract print body from EXECUTABLE_BLOCK
+  // BambuStudio puts everything inside EXECUTABLE_BLOCK, so we need to find the print body start
+  // The print body starts after ;MACHINE_START_GCODE_END or after the first ;BEFORE_LAYER_CHANGE
+  let printBody = "";
+  const machineStartEndIdx = content.indexOf("; MACHINE_START_GCODE_END");
+  if (machineStartEndIdx >= 0) {
+    // Print body starts after MACHINE_START_GCODE_END
+    printBody = content.substring(machineStartEndIdx + "; MACHINE_START_GCODE_END".length);
+  } else {
+    // Fallback: use everything after EXECUTABLE_BLOCK_END
+    const bodyStart = execEnd >= 0 ? execEnd + "; EXECUTABLE_BLOCK_END".length : 0;
+    printBody = content.substring(bodyStart);
+  }
+
+  // Extract info from EXECUTABLE_BLOCK for conversion
+  const execContent = execBlock;
+
+  // Find temperatures from entire file (EXEC block only has preheat temps like S140,
+  // actual print temps like S220 are in the print body)
+  const hotendTemps = [];
+  const bedTemps = [];
+  const m104Matches = content.matchAll(/M104\s+(?:T(\d+)\s+)?S(\d+)/g);
+  for (const m of m104Matches) {
+    hotendTemps.push({ tool: m[1] ? parseInt(m[1]) : 0, temp: parseInt(m[2]) });
+  }
+  const m109Matches = content.matchAll(/M109\s+(?:T(\d+)\s+)?S(\d+)/g);
+  for (const m of m109Matches) {
+    hotendTemps.push({ tool: m[1] ? parseInt(m[1]) : 0, temp: parseInt(m[2]) });
+  }
+  const m140Matches = content.matchAll(/M140\s+S(\d+)/g);
+  for (const m of m140Matches) {
+    bedTemps.push(parseInt(m[1]));
+  }
+  const m190Matches = content.matchAll(/M190\s+S(\d+)/g);
+  for (const m of m190Matches) {
+    bedTemps.push(parseInt(m[1]));
+  }
+
+  // Find first tool used
+  const firstToolMatch = execContent.match(/^T(\d+)/m);
+  const firstTool = firstToolMatch ? parseInt(firstToolMatch[1]) : 0;
+
+  // Get primary temperatures: use the highest hotend temp (actual print temp, not preheat)
+  // BambuStudio EXEC block has M104 S140 (preheat), actual M109 S220 is in the print body
+  const primaryHotendTemp = hotendTemps.length > 0
+    ? Math.max(...hotendTemps.map(t => t.temp))
+    : 200;
+  const primaryBedTemp = bedTemps.length > 0
+    ? Math.max(...bedTemps)
+    : 60;
+
+  // Find total layers from body
+  const layerMatches = content.match(/;BEFORE_LAYER_CHANGE/g) || content.match(/;LAYER:\d+/g);
+  const totalLayers = layerMatches ? layerMatches.length : 0;
+
+  // Detect multi-extruder from body
+  const toolChanges = new Set();
+  const tMatches = printBody.matchAll(/^T(\d+)/gm);
+  for (const m of tMatches) toolChanges.add(parseInt(m[1]));
+  toolChanges.add(firstTool);
+  const usedTools = [...toolChanges].sort();
+
+  log("INFO", `G-code convert: hotend=${primaryHotendTemp}°C bed=${primaryBedTemp}°C firstTool=T${firstTool} layers=${totalLayers} tools=[${usedTools.join(',')}]`);
+
+  // Build OrcaSlicer-compatible EXECUTABLE_BLOCK
+  // Strategy: keep existing EXCLUDE_OBJECT_DEFINE, M73, M106, PRINT_START sequence
+  // Replace BambuStudio-specific commands (MOVE_TO_*, ROUGHLY_CLEAN, etc.) with OrcaSlicer flow
+  let newExecBlock = "; EXECUTABLE_BLOCK_START\n";
+
+  // Extract pre-PRINT_START content (EXCLUDE_OBJECT_DEFINE, M73, M106, etc.)
+  const execLines = execContent.split('\n');
+  const printStartIdx = execLines.findIndex(l => l.trim() === 'PRINT_START');
+  if (printStartIdx > 0) {
+    // Keep lines before PRINT_START (EXCLUDE_OBJECT_DEFINE, M73, M106, etc.)
+    newExecBlock += execLines.slice(1, printStartIdx).join('\n') + '\n'; // skip EXECUTABLE_BLOCK_START line
+  }
+
+  // Keep PRINT_START + DEFECT_DETECTION_START + SET_PRINT_STATS_INFO + TIMELAPSE_START
+  newExecBlock += "PRINT_START\n";
+  newExecBlock += "DEFECT_DETECTION_START\n";
+  if (totalLayers > 0) {
+    newExecBlock += `SET_PRINT_STATS_INFO TOTAL_LAYER=${totalLayers} CURRENT_LAYER=0\n`;
+  }
+  newExecBlock += "TIMELAPSE_START\n";
+  newExecBlock += `M140 S${primaryBedTemp}\n`;
+  // Preheat all used tools to standby temp
+  for (const tool of usedTools) {
+    newExecBlock += `M104 T${tool} S140\n`;
+  }
+  newExecBlock += "M204 S10000\n";
+
+  // OrcaSlicer-style flow: bed mesh → wait temps → auto feed → flow calibrate
+  newExecBlock += "G28 X Y\n";
+  newExecBlock += "DEFECT_DETECT_NOODLE_FIRST\n";
+  newExecBlock += `T${firstTool}\n`;
+  newExecBlock += "G90\n";
+  newExecBlock += "DEFECT_DETECTION_DETECT_BED\n";
+  newExecBlock += "SM_PRINT_CHECK_SWITCH_EXTRUDER\n";
+  for (const tool of usedTools) {
+    if (tool !== firstTool) {
+      newExecBlock += `SM_PRINT_EXTRUDER_PREHEAT EXTRUDER=${tool} TEMP=140\n`;
+    }
+  }
+  newExecBlock += `SM_PRINT_AUTO_FEED EXTRUDER=${firstTool}\n`;
+  newExecBlock += `SM_PRINT_FLOW_CALIBRATE EXTRUDER=${firstTool}\n`;
+  for (const tool of usedTools) {
+    if (tool !== firstTool) {
+      newExecBlock += `SM_PRINT_AUTO_FEED EXTRUDER=${tool}\n`;
+      newExecBlock += `SM_PRINT_FLOW_CALIBRATE EXTRUDER=${tool}\n`;
+    }
+  }
+  // Turn off all extruders before cleaning (OrcaSlicer standard flow)
+  for (const tool of usedTools) {
+    newExecBlock += `M104 S0 T${tool} A0\n`;
+  }
+  newExecBlock += `M104 T${firstTool} S130\n`;
+
+  // Rough clean + detect bed plate + deep clean + fine home (OrcaSlicer standard flow)
+  newExecBlock += `T${firstTool}\n`;
+  newExecBlock += "M106 S255\n";
+  newExecBlock += "M106 P2 S0\n";
+  newExecBlock += "MOVE_TO_DISCARD_FILAMENT_POSITION\n";
+  newExecBlock += `M109 T${firstTool} S130\n`;
+  newExecBlock += "ROUGHLY_CLEAN_NOZZLE_WITH_DISCARD\n";
+  newExecBlock += "MOVE_TO_XY_IDLE_POSITION_EXTRUDER\n";
+  newExecBlock += "G28 Z I140 J140\n";
+  newExecBlock += "DETECT_BED_PLATE\n";
+  newExecBlock += "G90\n";
+  newExecBlock += "G0 Z5 F10000\n";
+  newExecBlock += "MOVE_TO_DISCARD_FILAMENT_POSITION\n";
+  newExecBlock += "M109 S170\n";
+  newExecBlock += "ROUGHLY_CLEAN_NOZZLE\n";
+  newExecBlock += "MOVE_TO_XY_IDLE_POSITION_EXTRUDER\n";
+  newExecBlock += "FINELY_CLEAN_NOZZLE_STAGE_1\n";
+  newExecBlock += `M104 S130\n`;
+  newExecBlock += "G0 Z5 F10000\n";
+  newExecBlock += "MOVE_TO_DISCARD_FILAMENT_POSITION\n";
+  newExecBlock += "ROUGHLY_CLEAN_NOZZLE\n";
+  newExecBlock += "MOVE_TO_XY_IDLE_POSITION_EXTRUDER\n";
+  newExecBlock += "FINELY_CLEAN_NOZZLE_STAGE_2\n";
+
+  // Fine home
+  newExecBlock += "M106 S255\n";
+  newExecBlock += `M109 S130\n`;
+  newExecBlock += `M190 S${primaryBedTemp}\n`;
+  newExecBlock += "M107 P2\n";
+  newExecBlock += "G90\n";
+  newExecBlock += "G0 Z5 F10000\n";
+  newExecBlock += "G28 Z\n";
+
+  // Bed mesh calibration
+  newExecBlock += "BED_MESH_CALIBRATE PROBE_COUNT=11,11\n";
+
+  // Draw prime line (OrcaSlicer standard flow)
+  newExecBlock += "G90\n";
+  newExecBlock += "G1 Z1.5\n";
+  newExecBlock += "G0 X85 Y1 Z2 F18000\n";
+  newExecBlock += `M109 S${primaryHotendTemp}\n`;
+  newExecBlock += "G1 Z0.2\n";
+  newExecBlock += "M83\n";
+  newExecBlock += "G1 X185 E15 F360\n";
+  newExecBlock += "G1 Z1.5\n";
+
+  // Post prime line setup (OrcaSlicer standard)
+  newExecBlock += "G90\n";
+  newExecBlock += "M106 S0\n";
+  newExecBlock += "G90\n";
+  newExecBlock += "G21\n";
+  newExecBlock += "M83 ; use relative distances for extrusion\n";
+
+  newExecBlock += "; EXECUTABLE_BLOCK_END\n";
+
+  // Convert print body: replace BambuStudio Start G-code with OrcaSlicer format
+  // Find where actual printing starts (first ;LAYER:0 or first G1 with E value after EXEC)
+  let convertedBody = printBody;
+
+  // Remove BambuStudio-specific pre-print commands from body start
+  // Find where actual printing starts (first ;BEFORE_LAYER_CHANGE or ;LAYER:0)
+  const layerStartMarker = convertedBody.includes(";BEFORE_LAYER_CHANGE")
+    ? ";BEFORE_LAYER_CHANGE"
+    : ";LAYER:0";
+  const layer0Idx = convertedBody.indexOf(layerStartMarker);
+  if (layer0Idx > 0) {
+    const beforeLayer0 = convertedBody.substring(0, layer0Idx);
+    const afterLayer0 = convertedBody.substring(layer0Idx);
+
+    // Filter out BambuStudio-specific pre-print commands that are now handled by PRINT_START
+    // Keep standard G-code commands (G90, G21, M83, etc.) that are needed for printing
+    const lines = beforeLayer0.split("\n");
+    const filteredLines = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      // Skip empty lines at the very start
+      if (trimmed === "" && filteredLines.length === 0) continue;
+      // Skip BambuStudio-specific commands now handled by PRINT_START
+      if (/^M10[49]\s/.test(trimmed) && !trimmed.includes("S0")) continue; // M104/M109 temp set (keep S0/off)
+      if (/^M1[49]0\s/.test(trimmed)) continue; // M140/M190 bed temp
+      if (/^T\d\s*$/.test(trimmed)) continue;    // Tool changes
+      if (/^G28\b/.test(trimmed)) continue;       // Home
+      if (/^M106\s/.test(trimmed) && !trimmed.includes("P2") && !trimmed.includes("P3")) continue; // Main fan
+      if (/^M106 P[23]\s/.test(trimmed)) continue; // Aux fans
+      if (/^M400\b/.test(trimmed)) continue;       // Wait
+      if (/^M220\s/.test(trimmed)) continue;       // Speed override
+      if (/^M221\s/.test(trimmed)) continue;       // Flow override
+      if (/^G92 E0\b/.test(trimmed)) continue;     // E reset
+      if (trimmed.startsWith(";_FORCE_RESUME")) continue;
+      if (trimmed.startsWith("; Change Tool")) continue;
+      if (/^MOVE_TO_/.test(trimmed)) continue;     // BambuStudio-specific moves
+      if (/^ROUGHLY_CLEAN/.test(trimmed)) continue;
+      if (/^CLEAN_NOZZLE/.test(trimmed)) continue;
+      if (/^FINELY_CLEAN/.test(trimmed)) continue;
+      if (/^BED_MESH/.test(trimmed)) continue;
+      if (/^SET_LED/.test(trimmed)) continue;
+      if (/^DETECT_BED/.test(trimmed)) continue;
+      if (/^SM_PRINT_/.test(trimmed)) continue;    // U1 specific (handled by new EXEC)
+      if (/^DEFECT_DETECTION_DETECT_BED/.test(trimmed)) continue;
+      if (/^EXCLUDE_OBJECT_DEFINE/.test(trimmed)) continue; // Moved to EXEC block
+      if (/^M73\s/.test(trimmed) && trimmed.includes("P0")) continue; // Initial progress
+      if (/^DEFECT_DETECT_NOODLE_FIRST/.test(trimmed)) continue; // OrcaSlicer-specific noodle detect (handled by EXEC)
+      if (/^M107\b/.test(trimmed)) continue;       // Fan off (redundant with M106 S0)
+      if (trimmed === "; MACHINE_END_GCODE_START") continue;
+      if (trimmed === "; MACHINE_START_GCODE_END") continue;
+      // Keep everything else (G90, G21, M83, comments, G1 moves, etc.)
+      filteredLines.push(line);
+    }
+
+    convertedBody = filteredLines.join("\n") + "\n" + afterLayer0;
+  }
+
+  // Remove residual EXECUTABLE_BLOCK_END from print body (BambuStudio puts it at the end of body)
+  // The new EXEC block already has its own EXECUTABLE_BLOCK_END
+  convertedBody = convertedBody.replace(/^; EXECUTABLE_BLOCK_END\s*$/gm, "");
+
+  // Convert End G-code: check if it needs conversion
+  // BambuStudio with U1 profile already uses PRINT_END/TIMELAPSE_STOP (OrcaSlicer-compatible)
+  // Only replace if it uses BambuStudio-specific end commands
+  const endPatterns = [
+    "; --- end ---",
+    "; End G-code",
+    "; end gcode",
+  ];
+  let endIdx = -1;
+  for (const pattern of endPatterns) {
+    endIdx = convertedBody.indexOf(pattern);
+    if (endIdx >= 0) break;
+  }
+
+  // Only replace end gcode if it's NOT already OrcaSlicer format (PRINT_END)
+  if (endIdx >= 0 && !convertedBody.includes("PRINT_END")) {
+    const beforeEnd = convertedBody.substring(0, endIdx);
+    // Build OrcaSlicer-compatible End G-code
+    let orcaEnd = "; End G-code\n";
+    orcaEnd += "M400\n";
+    orcaEnd += "TIMELAPSE_STOP\n";
+    orcaEnd += "DEFECT_DETECTION_STOP\n";
+    orcaEnd += "SET_PRINT_STATS_INFO TOTAL_LAYER=" + totalLayers + " CURRENT_LAYER=" + totalLayers + "\n";
+    orcaEnd += "M106 S0 ; Fan off\n";
+    orcaEnd += "M106 P2 S0 ; Cavity fan off\n";
+    orcaEnd += "M106 P3 S0 ; Exhaust fan off\n";
+    for (const tool of usedTools) {
+      orcaEnd += `M104 T${tool} S0 ; T${tool} off\n`;
+    }
+    orcaEnd += "M140 S0 ; Bed off\n";
+    orcaEnd += "M84 ; Motors off\n";
+    convertedBody = beforeEnd + orcaEnd;
+  }
+
+  // Assemble final file in OrcaSlicer order: HEADER → THUMB → EXEC → body → CONFIG
+  let result = "";
+  if (headerBlock) result += headerBlock + "\n";
+  if (thumbBlock) result += thumbBlock + "\n";
+  result += newExecBlock + "\n";
+  result += convertedBody;
+  if (configBlock) result += configBlock + "\n";
+
+  // Key conversion: replace BambuStudio "; FEATURE:" with OrcaSlicer ";TYPE:"
+  // This is the critical difference that makes the U1 device panel reject BambuStudio gcode
+  result = result.replace(/; FEATURE: /g, ";TYPE:");
+
+  // Write converted file to AI Lab gcode dir (not BambuStudio dir)
+  const parsed = path.parse(gcodePath);
+  const convertedName = `${parsed.name}_orca${parsed.ext}`;
+  const convertedPath = path.join(GCODE_DIR, convertedName);
+  fs.writeFileSync(convertedPath, result, "utf-8");
+
+  log("INFO", `G-code convert: saved to ${convertedName}`);
+
+  return {
+    converted: true,
+    converted_gcode_name: convertedName,
+    conversions: {
+      exec_block: "Replaced with OrcaSlicer PRINT_START format",
+      start_gcode: "Replaced BambuStudio-specific commands with OrcaSlicer flow",
+      end_gcode: "Kept existing PRINT_END format",
+      layout: "Reorganized to HEADER→THUMB→EXEC→body→CONFIG",
+      feature_type: 'Replaced "; FEATURE:" with ";TYPE:" (critical for U1 device panel)',
+    },
+    info: {
+      hotend_temp: primaryHotendTemp,
+      bed_temp: primaryBedTemp,
+      first_tool: firstTool,
+      used_tools: usedTools,
+      total_layers: totalLayers,
+    },
+  };
+}
+
 // ─── 导出 ───
 
 module.exports = {
@@ -2513,6 +2869,7 @@ module.exports = {
   saveGcodeFile,
   patchGcode,
   optimizeGcode,
+  convertGcode,
   regenerateFromRawPath,
   advancedSlice,
   setRawPathCache,

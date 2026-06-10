@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.28.3 (2026-06-10)
+## 当前版本: v5.29.3 (2026-06-10)
 
 ---
 
@@ -43,6 +43,28 @@
 ---
 
 ## 版本历史
+
+### v5.29.3 (2026-06-10) — 完善转换 EXEC 块，匹配 OrcaSlicer 原生流程
+- **修复 M109 温度**：EXEC 块中画起始线前 `M109 T0 S140`（预热温度），应为 `M109 S220`（实际打印温度）。根因：温度从 EXEC 块提取只有 S140 预热值，实际打印温度 S220 在打印体中。改为从整个文件提取最高温度
+- **补全完整清洗流程**：对比 OrcaSlicer 原生 EXEC 块，补充了 `DEFECT_DETECT_NOODLE_FIRST`、粗回零+粗清洗、检测钢板、深度清洁喷嘴、精回零等步骤
+- **补全画起始线后设置**：`G90 / M106 S0 / G21 / M83` 基本设置命令
+- **补全清洗前关闭挤出机**：`M104 S0 T0-T3 A0` + `M104 T0 S130` 清洗预热
+
+### v5.29.2 (2026-06-10) — 修复 G-code 转换输出质量问题
+- **修复 EXEC 块缺少画起始线**：OrcaSlicer 在 BED_MESH_CALIBRATE 后有 M109 等温 + G1 X185 E15 F360 画起始线，转换后缺失
+- **修复打印体残留 EXECUTABLE_BLOCK_END**：原始 BambuStudio 的 EXECUTABLE_BLOCK_END 在打印体末尾，转换后未清理导致出现两个 END 标记
+- **修复 M109 温度**：新 EXEC 块中 M109 T0 S140 只是预热温度，应在画起始线前用 M109 T0 S220 等待实际打印温度
+- **格式检测修复**：改用 `; FEATURE:` vs `;TYPE:` 层标记判断（traps.md #116）
+
+### v5.29.1 (2026-06-10) — 修复 G-code 格式检测误判
+- **修复格式检测逻辑**：OrcaSlicer U1 gcode 也包含 `MOVE_TO_DISCARD_FILAMENT_POSITION` 等命令，导致被误判为 BambuStudio 格式。改用 `; FEATURE:` vs `;TYPE:` 层标记格式判断——BambuStudio 只含 `; FEATURE:`，OrcaSlicer 只含 `;TYPE:`，两者互斥（traps.md #116）
+- **影响范围**：`listGcodeFiles` 文件列表格式标注 + `convertGcode` 转换前格式校验
+
+### v5.29.0 (2026-06-10) — 新增 G-code 转换功能（BambuStudio → OrcaSlicer 兼容）
+- **新增 G-code 转换功能**：AI Lab 新增"G-code 转换"标签页，将 BambuStudio 生成的 gcode 转换为 OrcaSlicer 兼容格式，使 U1 设备面板能识别和打印
+- **转换逻辑**：重组文件结构（HEADER→THUMB→EXEC→body→CONFIG）+ 替换 EXECUTABLE_BLOCK 为 PRINT_START 序列 + 替换 Start/End G-code + 过滤 BambuStudio 专有命令 + 保留打印体不变
+- **新增 API**：`/api/ai/convert_gcode.js`、`/api/ai/download_gcode`
+- **前端**：主标签切换（G-code 优化 | G-code 转换），转换面板支持本地文件选择和上传，左右对比预览，下载和上传到打印机
 
 ### v5.28.3 (2026-06-10) — 修复 replace_speed 速度单位转换
 - **修复 replace_speed 未生效**：AI 返回 mm/s 单位速度值（如 `"500"`），代码补全 F 前缀后变成 `F500`，在 gcode 中找不到 `F30000`。添加 mm/s → mm/min 自动转换逻辑（值 < 1000 视为 mm/s，乘以 60）（traps.md #115）

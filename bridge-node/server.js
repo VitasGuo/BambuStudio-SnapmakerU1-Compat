@@ -8,7 +8,7 @@ const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.28.3";
+const BRIDGE_VERSION = "5.29.3";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -761,9 +761,9 @@ function patchGcodeLayout(content) {
       });
     });
 
-    const file = files.gcode?.[0];
+    const file = files.gcode?.[0] || files.file?.[0];
     if (!file) {
-      log("WARN", "Upload has no file field");
+      log("WARN", `Upload has no file field, available keys: ${Object.keys(files).join(",")}`);
       return res.status(400).json({ error: "no_file_field" });
     }
 
@@ -1218,6 +1218,18 @@ app.get("/api/ai/list_gcode.js", (req, res) => {
   }
 });
 
+app.get("/api/ai/download_gcode", (req, res) => {
+  try {
+    const gcodeName = req.query.gcode_name;
+    if (!gcodeName) return res.status(400).json({ ok: false, error: "gcode_name required" });
+    const gcodePath = sliceAgent.getGcodePath(gcodeName);
+    if (!gcodePath || !fs.existsSync(gcodePath)) return res.status(404).json({ ok: false, error: "File not found" });
+    res.download(gcodePath, gcodeName);
+  } catch (e) {
+    res.status(500).json({ ok: false, error: aiErrMsg(e) });
+  }
+});
+
 app.get("/api/ai/optimize_gcode.js", async (req, res) => {
   const cb = req.query.cb || "callback";
   try {
@@ -1229,6 +1241,22 @@ app.get("/api/ai/optimize_gcode.js", async (req, res) => {
     res.send(`${cb}(${JSON.stringify({ ok: true, ...result })});`);
   } catch (e) {
     log("ERROR", `AI Lab optimize_gcode error: ${aiErrMsg(e)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+app.get("/api/ai/convert_gcode.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const gcodeName = req.query.gcode_name;
+    if (!gcodeName) throw new Error("gcode_name parameter required");
+    const result = sliceAgent.convertGcode(gcodeName);
+    log("INFO", `AI Lab: gcode converted: ${gcodeName} → ${result.converted_gcode_name}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, ...result })});`);
+  } catch (e) {
+    log("ERROR", `AI Lab convert_gcode error: ${aiErrMsg(e)}`);
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
   }

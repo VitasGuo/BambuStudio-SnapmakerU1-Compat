@@ -11,7 +11,7 @@
 #1 跨厂商继承不支持 | #2 filament_list 加载顺序 | #3 PowerShell JSON 格式错误 | #4 AppConfig filaments 缓存 | #5 compatible_printers_condition | #6 厂商匹配检查 | #7 删除 models 段 | #8 Copy-Item 嵌套 | #9 user/default 残留 | #10 conf 写入时机 | #11 filament_vendor 缺失 | #20 只看 @U1 不够 | #21 Orca GitHub 过时
 
 ### G-code 与打印流程
-#12 换色温度不够停机 | #13 auxiliary_fan=0 | #14 enable_pre_heating=0 | #15 preheat delta 符号 | #16 ooze_prevention 与擦料塔互斥 | #22 retract_length_toolchange | #23 Support PLA-PETG 继承错误 | #24 required_nozzle_HRC | #55 G-code 布尔参数格式 | #103 设备面板不识别 BambuStudio gcode | #105 打印层进度不显示
+#12 换色温度不够停机 | #13 auxiliary_fan=0 | #14 enable_pre_heating=0 | #15 preheat delta 符号 | #16 ooze_prevention 与擦料塔互斥 | #22 retract_length_toolchange | #23 Support PLA-PETG 继承错误 | #24 required_nozzle_HRC | #55 G-code 布尔参数格式 | #103 设备面板不识别 BambuStudio gcode | #105 打印层进度不显示 | #116 格式检测误判 OrcaSlicer
 
 ### 耗材参数
 #17 跨材料基类参数缺失 | #18 Snapmaker 基础耗材缺覆盖 | #19 filament_type 缺失
@@ -899,3 +899,10 @@
 1. `replace_speed` 中添加 mm/s → mm/min 自动转换：如果 F 值 < 1000（典型打印速度 16-500 mm/s 对应 960-30000 mm/min，< 1000 几乎不可能是 mm/min），视为 mm/s 并乘以 60
 2. 改善 AI prompt：在 `optimize_gcode.md` 和 `optimizeGcode` 的 `taskInstructions` 中明确标注"G-code 速度单位为 mm/min（不是 mm/s）"，给出换算示例（F30000 = 500 mm/s）
 3. 添加匹配结果日志：成功时记录匹配次数，失败时记录 WARN
+
+---
+
+#116 ✅
+**现象**：G-code 转换格式检测错误——OrcaSlicer 生成的 gcode 被标记为 `[Bambu]` 格式，转换时报"Already OrcaSlicer format (contains PRINT_START)"
+**根因**：格式检测使用 BambuStudio 专有命令标记（`MOVE_TO_DISCARD_FILAMENT_POSITION`、`ROUGHLY_CLEAN_NOZZLE`、`SM_PRINT_EXTRUDER_PREHEAT` 等），但 OrcaSlicer U1 gcode 也包含这些命令（因为 U1 的 Start G-code 模板中定义了它们）。对比两个 gcode 发现真正的区分标志是层标记格式：BambuStudio 用 `; FEATURE:`（13193 处），OrcaSlicer 用 `;TYPE:`（9958 处），两者互斥
+**解决方案**（v5.29.1）：格式检测改用 `; FEATURE:` vs `;TYPE:` 判断——BambuStudio gcode 只含 `; FEATURE:` 不含 `;TYPE:`，OrcaSlicer gcode 只含 `;TYPE:` 不含 `; FEATURE:`。这是最可靠的区分方法
