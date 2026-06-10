@@ -70,7 +70,7 @@
 | 文件 | 说明 |
 |------|------|
 | `bridge-node/server.js` | Express HTTP/WebSocket 代理服务器 |
-| `bridge-node/slice_agent.js` | AI Lab 核心：G-code 优化引擎 + Workspace 系统 |
+| `bridge-node/slice_agent.js` | AI Lab 核心：G-code 优化引擎 + G-code 转换引擎 + Workspace 系统 |
 | `bridge-node/dialog.js` | 跨平台原生打印确认对话框 |
 | `bridge-node/package.json` | Node.js 依赖声明 |
 | `bridge-node/workspace/` | AI Agent Workspace（Soul/Knowledge/Skills/Memory Markdown） |
@@ -172,7 +172,7 @@ Snapmaker U1 (Moonraker + Klipper)
 | 打印控制 | ✅ 开始/暂停/恢复/取消 | ✅ 完整 Klipper |
 | 中英文 | ✅ | ❌ |
 | 调试日志 | ✅ Debug 面板 | ❌ |
-| AI 实验室 | ✅ G-code 优化 + 打印问答 | ❌ |
+| AI 实验室 | ✅ G-code 优化 + 转换 + 打印助手 | ❌ |
 
 ---
 
@@ -182,7 +182,7 @@ Snapmaker U1 (Moonraker + Klipper)
 - **打印机自动检测**：Bridge 首次启动时通过 mDNS 自动检测。失败时可在浏览器打开 `http://127.0.0.1:13628` 手动配置
 - **多色打印**：BambuStudio 支持多色切片，U1 的 4 工具头换色机制可正常工作
 - **耗材选择**：在 BambuStudio 中手动选择与 U1 工具头实际装载一致的耗材预设
-- **⚠️ 设备面板直接打印限制**：BambuStudio 生成的 gcode 在 U1 设备触摸面板上直接打印时提示"未识别的gcode类型"（闭源触摸屏固件检查 EXECUTABLE_BLOCK），请通过 WebUI 打印
+- **⚠️ 设备面板直接打印限制**：BambuStudio 生成的 gcode 在 U1 设备触摸面板上直接打印时提示"未识别的gcode类型"（闭源触摸屏固件检查 `;TYPE:` 层标记），可通过 AI Lab 的 **G-code 转换** 功能将 BambuStudio gcode 转换为 OrcaSlicer 兼容格式后再上传，或通过 WebUI 打印
 
 ---
 

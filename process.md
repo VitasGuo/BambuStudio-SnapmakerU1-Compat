@@ -17,7 +17,7 @@
 - Fluidd 集成（侧栏一键切换）
 - 中英文切换
 - About 页面（使用说明 + 版本更新检测）
-- AI 实验室（LLM 辅助切片：上传模型 → AI切片(CLI几何+AI策略) → AI审查 → 上传打印机，Workspace Markdown 系统，高级非平面切片）
+- AI 实验室（G-code 优化 + G-code 转换 + 打印助手浮动窗口，Workspace Markdown 系统）
 
 ### ✅ 打印流程（对齐 OrcaSlicer）
 1. `SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=x MAP_EXTRUDER=y` — 设置映射
@@ -33,7 +33,7 @@
 - 用户可手动选择映射
 
 ### ❌ 已知限制
-1. **设备面板直接打印 BambuStudio gcode**：闭源触摸屏固件检查 EXECUTABLE_BLOCK，提示"未识别的gcode类型"。只能通过 WebUI 打印。见 traps.md #103
+1. **设备面板直接打印 BambuStudio gcode**：闭源触摸屏固件检查 `;TYPE:` 层标记（BambuStudio 用 `; FEATURE:`），提示"未识别的gcode类型"。可通过 AI Lab G-code 转换功能解决，或通过 WebUI 打印。见 traps.md #103
 2. **旧 gcode 无层进度**：`layer_change_gcode` 修复只影响新切片的 gcode，旧文件需重新切片。见 traps.md #105
 
 ### 📝 下一步

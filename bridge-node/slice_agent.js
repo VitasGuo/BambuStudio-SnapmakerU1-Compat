@@ -1,7 +1,7 @@
 /**
  * BambuStudio Bridge AI Lab — Slice Agent 核心模块
- * 从 VoxelFlow web/slice_agent.js 提取，用于 BambuStudio Bridge AI Lab 模块
- * 移除了 AGENT_TOOLS、AGENT_RESOURCES、executeAgentPlan、TOOL_EXECUTORS、estimate_print、query_filaments/select_filaments
+ * 功能：G-code 优化引擎 + G-code 转换引擎（BambuStudio→OrcaSlicer 兼容）+ Workspace 系统
+ * 从 VoxelFlow web/slice_agent.js 提取，移除了 AGENT_TOOLS/AGENT_RESOURCES/executeAgentPlan 等
  */
 
 const { spawn } = require("child_process");
