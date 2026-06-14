@@ -1,11 +1,11 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.29.3 Installer"
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.30.0 Installer"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.29.3" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.30.0" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -458,6 +458,26 @@ if (Test-Path $vbsPath) {
         }
     } catch {
         Write-Host "  [!] Failed to start Bridge: $_" -ForegroundColor Yellow
+    }
+
+    # Register watchdog scheduled task (auto-restart bridge if it crashes)
+    try {
+        $watchdogSrc = Join-Path $bridgeDst "watchdog.ps1"
+        if (Test-Path $watchdogSrc) {
+            $taskName = "BambuStudio Bridge Watchdog"
+            $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+            if ($existingTask) {
+                Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+            }
+            $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$watchdogSrc`""
+            $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes 2)
+            $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 1)
+            $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType S4U -RunLevel Limited
+            Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Settings $settings -Principal $principal -Description "Auto-restart BambuStudio Bridge if it crashes" -Force | Out-Null
+            Write-Host "  Registered watchdog task (checks every 2 min)" -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "  [!] Watchdog task registration failed: $_" -ForegroundColor Yellow
     }
 } else {
     Write-Host "  Bridge launcher not found, skipping auto-start" -ForegroundColor Yellow

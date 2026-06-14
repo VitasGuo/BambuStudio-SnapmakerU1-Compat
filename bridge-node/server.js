@@ -8,7 +8,7 @@ const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.29.3";
+const BRIDGE_VERSION = "5.30.0";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -73,6 +73,14 @@ function log(level, msg) {
 
 process.on("exit", () => {
   try { logStream.end(); } catch (_) {}
+});
+
+// Prevent bridge crash from unhandled errors — log and keep running
+process.on("uncaughtException", (err) => {
+  log("ERROR", `Uncaught exception (bridge staying alive): ${err.message}\n${err.stack}`);
+});
+process.on("unhandledRejection", (reason) => {
+  log("ERROR", `Unhandled rejection (bridge staying alive): ${reason}`);
 });
 
 function moonrakerHeaders() {

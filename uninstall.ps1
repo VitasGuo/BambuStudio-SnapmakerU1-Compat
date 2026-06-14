@@ -130,6 +130,13 @@ if (Test-Path $shortcutPath) {
     Write-Host "  Removed startup shortcut" -ForegroundColor Green
 }
 
+# Remove watchdog scheduled task
+$watchdogTask = Get-ScheduledTask -TaskName "BambuStudio Bridge Watchdog" -ErrorAction SilentlyContinue
+if ($watchdogTask) {
+    Unregister-ScheduledTask -TaskName "BambuStudio Bridge Watchdog" -Confirm:$false
+    Write-Host "  Removed watchdog scheduled task" -ForegroundColor Green
+}
+
 if ($hasBridge) {
     try {
         Remove-Item "$bambuDir\bridge" -Recurse -Force

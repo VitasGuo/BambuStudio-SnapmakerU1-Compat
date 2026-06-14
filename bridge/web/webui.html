@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <title>BambuStudio Bridge</title>
-<link rel="stylesheet" href="ailab.css?v=5.29.3">
+<link rel="stylesheet" href="ailab.css?v=5.30.0">
 <style>
 :root{--bg:#f0f2f5;--panel:#fff;--panel2:#f5f5f5;--border:#e0e0e0;--primary:#2196f3;--primary-light:#64b5f6;--danger:#f44336;--success:#4caf50;--warn:#ff9800;--text:#333;--text2:#666;--text3:#999;--radius:10px}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -640,7 +640,7 @@ layers:'layers',online:'Online',reconnecting:'Reconnecting...',ws_error:'WS Erro
 st_working:'Working',st_xyz_cal:'XYZ Calibrating',st_bed_cal:'Heated Bed Calibrating',st_flow_cal:'Flow Calibrating',st_vib_cal:'Vibration Compensation Calibrating',st_updating:'Updating',st_spring:'Manual Adjusting Spring Screw',st_auto_load:'Auto Loading',st_unloading:'Unloading',st_manual_load:'Manual Loading',st_dock_cal:'Docking Coordinate Calibrating',st_homing:'Homing Calibration...',st_offline:'Offline',
 st_homing2:'Homing',st_pei_detect:'PEI Sheet Placement Detection...',st_resuming:'Resuming printing...',st_paused:'Paused',st_resuming2:'Resuming print...',st_auto_reload:'Auto-reloading filament...',st_check_tool:'Checking toolheads...',st_auto_load2:'Auto-loading filament...',st_preextrude:'Pre-extruding...',st_auto_unload:'Auto-unloading filament...',st_bed_detect:'Bed detecting...',st_clean_nozzle:'Cleaning Nozzle',st_cool_nozzle:'Cooling Nozzle...',st_cal_toolhead:'Calibrating Toolhead',st_wiping:'Wiping Nozzle...',st_leveling:'Leveling progress...',st_cal_flow:'Calibrating extrusion flow',st_cal_vib:'Calibrating vibration compensation...',st_reset_pos:'Reset to Initial Position',st_sample_height:'Sampling to Calculate Reference Height',st_adjust_wheels:'Adjust Leveling Wheels',st_recheck:'Re-checking reference points...',st_extruder_dock_cal:'Extruder Docking Calibrating...',st_check_park:'Checking Extruder Park...',st_check_pick:'Checking Extruder Pick...',
 bridge_offline:'Bridge Offline',bridge_offline_msg:'Bridge server is not running. Please restart it or use Fluidd mode.',
-restart_bridge:'Restart Bridge',open_fluidd:'Open Fluidd',
+restart_bridge:'Restart Bridge',open_fluidd:'Open Fluidd',restart_failed:'Restart failed. Bridge process may have crashed.',restart_manual:'Bridge process appears to have crashed and cannot be restarted from WebUI.\n\nPlease run the following command in PowerShell:\nwscript "$env:APPDATA\\BambuStudio-Bridge\\start-hidden.vbs"\n\nOr restart BambuStudio.',
 file_name:'File',progress:'Progress',elapsed:'Elapsed',remaining:'Remaining',
 calibrating:'Calibrating...',printer_busy:'Printer is busy',
 no_pending:'No pending print',print_started:'Print started',print_failed:'Print failed',
@@ -678,7 +678,7 @@ layers:'层',online:'已连接',reconnecting:'重连中...',ws_error:'连接错�
 st_working:'工作中',st_xyz_cal:'XYZ 校准中',st_bed_cal:'热床校准中',st_flow_cal:'流量校准中',st_vib_cal:'振动补偿校准中',st_updating:'更新中',st_spring:'手动调节弹簧螺丝',st_auto_load:'自动装料中',st_unloading:'卸料中',st_manual_load:'手动装料中',st_dock_cal:'挤出头对接校准中',st_homing:'回原点校准中...',st_offline:'离线',
 st_homing2:'回原点',st_pei_detect:'PEI 板检测中...',st_resuming:'恢复打印中...',st_paused:'已暂停',st_resuming2:'恢复打印中...',st_auto_reload:'自动重装耗材中...',st_check_tool:'检查喷头中...',st_auto_load2:'自动装料中...',st_preextrude:'预挤出中...',st_auto_unload:'自动卸料中...',st_bed_detect:'热床检测中...',st_clean_nozzle:'清洁喷嘴',st_cool_nozzle:'冷却喷嘴中...',st_cal_toolhead:'校准喷头',st_wiping:'擦拭喷嘴中...',st_leveling:'调平进行中...',st_cal_flow:'校准挤出流量',st_cal_vib:'校准振动补偿中...',st_reset_pos:'复位到初始位置',st_sample_height:'采样计算参考高度',st_adjust_wheels:'调节调平旋钮',st_recheck:'重新检查参考点...',st_extruder_dock_cal:'挤出头对接校准中...',st_check_park:'检查挤出头停靠位...',st_check_pick:'检查挤出头取放位...',
 bridge_offline:'Bridge 离线',bridge_offline_msg:'Bridge 服务器未运行，请重启或使用 Fluidd 模式。',
-restart_bridge:'重启 Bridge',open_fluidd:'打开 Fluidd',
+restart_bridge:'重启 Bridge',open_fluidd:'打开 Fluidd',restart_failed:'重启失败，Bridge 进程可能已崩溃。',restart_manual:'Bridge 进程可能已崩溃，无法通过 WebUI 重启。\n\n请在 PowerShell 中运行：\nwscript "$env:APPDATA\\BambuStudio-Bridge\\start-hidden.vbs"\n\n或重启 BambuStudio。',
 file_name:'文件',progress:'进度',elapsed:'已用时间',remaining:'剩余时间',
 calibrating:'校准中...',printer_busy:'打印机工作中',
 no_pending:'无待打印任务',print_started:'打印已开始',print_failed:'打印失败',
@@ -1143,10 +1143,17 @@ var bar=$('offlineBar');
 if(bar){if(show)bar.classList.add('show');else bar.classList.remove('show');}
 }
 function restartBridge(){
-bridgeGET('/api/bridge/restart',function(d){
-if(d&&d.ok){showOfflineBar(false);setTimeout(function(){location.reload();},2000);}
-else{alert('Restart failed. Please run reinstall.ps1 manually.');}
-});
+  // Try JSONP first (works when bridge is alive but WS disconnected)
+  bridgeGET('/api/bridge/restart',function(d){
+    if(d&&d.ok){showOfflineBar(false);setTimeout(function(){location.reload();},2000);}
+    else{alert(t('restart_failed'));}
+  });
+  // If still offline after 3s, bridge process is likely dead — show manual instructions
+  setTimeout(function(){
+    if($('offlineBar')&&$('offlineBar').classList.contains('show')){
+      alert(t('restart_manual'));
+    }
+  },5000);
 }
 function openFluidd(){openExternal(window.location.origin+'/fluidd/');}
 
@@ -1287,7 +1294,7 @@ function toggleDebugAuto(){
 }
 
 </script>
-<script src="ailab.js?v=5.29.3"></script>
+<script src="ailab.js?v=5.30.0"></script>
 </body>
 </html>
 

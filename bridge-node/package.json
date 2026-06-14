@@ -1,6 +1,6 @@
 {
   "name": "bambustudio-bridge",
-  "version": "5.29.3",
+  "version": "5.30.0",
   "description": "BambuStudio Bridge for Klipper printers",
   "main": "server.js",
   "scripts": {
