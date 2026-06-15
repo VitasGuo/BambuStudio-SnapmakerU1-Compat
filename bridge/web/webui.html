@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <title>BambuStudio Bridge</title>
-<link rel="stylesheet" href="ailab.css?v=5.30.0">
+<link rel="stylesheet" href="ailab.css?v=5.31.0">
 <style>
 :root{--bg:#f0f2f5;--panel:#fff;--panel2:#f5f5f5;--border:#e0e0e0;--primary:#2196f3;--primary-light:#64b5f6;--danger:#f44336;--success:#4caf50;--warn:#ff9800;--text:#333;--text2:#666;--text3:#999;--radius:10px}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -247,6 +247,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-u
 <div class="nav-item" data-tab="fluidd" onclick="switchTab('fluidd')" title="Fluidd Console"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><polyline points="16,9 11,14 16,19"/><line x1="8" y1="18" x2="8" y2="18"/></svg><span data-i18n="fluidd_console">Console</span></div>
 <div class="nav-item" data-tab="debug" onclick="switchTab('debug')" title="Debug Logs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg><span data-i18n="debug_logs">Debug</span></div>
 <div class="nav-item" data-tab="ailab" onclick="switchTab('ailab')" title="AI Lab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6v6H9z"/><path d="M3 9h6v6H3z"/><path d="M15 9h6v6h-6z"/><path d="M9 15h6v6H9z"/></svg><span>AI Lab</span></div>
+<div class="nav-item" data-tab="gcvt" onclick="switchTab('gcvt')" title="G-code 转换"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 1l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 23l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg><span data-i18n="gcode_convert">转换</span></div>
 <div class="nav-item" data-tab="about" onclick="switchTab('about')" title="About"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><span data-i18n="about">About</span></div>
 </div>
 </div>
@@ -553,6 +554,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-u
 </div>
 </div>
 <div id="ailab-content" style="display:none;width:100%;height:100%;overflow:hidden;"></div>
+<div id="gcvt-content" style="display:none;width:100%;height:100%;overflow:hidden;"></div>
 
 <script>
 document.addEventListener('click',function(e){
@@ -654,7 +656,8 @@ about_github:'View on GitHub',about_update_hint:'Check GitHub for the latest ver
 about_repo_url:'Repository URL:',
 update_checking:'Checking for updates...',update_check_fail:'Update check failed',update_available:'New version v{ver} available!',update_manual:'Please visit the repository URL above to download',update_latest:'You are on the latest version',
 about_author:'Author',about_ai:'Development Assistant',about_ai_text:'This project was developed with the assistance of ByteDance\'s Solo, using Zhipu AI\'s GLM-5.1.',
-about_license:'Open Source License',about_license_text:'This project is licensed under AGPL-3.0. It references or incorporates code from the following open-source projects:'
+about_license:'Open Source License',about_license_text:'This project is licensed under AGPL-3.0. It references or incorporates code from the following open-source projects:',
+gcode_convert:'Convert'
 },
 zh:{
 camera:'监控',control:'控制',print_job:'打印任务',filament:'耗材',
@@ -692,7 +695,8 @@ about_github:'在 GitHub 上查看',about_update_hint:'前往 GitHub 获取最�
 about_repo_url:'仓库地址：',
 update_checking:'正在检查更新...',update_check_fail:'更新检查失败',update_available:'发现新版本 v{ver}！',update_manual:'请访问上方仓库地址下载更新',update_latest:'当前已是最新版本',
 about_author:'作者',about_ai:'开发助手',about_ai_text:'本项目使用字节跳动旗下的 Solo，配合智谱的 GLM-5.1 开发。',
-about_license:'开源协议',about_license_text:'本项目基于 AGPL-3.0 协议开源。参考或使用了以下开源项目的代码：'
+about_license:'开源协议',about_license_text:'本项目基于 AGPL-3.0 协议开源。参考或使用了以下开源项目的代码：',
+gcode_convert:'转换'
 }
 };
 function t(k){return(I18N[curLang]||I18N.en)[k]||I18N.en[k]||k;}
@@ -722,9 +726,11 @@ function switchTab(tab){
   $('debug-content').style.display=tab==='debug'?'flex':'none';
   $('about-content').style.display=tab==='about'?'block':'none';
   $('ailab-content').style.display=tab==='ailab'?'block':'none';
+  $('gcvt-content').style.display=tab==='gcvt'?'block':'none';
   if(tab==='debug') loadDebugLogs();
   if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.19.0';checkUpdate();}
   if(tab==='ailab') aiLoadConfig();
+  if(tab==='gcvt') gcvtInit();
 }
 
 var camRpcId=null;
@@ -1294,7 +1300,8 @@ function toggleDebugAuto(){
 }
 
 </script>
-<script src="ailab.js?v=5.30.0"></script>
+<script src="ailab.js?v=5.31.0"></script>
+<script src="gcvt.js?v=5.31.0"></script>
 </body>
 </html>
 

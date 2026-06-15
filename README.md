@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.30.0
+# Snapmaker U1 BambuStudio 兼容包 v5.31.0
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -76,7 +76,8 @@
 | `bridge-node/workspace/` | AI Agent Workspace（Soul/Knowledge/Skills/Memory Markdown） |
 | `bridge/web/webui.html` | WebUI 设备控制面板 |
 | `bridge/web/ailab.css` | AI Lab 样式 |
-| `bridge/web/ailab.js` | AI Lab 前端逻辑 |
+| `bridge/web/ailab.js` | AI Lab 前端逻辑（G-code 优化 + 打印助手） |
+| `bridge/web/gcvt.js` | G-code 转换前端逻辑（独立标签页） |
 
 ### 目录结构
 
@@ -106,6 +107,7 @@ BambuStudio-SnapmakerU1-Compat/
         ├── webui.html              # 设备控制面板
         ├── ailab.css               # AI Lab 样式
         ├── ailab.js                # AI Lab 前端逻辑
+        ├── gcvt.js                 # G-code 转换前端逻辑
         └── dist/                   # Fluidd 前端（可选）
 ```
 
@@ -172,7 +174,8 @@ Snapmaker U1 (Moonraker + Klipper)
 | 打印控制 | ✅ 开始/暂停/恢复/取消 | ✅ 完整 Klipper |
 | 中英文 | ✅ | ❌ |
 | 调试日志 | ✅ Debug 面板 | ❌ |
-| AI 实验室 | ✅ G-code 优化 + 转换 + 打印助手 | ❌ |
+| AI 实验室 | ✅ G-code 优化 + 打印助手 | ❌ |
+| G-code 转换 | ✅ BambuStudio→OrcaSlicer | ❌ |
 
 ---
 
@@ -182,7 +185,7 @@ Snapmaker U1 (Moonraker + Klipper)
 - **打印机自动检测**：Bridge 首次启动时通过 mDNS 自动检测。失败时可在浏览器打开 `http://127.0.0.1:13628` 手动配置
 - **多色打印**：BambuStudio 支持多色切片，U1 的 4 工具头换色机制可正常工作
 - **耗材选择**：在 BambuStudio 中手动选择与 U1 工具头实际装载一致的耗材预设
-- **⚠️ 设备面板直接打印限制**：BambuStudio 生成的 gcode 在 U1 设备触摸面板上直接打印时提示"未识别的gcode类型"（闭源触摸屏固件检查 `;TYPE:` 层标记），可通过 AI Lab 的 **G-code 转换** 功能将 BambuStudio gcode 转换为 OrcaSlicer 兼容格式后再上传，或通过 WebUI 打印
+- **⚠️ 设备面板直接打印限制**：BambuStudio 生成的 gcode 在 U1 设备触摸面板上直接打印时提示"未识别的gcode类型"（闭源触摸屏固件检查 `;TYPE:` 层标记），可通过 WebUI 侧栏"转换"标签页的 **G-code 转换** 功能将 BambuStudio gcode 转换为 OrcaSlicer 兼容格式后再上传，或通过 WebUI 打印
 
 ---
 
@@ -207,6 +210,7 @@ A: v5.18.1 已修复此问题，安装脚本不再删除用户自定义预设。
 
 ## 版本历史
 
+- **v5.31.0** (2026-06-15) - G-code 转换独立为侧栏标签页（从 AI Lab 拆分）
 - **v5.30.0** (2026-06-10) - Bridge 看门狗（崩溃自动重启）+ uncaughtException 防护
 - **v5.29.3** (2026-06-10) - G-code 转换 EXEC 块完善（温度/清洗流程/格式检测修复）
 - **v5.29.0** (2026-06-10) - G-code 转换功能（BambuStudio→OrcaSlicer 兼容）+ 上传字段名修复

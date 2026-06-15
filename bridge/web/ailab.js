@@ -1,5 +1,5 @@
 // ============================================================
-// AI Lab — G-code Optimization + Conversion + Print QA Assistant
+// AI Lab — G-code Optimization + Print QA Assistant
 // Injected into webui.html #ailab-content
 // ============================================================
 
@@ -8,8 +8,6 @@ var aiCfg={provider:'local',model:'',apiKey:'',customBaseUrl:''};
 var aiProviders={};
 var aiOptState={originalGcodeName:null,optimizedGcodeName:null};
 var aiOptUploadedName=null;
-var aiCvtState={originalGcodeName:null,convertedGcodeName:null};
-var aiCvtUploadedName=null;
 var aiOptOrigLines=[];
 var aiQAHistory=[];
 
@@ -25,17 +23,12 @@ var aiQAHistory=[];
 <div class="panel" style="margin-bottom:0;border-radius:0;border-bottom:1px solid var(--border);flex-shrink:0;">\
 <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;flex-wrap:wrap;">\
 \
-<!-- Main mode tabs -->\
-<div style="display:flex;gap:2px;">\
-<button class="ai-opt-tab active" id="aiMainTabOpt" onclick="aiSwitchMainTab(\'optimize\')">G-code 优化</button>\
-<button class="ai-opt-tab" id="aiMainTabCvt" onclick="aiSwitchMainTab(\'convert\')">G-code 转换</button>\
-</div>\
-\
-<!-- Optimize panel controls -->\
-<div id="aiOptControls" style="display:flex;align-items:center;gap:0;flex-wrap:wrap;">\
+<!-- Feature title -->\
+<span style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;">G-code 优化</span>\
+<div style="width:1px;height:20px;background:var(--border);flex-shrink:0;"></div>\
 \
 <!-- Source tabs -->\
-<div style="display:flex;gap:2px;margin-left:8px;padding-left:8px;border-left:1px solid var(--border);">\
+<div style="display:flex;gap:2px;">\
 <button class="ai-opt-tab active" id="aiOptTabLocal" onclick="aiOptSwitchTab(\'local\')">本地文件</button>\
 <button class="ai-opt-tab" id="aiOptTabPrinter" onclick="aiOptSwitchTab(\'printer\')">打印机</button>\
 <button class="ai-opt-tab" id="aiOptTabUpload" onclick="aiOptSwitchTab(\'upload\')">上传</button>\
@@ -66,42 +59,17 @@ var aiQAHistory=[];
 <button onclick="aiOptimizeGcode()" class="ai-btn ai-btn-primary" id="aiOptBtn" style="padding:5px 14px;font-size:13px;">优化</button>\
 <button onclick="aiNewProject()" class="ai-btn ai-btn-outline" style="font-size:12px;padding:4px 10px;">\
 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>新项目</button>\
-</div>\
-\
-<!-- Convert panel controls -->\
-<div id="aiCvtControls" style="display:none;align-items:center;gap:0;flex-wrap:wrap;">\
-\
-<!-- Source tabs -->\
-<div style="display:flex;gap:2px;margin-left:8px;padding-left:8px;border-left:1px solid var(--border);">\
-<button class="ai-opt-tab active" id="aiCvtTabLocal" onclick="aiCvtSwitchTab(\'local\')">本地文件</button>\
-<button class="ai-opt-tab" id="aiCvtTabUpload" onclick="aiCvtSwitchTab(\'upload\')">上传</button>\
-</div>\
-\
-<!-- Local file selector -->\
-<div id="aiCvtLocalPanel" style="display:flex;align-items:center;margin-left:8px;">\
-<select id="aiCvtGcodeSelect" onchange="if(this.value)aiCvtLoadOriginal(this.value)" style="height:32px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:13px;background:var(--panel);color:var(--text);min-width:160px;">\
-<option value="">-- 选择 G-code --</option></select>\
-</div>\
-\
-<!-- Upload panel -->\
-<div id="aiCvtUploadPanel" style="display:none;align-items:center;gap:6px;margin-left:8px;">\
-<button onclick="document.getElementById(\'aiCvtFileInput\').click()" style="height:32px;padding:0 12px;border:1px dashed var(--border);border-radius:6px;background:var(--panel);color:var(--text2);cursor:pointer;font-size:12px;">选择文件</button>\
-<input type="file" id="aiCvtFileInput" accept=".gcode,.gco" style="display:none" onchange="aiCvtUploadFile(this)">\
-<span id="aiCvtUploadInfo" style="display:none;font-size:12px;color:var(--success);"></span>\
-</div>\
-\
-<span class="spacer" style="flex:1;"></span>\
-\
-<!-- Actions -->\
-<button onclick="aiConvertGcode()" class="ai-btn ai-btn-primary" id="aiCvtBtn" style="padding:5px 14px;font-size:13px;">转换</button>\
-</div>\
-\
-<!-- Shared actions -->\
 <button onclick="aiOpenGcodeFolder()" class="ai-btn ai-btn-outline" style="font-size:12px;padding:4px 10px;" title="打开 G-code 文件夹">\
 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>文件夹</button>\
 <button onclick="showAiConfig()" class="ai-btn ai-btn-outline" style="font-size:12px;padding:4px 10px;">\
 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>配置</button>\
 </div>\
+</div>\
+\
+<!-- Info banner -->\
+<div style="padding:8px 16px;background:rgba(33,150,243,.06);border-bottom:1px solid rgba(33,150,243,.12);flex-shrink:0;font-size:12px;color:var(--text2);line-height:1.6;">\
+<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>\
+基于 LLM 分析 G-code，诊断打印质量问题（如速度过快、回抽不足、温度不当等）并生成优化补丁。需要配置 LLM 连接后使用。\
 </div>\
 \
 <!-- Optimize progress bar -->\
@@ -124,20 +92,8 @@ var aiQAHistory=[];
 <div id="aiOptSummary" style="font-size:12px;color:var(--text2);margin-top:2px;line-height:1.5;display:none;"></div>\
 </div>\
 \
-<!-- Convert result bar -->\
-<div id="aiCvtResult" style="display:none;padding:6px 16px;background:rgba(76,175,80,.06);border-bottom:1px solid rgba(76,175,80,.15);flex-shrink:0;">\
-<div style="display:flex;align-items:center;gap:14px;font-size:12px;flex-wrap:wrap;">\
-<span style="color:var(--success);font-weight:600;">转换完成</span>\
-<span id="aiCvtInfo" style="color:var(--text2);"></span>\
-<span style="flex:1;min-width:8px;"></span>\
-<span id="aiCvtConversions" style="display:flex;gap:6px;flex-wrap:wrap;"></span>\
-<a id="aiCvtDownload" style="display:none;font-size:11px;padding:3px 10px;" class="ai-btn ai-btn-outline" download>下载</a>\
-<button id="aiCvtUploadBtn" style="display:none;font-size:11px;padding:3px 10px;" onclick="aiCvtUploadToPrinter()" class="ai-btn ai-btn-primary">上传到打印机</button>\
-</div>\
-</div>\
-\
-<!-- Optimize: Left-Right G-code panels -->\
-<div id="aiOptPanel" style="flex:1;display:flex;overflow:hidden;min-height:0;">\
+<!-- Left-Right G-code panels -->\
+<div style="flex:1;display:flex;overflow:hidden;min-height:0;">\
 <!-- Left: Original -->\
 <div style="flex:1;display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border);">\
 <div style="padding:5px 12px;font-size:11px;font-weight:600;color:var(--text3);background:var(--panel2);border-bottom:1px solid var(--border);flex-shrink:0;">原始 G-code</div>\
@@ -149,24 +105,6 @@ var aiQAHistory=[];
 <div style="padding:5px 12px;font-size:11px;font-weight:600;color:var(--text3);background:var(--panel2);border-bottom:1px solid var(--border);flex-shrink:0;">优化后 G-code</div>\
 <div id="aiOptDiffOptimized" style="flex:1;overflow:auto;padding:6px 10px;font-size:11px;font-family:Cascadia Code,Consolas,monospace;line-height:1.55;white-space:pre;word-break:break-all;background:var(--bg);font-style:italic;">\
 <div style="text-align:center;padding:40px 20px;color:var(--text3);">优化后在此显示</div></div>\
-</div>\
-</div>\
-\
-<!-- Convert: Left-Right G-code panels -->\
-<div id="aiCvtPanel" style="flex:1;display:none;overflow:hidden;min-height:0;">\
-<div style="display:flex;flex:1;overflow:hidden;min-height:0;">\
-<!-- Left: Original -->\
-<div style="flex:1;display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border);">\
-<div style="padding:5px 12px;font-size:11px;font-weight:600;color:var(--text3);background:var(--panel2);border-bottom:1px solid var(--border);flex-shrink:0;">BambuStudio G-code</div>\
-<div id="aiCvtDiffOriginal" style="flex:1;overflow:auto;padding:6px 10px;font-size:11px;font-family:Cascadia Code,Consolas,monospace;line-height:1.55;white-space:pre;word-break:break-all;background:var(--bg);">\
-<div style="text-align:center;padding:40px 20px;color:var(--text3);">选择 BambuStudio G-code 文件后在此预览</div></div>\
-</div>\
-<!-- Right: Converted -->\
-<div style="flex:1;display:flex;flex-direction:column;min-width:0;">\
-<div style="padding:5px 12px;font-size:11px;font-weight:600;color:var(--text3);background:var(--panel2);border-bottom:1px solid var(--border);flex-shrink:0;">OrcaSlicer 兼容 G-code</div>\
-<div id="aiCvtDiffConverted" style="flex:1;overflow:auto;padding:6px 10px;font-size:11px;font-family:Cascadia Code,Consolas,monospace;line-height:1.55;white-space:pre;word-break:break-all;background:var(--bg);font-style:italic;">\
-<div style="text-align:center;padding:40px 20px;color:var(--text3);">转换后在此显示</div></div>\
-</div>\
 </div>\
 </div>\
 </div>';
@@ -371,199 +309,6 @@ function aiListGcodeFiles(){
 }
 
 // ─── Source Tab Switching ───
-// ─── Main tab switching (Optimize / Convert) ───
-function aiSwitchMainTab(mode){
-  var tabOpt=document.getElementById('aiMainTabOpt');
-  var tabCvt=document.getElementById('aiMainTabCvt');
-  var ctrlOpt=document.getElementById('aiOptControls');
-  var ctrlCvt=document.getElementById('aiCvtControls');
-  var panelOpt=document.getElementById('aiOptPanel');
-  var panelCvt=document.getElementById('aiCvtPanel');
-  var resultOpt=document.getElementById('aiOptResult');
-  var resultCvt=document.getElementById('aiCvtResult');
-  var progressOpt=document.getElementById('aiOptProgress');
-
-  if(mode==='optimize'){
-    if(tabOpt)tabOpt.className='ai-opt-tab active';
-    if(tabCvt)tabCvt.className='ai-opt-tab';
-    if(ctrlOpt)ctrlOpt.style.display='flex';
-    if(ctrlCvt)ctrlCvt.style.display='none';
-    if(panelOpt)panelOpt.style.display='flex';
-    if(panelCvt)panelCvt.style.display='none';
-    if(resultOpt)resultOpt.style.display=resultOpt.dataset.show||'none';
-    if(resultCvt)resultCvt.style.display='none';
-    if(progressOpt)progressOpt.style.display=progressOpt.dataset.show||'none';
-  } else {
-    if(tabOpt)tabOpt.className='ai-opt-tab';
-    if(tabCvt)tabCvt.className='ai-opt-tab active';
-    if(ctrlOpt)ctrlOpt.style.display='none';
-    if(ctrlCvt)ctrlCvt.style.display='flex';
-    if(panelOpt)panelOpt.style.display='none';
-    if(panelCvt)panelCvt.style.display='flex';
-    if(resultOpt)resultOpt.style.display='none';
-    if(resultCvt)resultCvt.style.display=resultCvt.dataset.show||'none';
-    if(progressOpt)progressOpt.style.display='none';
-    // Load gcode list for convert tab
-    var sel=document.getElementById('aiCvtGcodeSelect');
-    if(!sel||sel.options.length<=1)aiCvtListFiles();
-  }
-}
-
-// ─── G-code Convert: source tab switching ───
-function aiCvtSwitchTab(source){
-  ['Local','Upload'].forEach(function(s){
-    var btn=document.getElementById('aiCvtTab'+s);
-    var panel=document.getElementById('aiCvt'+s+'Panel');
-    if(btn){
-      btn.className=s.toLowerCase()===source?'ai-opt-tab active':'ai-opt-tab';
-    }
-    if(panel){
-      panel.style.display=s.toLowerCase()===source?'flex':'none';
-    }
-  });
-  if(source==='local'){
-    var sel=document.getElementById('aiCvtGcodeSelect');
-    if(!sel||sel.options.length<=1)aiCvtListFiles();
-  }
-}
-
-// ─── G-code Convert: list files ───
-function aiCvtListFiles(){
-  var sel=document.getElementById('aiCvtGcodeSelect');if(!sel)return;
-  sel.innerHTML='<option value="">-- 加载中... --</option>';
-  bridgeGET('/api/ai/list_gcode',function(d){
-    if(!d||!d.ok){
-      sel.innerHTML='<option value="">-- 加载失败 --</option>';
-      return;
-    }
-    var files=d.files||[];
-    sel.innerHTML='<option value="">-- 选择 G-code ('+files.length+') --</option>';
-    for(var i=0;i<files.length;i++){
-      var f=files[i];
-      var fname=f.filename||f.name;
-      var fsize=f.size?(f.size/1024).toFixed(1)+'KB':'';
-      var fmt=f.format==='bambu'?' [Bambu]':f.format==='orca'?' [Orca]':'';
-      var o=document.createElement('option');o.value=fname;o.textContent=fname+' ('+fsize+')'+fmt;
-      sel.appendChild(o);
-    }
-  });
-}
-
-// ─── G-code Convert: load original preview ───
-function aiCvtLoadOriginal(gcodeName){
-  aiCvtState.originalGcodeName=gcodeName;
-  aiCvtState.convertedGcodeName=null;
-  var left=document.getElementById('aiCvtDiffOriginal');
-  var right=document.getElementById('aiCvtDiffConverted');
-  if(left)left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--primary);">加载中...</div>';
-  if(right)right.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text3);">转换后在此显示</div>';
-  bridgeGET('/api/ai/read_gcode?gcode_name='+encodeURIComponent(gcodeName)+'&max_lines=200',function(d){
-    if(!d||!d.ok){
-      if(left)left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--danger);">加载失败: '+(d&&d.error||'未知错误')+'</div>';
-      return;
-    }
-    if(left)left.textContent=d.content||'';
-  });
-}
-
-// ─── G-code Convert: upload file ───
-function aiCvtUploadFile(input){
-  if(!input.files||!input.files[0])return;
-  var file=input.files[0];
-  var info=document.getElementById('aiCvtUploadInfo');
-  var fd=new FormData();fd.append('gcode',file);
-  fetch('/api/ai/upload_gcode',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(d){
-    if(d&&d.ok){
-      aiCvtUploadedName=d.gcode_name||d.name;
-      aiCvtState.originalGcodeName=d.gcode_name||d.name;
-      if(info){info.textContent=file.name+' 已上传';info.style.display='inline';}
-      // Load preview
-      aiCvtLoadOriginal(d.gcode_name||d.name);
-    } else {
-      if(info){info.textContent='上传失败: '+(d&&d.error||'未知错误');info.style.color='var(--danger)';info.style.display='inline';}
-    }
-  }).catch(function(e){
-    if(info){info.textContent='上传失败';info.style.color='var(--danger)';info.style.display='inline';}
-  });
-  input.value='';
-}
-
-// ─── G-code Convert: execute conversion ───
-function aiConvertGcode(){
-  var gcodeName=aiCvtState.originalGcodeName;
-  if(!gcodeName){
-    showAiError('请先选择一个 G-code 文件','未选择文件');
-    return;
-  }
-  var resultBar=document.getElementById('aiCvtResult');
-  if(resultBar){resultBar.style.display='none';resultBar.dataset.show='none';}
-  var btn=document.getElementById('aiCvtBtn');
-  if(btn){btn.disabled=true;btn.textContent='转换中...';}
-
-  bridgeGET('/api/ai/convert_gcode?gcode_name='+encodeURIComponent(gcodeName),function(d){
-    if(btn){btn.disabled=false;btn.textContent='转换';}
-    if(!d||!d.ok){
-      showAiError(d&&d.error||'转换失败','G-code 转换失败');
-      return;
-    }
-    aiCvtState.convertedGcodeName=d.converted_gcode_name;
-
-    // Show result bar
-    var info=document.getElementById('aiCvtInfo');
-    if(info){
-      var inf=d.info||{};
-      info.innerHTML='喷头: <b style="color:var(--primary);">'+inf.hotend_temp+'°C</b> 热床: <b style="color:var(--primary);">'+inf.bed_temp+'°C</b> 工具: <b>T'+inf.first_tool+'</b> 层数: <b>'+inf.total_layers+'</b>';
-    }
-    var convs=document.getElementById('aiCvtConversions');
-    if(convs&&d.conversions){
-      var html='';
-      var c=d.conversions;
-      if(c.exec_block)html+='<span class="ai-tag">EXEC</span>';
-      if(c.start_gcode)html+='<span class="ai-tag">Start</span>';
-      if(c.end_gcode)html+='<span class="ai-tag">End</span>';
-      if(c.layout)html+='<span class="ai-tag">布局</span>';
-      convs.innerHTML=html;
-    }
-    // Download link
-    var dl=document.getElementById('aiCvtDownload');
-    if(dl&&d.converted_gcode_name){
-      dl.href='/api/ai/download_gcode?gcode_name='+encodeURIComponent(d.converted_gcode_name);
-      dl.download=d.converted_gcode_name;dl.style.display='inline-block';
-    }
-    // Upload to printer button
-    var upBtn=document.getElementById('aiCvtUploadBtn');
-    if(upBtn)upBtn.style.display='inline-block';
-
-    if(resultBar){resultBar.style.display='block';resultBar.dataset.show='block';}
-
-    // Load converted preview
-    var right=document.getElementById('aiCvtDiffConverted');
-    if(right)right.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--primary);">加载中...</div>';
-    bridgeGET('/api/ai/read_gcode?gcode_name='+encodeURIComponent(d.converted_gcode_name)+'&max_lines=200',function(d2){
-      if(d2&&d2.ok&&right){
-        right.textContent=d2.content||'';
-        right.style.fontStyle='normal';
-      }
-    });
-  });
-}
-
-// ─── G-code Convert: upload to printer ───
-function aiCvtUploadToPrinter(){
-  var gcodeName=aiCvtState.convertedGcodeName;
-  if(!gcodeName)return;
-  var btn=document.getElementById('aiCvtUploadBtn');
-  if(btn){btn.disabled=true;btn.textContent='上传中...';}
-  bridgeGET('/api/ai/upload_to_printer?gcode_name='+encodeURIComponent(gcodeName),function(d){
-    if(btn){btn.disabled=false;btn.textContent='上传到打印机';}
-    if(d&&d.ok){
-      if(btn)btn.textContent='已上传';
-    } else {
-      showAiError(d&&d.error||'上传失败','上传到打印机失败');
-    }
-  });
-}
-
 function aiOptSwitchTab(source){
   ['Local','Printer','Upload'].forEach(function(s){
     var btn=document.getElementById('aiOptTab'+s);
@@ -680,6 +425,8 @@ function aiOptUploadFile(input){
 
 // ─── G-code Optimize ───
 function aiOptimizeGcode(){
+  // Check LLM config before optimizing
+  if(!aiCfg._hasKey&&!aiCfg.apiKey){showAiError('提示','请先配置 LLM 连接：点击 AI Lab 设置图标，填写 API Key 后保存。');return;}
   var gcodeName=aiOptState.originalGcodeName;
   if(!gcodeName){
     // Try to get from local select
@@ -986,6 +733,17 @@ function aiClearQA(){
 
 function aiSendQuestion(){
   var input=document.getElementById('qaInput');if(!input||!input.value.trim())return;
+  // Check LLM config before sending
+  if(!aiCfg._hasKey&&!aiCfg.apiKey){
+    var noKeyMsg='请先配置 LLM 连接：点击 AI Lab 设置图标，填写 API Key 后保存。';
+    var hist=document.getElementById('qaHistory');if(hist){
+      hist.innerHTML+=aiRenderChatMessage('user',input.value.trim());
+      hist.innerHTML+=aiRenderChatMessage('ai',noKeyMsg);
+      hist.scrollTop=hist.scrollHeight;
+    }
+    input.value='';
+    return;
+  }
   var q=input.value.trim();input.value='';input.disabled=true;
   var btn=document.getElementById('qaSendBtn');if(btn)btn.disabled=true;
   var hist=document.getElementById('qaHistory');if(!hist)return;

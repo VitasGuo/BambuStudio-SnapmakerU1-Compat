@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.30.0 (2026-06-10)
+## 当前版本: v5.31.0 (2026-06-15)
 
 ---
 
@@ -17,7 +17,8 @@
 - Fluidd 集成（侧栏一键切换）
 - 中英文切换
 - About 页面（使用说明 + 版本更新检测）
-- AI 实验室（G-code 优化 + G-code 转换 + 打印助手浮动窗口，Workspace Markdown 系统）
+- AI 实验室（G-code 优化 + 打印助手浮动窗口，Workspace Markdown 系统）
+- G-code 转换（独立侧栏标签页，BambuStudio→OrcaSlicer 兼容格式转换）
 
 ### ✅ 打印流程（对齐 OrcaSlicer）
 1. `SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=x MAP_EXTRUDER=y` — 设置映射
@@ -43,6 +44,14 @@
 ---
 
 ## 版本历史
+
+### v5.31.0 (2026-06-15) — G-code 转换独立为侧栏标签页
+- **G-code 转换从 AI Lab 拆分**：转换功能不需要 LLM，从 AI Lab 独立为左侧栏"转换"标签页（gcvt.js）
+- **AI Lab 简化**：移除主标签切换器，工具栏直接显示优化控件，添加"G-code 优化"功能说明
+- **新增 gcvt.js**：完全自包含的转换模块，拥有独立工具栏、diff 面板、结果栏、功能说明条
+- **新增侧栏导航项**：AI Lab 和 About 之间添加"转换"图标入口
+- **LLM 配置检查**：未配置 API Key 时优化/问答提示"请先配置 LLM 连接"
+- **功能说明条**：AI Lab 和转换页面各添加蓝色信息条说明功能用途
 
 ### v5.30.0 (2026-06-10) — Bridge 看门狗 + 崩溃防护
 - **新增看门狗**：`watchdog.ps1` 每 2 分钟检查 bridge 是否存活，崩溃自动重启（注册为 Windows 计划任务）

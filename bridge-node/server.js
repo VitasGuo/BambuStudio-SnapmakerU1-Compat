@@ -8,7 +8,7 @@ const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.30.0";
+const BRIDGE_VERSION = "5.31.0";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -257,6 +257,11 @@ app.get("/ailab.css", (req, res) => {
 });
 app.get("/ailab.js", (req, res) => {
   const p = path.join(WEB_DIR, "ailab.js");
+  if (fs.existsSync(p)) return res.sendFile(p);
+  res.status(404).end();
+});
+app.get("/gcvt.js", (req, res) => {
+  const p = path.join(WEB_DIR, "gcvt.js");
   if (fs.existsSync(p)) return res.sendFile(p);
   res.status(404).end();
 });
