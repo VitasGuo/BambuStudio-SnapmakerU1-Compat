@@ -14,3 +14,4 @@ bridge-node/test*.js
 bridge-node/diff_check*.js
 bridge-node/voxelflow.exe
 bridge-node/voxelflow
+git_push_*
