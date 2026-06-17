@@ -41,6 +41,19 @@
 1. 验证 GitHub 版本更新检测
 2. 对齐 OrcaSlicer 挤出头取出/放回功能
 
+### 🔍 代码审查待改进项（v5.31.1 审查，暂不修复）
+| # | 问题 | 重要性 | 必要性 | 说明 |
+|---|------|--------|--------|------|
+| 1 | node-fetch v2 停止维护 | 中 | 中 | 9 处 `timeout:` 选项是 v2 专有 API，升级 v3 需改为 `AbortController`。当前无已知安全漏洞，未来版本统一处理 |
+| 2 | 无自动化测试 | 中 | 中 | 核心逻辑（patchGcode 12 种操作、convertGcode 格式检测+EXEC 重组、CIEDE2000 颜色匹配）缺乏测试保护。建议优先为 patchGcode + convertGcode 添加测试 |
+| 3 | knowledge.md 全量注入 system prompt | 中 | 中 | 1254 行全量注入，每次 AI 调用消耗约 4000-6000 tokens。可优化为按技能按需注入相关段落 |
+| 4 | JSONP 错误处理薄弱 | 中 | 低 | `<script>` 标签加载时服务端 500 或超时只能靠 timeout 回调，用户看到"未知错误"。受限于 BambuStudio WebView 限制，改造成本高 |
+| 5 | API Key 通过 GET URL query 传递 | 低 | 低 | optimize_gcode 前端传了 apiKey 但后端未读取（server.js:1251 直接用 aiConfig），去掉前端 ailab.js:452 一行即可。本地工具泄露面极小 |
+| 6 | slice_agent.js 单文件 2880 行 | 低 | 低 | 代码组织偏好，非 bug。拆分引入大量 diff 增加回归风险，已稳定迭代至 v5.31.1 |
+| 7 | API Key 明文存储 | 低 | 低 | 配置在 `%APPDATA%\BambuStudio-Bridge\bridge_config.json`，本地单用户工具，攻击者能读此文件已能做更多事 |
+| 8 | install.ps1 / reinstall.ps1 80% 代码重复 | 低 | 低 | 两个脚本独立运行，重复不影响功能。提取公共模块增加 PowerShell 复杂度 |
+| 9 | patchGcodeLayout 嵌套在请求处理函数内 | 低 | 低 | server.js:730-765，代码组织问题，不影响功能 |
+
 ---
 
 ## 版本历史
