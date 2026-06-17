@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.31.0 (2026-06-15)
+## 当前版本: v5.31.1 (2026-06-17)
 
 ---
 
@@ -44,6 +44,10 @@
 ---
 
 ## 版本历史
+
+### v5.31.1 (2026-06-17) — 代码审查修复：版本号一致性 + skills 文档命名
+- **版本号一致性修复**：uninstall.ps1（v5.18.1/v5.16.1）、reinstall.ps1（v5.18.1/v5.16.1）、build.js（v5.0.0）、webui.html 回退值（v5.19.0）、memory.md（0.1.0）全部统一到 v5.31.1
+- **skills 文档命名统一**：patch_gcode.md 中 add_retraction→add_retract、modify_fan→replace_fan、insert_command→insert_line，与 slice_agent.js 代码实际使用的操作名对齐
 
 ### v5.31.0 (2026-06-15) — G-code 转换独立为侧栏标签页
 - **G-code 转换从 AI Lab 拆分**：转换功能不需要 LLM，从 AI Lab 独立为左侧栏"转换"标签页（gcvt.js）

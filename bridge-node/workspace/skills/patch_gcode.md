@@ -19,11 +19,11 @@
 - 用户手动调整速度
 ```
 
-#### 5.2 添加回抽（add_retraction）
+#### 5.2 添加回抽（add_retract）
 
 ```
 目标: 在指定位置前插入回抽指令
-格式: patch_gcode --operation add_retraction --before "LAYER:5" --length 0.8 --speed 40
+格式: patch_gcode --operation add_retract --before "LAYER:5" --length 0.8 --speed 40
 说明: 在 LAYER:5 注释前插入回抽
 
 插入内容:
@@ -52,11 +52,11 @@
 - 打印质量问题调试
 ```
 
-#### 5.4 修改风扇（modify_fan）
+#### 5.4 修改风扇（replace_fan）
 
 ```
 目标: 修改风扇速度
-格式: patch_gcode --operation modify_fan --value 128 --range "L10-L100"
+格式: patch_gcode --operation replace_fan --value 128 --range "L10-L100"
 说明: 将第 10-100 行范围内的风扇速度修改为 128（50%）
 
 使用场景:
@@ -65,11 +65,11 @@
 - 过度冷却问题修复
 ```
 
-#### 5.5 插入命令（insert_command）
+#### 5.5 插入命令（insert_line）
 
 ```
 目标: 在指定位置插入 G-code 指令
-格式: patch_gcode --operation insert_command --command "M106 S255" --after "LAYER:3"
+格式: patch_gcode --operation insert_line --command "M106 S255" --after "LAYER:3"
 说明: 在 LAYER:3 注释后插入 M106 S255
 
 使用场景:
