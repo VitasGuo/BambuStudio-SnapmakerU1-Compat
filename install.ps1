@@ -367,7 +367,9 @@ if (-not (Test-Path $bridgeSrc)) {
 
         $vbsContent = @"
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run """$nodePath"" ""$bridgeDst\server.js""", 0, False
+nodePath = "$nodePath"
+scriptPath = "$bridgeDst\server.js"
+WshShell.Run """" & nodePath & """ """ & scriptPath & """", 0, False
 "@
         $vbsPath = "$bridgeConfigDir\start-hidden.vbs"
         [System.IO.File]::WriteAllText($vbsPath, $vbsContent, [System.Text.Encoding]::Unicode)

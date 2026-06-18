@@ -728,7 +728,7 @@ function switchTab(tab){
   $('ailab-content').style.display=tab==='ailab'?'block':'none';
   $('gcvt-content').style.display=tab==='gcvt'?'block':'none';
   if(tab==='debug') loadDebugLogs();
-  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.31.1';checkUpdate();}
+  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.31.2';checkUpdate();}
   if(tab==='ailab') aiLoadConfig();
   if(tab==='gcvt') gcvtInit();
 }

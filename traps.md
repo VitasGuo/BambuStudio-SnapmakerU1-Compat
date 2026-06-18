@@ -906,3 +906,10 @@
 **现象**：G-code 转换格式检测错误——OrcaSlicer 生成的 gcode 被标记为 `[Bambu]` 格式，转换时报"Already OrcaSlicer format (contains PRINT_START)"
 **根因**：格式检测使用 BambuStudio 专有命令标记（`MOVE_TO_DISCARD_FILAMENT_POSITION`、`ROUGHLY_CLEAN_NOZZLE`、`SM_PRINT_EXTRUDER_PREHEAT` 等），但 OrcaSlicer U1 gcode 也包含这些命令（因为 U1 的 Start G-code 模板中定义了它们）。对比两个 gcode 发现真正的区分标志是层标记格式：BambuStudio 用 `; FEATURE:`（13193 处），OrcaSlicer 用 `;TYPE:`（9958 处），两者互斥
 **解决方案**（v5.29.1）：格式检测改用 `; FEATURE:` vs `;TYPE:` 判断——BambuStudio gcode 只含 `; FEATURE:` 不含 `;TYPE:`，OrcaSlicer gcode 只含 `;TYPE:` 不含 `; FEATURE:`。这是最可靠的区分方法
+
+---
+
+#117 ✅
+**现象**：安装后 Bridge 无法自启动，`start-hidden.vbs` 报错 `800A03EA`（VBScript 语法错误）
+**根因**：install.ps1/reinstall.ps1 生成 VBS 时，PowerShell here-string 展开 `$nodePath` 变量到 `WshShell.Run` 参数中。当 Node.js 安装在 `C:\Program Files (x86)\nodejs\` 时，展开后的 VBS 代码为 `WshShell.Run """C:\Program Files (x86)\nodejs\node.exe"" ..."`，VBScript 把 `(x86)` 中的括号解析为函数调用语法，导致 800A03EA 语法错误
+**解决方案**（v5.31.2）：VBS 中先用变量赋值路径再拼接，避免括号直接出现在 `Run` 参数中：`nodePath = "C:\Program Files (x86)\nodejs\node.exe"` → `WshShell.Run """" & nodePath & """ ..."`

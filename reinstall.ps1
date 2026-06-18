@@ -6,11 +6,11 @@ if ($args -contains "-y" -or $args -contains "--yes" -or $args -contains "-AutoC
     $AutoConfirm = $true
 }
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.31.1 Reinstaller"
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.31.2 Reinstaller"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.31.1 - Reinstall" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.31.2 - Reinstall" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -401,7 +401,9 @@ if (-not (Test-Path $bridgeSrc)) {
 
         $vbsContent = @"
 Set WshShell = CreateObject("WScript.Shell")
-WshShell.Run """$nodePath"" ""$bridgeDst\server.js""", 0, False
+nodePath = "$nodePath"
+scriptPath = "$bridgeDst\server.js"
+WshShell.Run """" & nodePath & """ """ & scriptPath & """", 0, False
 "@
         $vbsPath = "$bridgeConfigDir\start-hidden.vbs"
         [System.IO.File]::WriteAllText($vbsPath, $vbsContent, [System.Text.Encoding]::Unicode)

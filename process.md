@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.31.1 (2026-06-17)
+## 当前版本: v5.31.2 (2026-06-18)
 
 ---
 
@@ -38,8 +38,8 @@
 2. **旧 gcode 无层进度**：`layer_change_gcode` 修复只影响新切片的 gcode，旧文件需重新切片。见 traps.md #105
 
 ### 📝 下一步
-1. 验证 GitHub 版本更新检测
-2. 对齐 OrcaSlicer 挤出头取出/放回功能
+1. 实测 GitHub 版本更新检测（server.js:496 + webui.html:1040 已实现，未验证）
+2. 对齐 OrcaSlicer 挤出头取出/放回功能（server.js 中无相关代码，未开始）
 
 ### 🔍 代码审查待改进项（v5.31.1 审查，暂不修复）
 | # | 问题 | 重要性 | 必要性 | 说明 |
@@ -57,6 +57,10 @@
 ---
 
 ## 版本历史
+
+### v5.31.2 (2026-06-18) — 修复 start-hidden.vbs 括号路径语法错误
+- **修复 VBS 800A03EA 语法错误**：Node.js 安装在 `C:\Program Files (x86)\` 时，路径中的括号被 VBScript 解析为函数调用语法导致报错。改用 VBS 变量赋值路径再拼接，避免括号直接出现在 `Run` 参数中（traps.md #117）
+- **影响范围**：install.ps1 和 reinstall.ps1 的 start-hidden.vbs 生成逻辑
 
 ### v5.31.1 (2026-06-17) — 代码审查修复：版本号一致性 + skills 文档命名
 - **版本号一致性修复**：uninstall.ps1（v5.18.1/v5.16.1）、reinstall.ps1（v5.18.1/v5.16.1）、build.js（v5.0.0）、webui.html 回退值（v5.19.0）、memory.md（0.1.0）全部统一到 v5.31.1
