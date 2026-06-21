@@ -15,7 +15,7 @@ build({
   outfile: path.join(OUT_DIR, "server.js"),
   format: "cjs",
   banner: {
-    js: "// BambuStudio Bridge v5.31.2 - Bundled\n",
+    js: "// BambuStudio Bridge v5.31.4 - Bundled\n",
   },
   external: [
     "bonjour-service",

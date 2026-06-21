@@ -916,6 +916,13 @@
 
 ---
 
+#119 ✅
+**现象**：使用本地模型（LMStudio）时，已保存配置且测试连接成功，但点击 G-code 优化或打印问答仍提示"请先配置 LLM 连接：点击 AI Lab 设置图标，填写 API Key 后保存。"
+**根因**：ailab.js 第 436 行和第 744 行的 LLM 配置检查 `!aiCfg._hasKey && !aiCfg.apiKey` 对所有 provider 生效。但本地模型不需要 API Key，`hasKey`（来自 `!!aiConfig.apiKey`）永远为 `false`，`aiCfg.apiKey` 前端也没有值，导致已配置的本地模型被误拦截
+**解决方案**（v5.31.4）：检查时先判断当前 provider 是否为本地模型（`aiProviders[aiCfg.provider].isLocal`），本地 provider 跳过 API Key 检查
+
+---
+
 #117 ✅
 **现象**：安装后 Bridge 无法自启动，`start-hidden.vbs` 报错 `800A03EA`（VBScript 语法错误）
 **根因**：install.ps1/reinstall.ps1 生成 VBS 时，PowerShell here-string 展开 `$nodePath` 变量到 `WshShell.Run` 参数中。当 Node.js 安装在 `C:\Program Files (x86)\nodejs\` 时，展开后的 VBS 代码为 `WshShell.Run """C:\Program Files (x86)\nodejs\node.exe"" ..."`，VBScript 把 `(x86)` 中的括号解析为函数调用语法，导致 800A03EA 语法错误

@@ -432,8 +432,9 @@ function aiOptUploadFile(input){
 
 // ─── G-code Optimize ───
 function aiOptimizeGcode(){
-  // Check LLM config before optimizing
-  if(!aiCfg._hasKey&&!aiCfg.apiKey){showAiError('提示','请先配置 LLM 连接：点击 AI Lab 设置图标，填写 API Key 后保存。');return;}
+  // Check LLM config before optimizing (local providers don't need API key)
+  var isLocalProv=aiProviders[aiCfg.provider]&&aiProviders[aiCfg.provider].isLocal;
+  if(!isLocalProv&&!aiCfg._hasKey&&!aiCfg.apiKey){showAiError('提示','请先配置 LLM 连接：点击 AI Lab 设置图标，填写 API Key 后保存。');return;}
   var gcodeName=aiOptState.originalGcodeName;
   if(!gcodeName){
     // Try to get from local select
@@ -740,8 +741,9 @@ function aiClearQA(){
 
 function aiSendQuestion(){
   var input=document.getElementById('qaInput');if(!input||!input.value.trim())return;
-  // Check LLM config before sending
-  if(!aiCfg._hasKey&&!aiCfg.apiKey){
+  // Check LLM config before sending (local providers don't need API key)
+  var isLocalProv=aiProviders[aiCfg.provider]&&aiProviders[aiCfg.provider].isLocal;
+  if(!isLocalProv&&!aiCfg._hasKey&&!aiCfg.apiKey){
     var noKeyMsg='请先配置 LLM 连接：点击 AI Lab 设置图标，填写 API Key 后保存。';
     var hist=document.getElementById('qaHistory');if(hist){
       hist.innerHTML+=aiRenderChatMessage('user',input.value.trim());
