@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.31.0
+# Snapmaker U1 BambuStudio 兼容包 v5.32.0
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -174,7 +174,7 @@ Snapmaker U1 (Moonraker + Klipper)
 | 打印控制 | ✅ 开始/暂停/恢复/取消 | ✅ 完整 Klipper |
 | 中英文 | ✅ | ❌ |
 | 调试日志 | ✅ Debug 面板 | ❌ |
-| AI 实验室 | ✅ G-code 优化 + 打印助手 | ❌ |
+| AI 实验室 | ✅ G-code 优化 + 打印助手（流式输出 + Thinking 模式） | ❌ |
 | G-code 转换 | ✅ BambuStudio→OrcaSlicer | ❌ |
 
 ---
@@ -210,6 +210,11 @@ A: v5.18.1 已修复此问题，安装脚本不再删除用户自定义预设。
 
 ## 版本历史
 
+- **v5.32.0** (2026-06-21) - AI 打印助手流式输出 + Thinking 模式支持（自动检测 reasoning_content，折叠展示思考过程）
+- **v5.31.4** (2026-06-21) - 修复本地模型 API Key 检查误拦截
+- **v5.31.3** (2026-06-21) - 修复 LMStudio 模型升级后连接失败（自动发现模型）
+- **v5.31.2** (2026-06-18) - 修复 start-hidden.vbs 括号路径语法错误 (800A03EA)
+- **v5.31.1** (2026-06-17) - 代码审查修复：版本号一致性 + skills 文档命名统一
 - **v5.31.0** (2026-06-15) - G-code 转换独立为侧栏标签页（从 AI Lab 拆分）
 - **v5.30.0** (2026-06-10) - Bridge 看门狗（崩溃自动重启）+ uncaughtException 防护
 - **v5.29.3** (2026-06-10) - G-code 转换 EXEC 块完善（温度/清洗流程/格式检测修复）
