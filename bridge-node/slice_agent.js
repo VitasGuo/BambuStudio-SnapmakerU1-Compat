@@ -1333,6 +1333,10 @@ async function testAiConnection(aiConfig) {
       if (!discoveredModels.includes(provider.defaultModel)) {
         provider.defaultModel = discoveredModels[0];
       }
+      // 如果当前配置的模型不在可用列表中，自动切换到第一个可用模型
+      if (aiConfig.model && !discoveredModels.includes(aiConfig.model)) {
+        aiConfig.model = discoveredModels[0];
+      }
     }
 
     return {
@@ -1340,6 +1344,7 @@ async function testAiConnection(aiConfig) {
       provider: provider.name,
       models: discoveredModels,
       defaultModel: provider.defaultModel,
+      currentModel: aiConfig.model || provider.defaultModel,
     };
   } catch (e) {
     const errMsg = e.message || (e.cause && (e.cause.message || e.cause.code || String(e.cause))) || String(e);

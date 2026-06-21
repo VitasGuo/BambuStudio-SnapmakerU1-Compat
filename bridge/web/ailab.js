@@ -241,7 +241,14 @@ function aiTestConnection(){
     })
   }).then(function(r){return r.json();}).then(function(d){
     var s=document.getElementById('aiConfigStatus');if(!s)return;
-    if(d&&d.ok){s.textContent='连接成功';s.style.color='var(--success)';}
+    if(d&&d.ok){
+      s.textContent='连接成功';s.style.color='var(--success)';
+      // 如果后端自动切换了模型，更新输入框
+      if(d.currentModel&&model&&model.value!==d.currentModel){
+        model.value=d.currentModel;
+        s.textContent='连接成功（模型已自动更新为 '+d.currentModel+'）';
+      }
+    }
     else{s.textContent='连接失败: '+(d&&d.error||'未知错误');s.style.color='var(--danger)';}
   }).catch(function(e){
     var s=document.getElementById('aiConfigStatus');if(!s)return;

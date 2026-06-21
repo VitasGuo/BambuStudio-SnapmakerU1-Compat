@@ -31,7 +31,7 @@ build({
 
   const pkg = {
     name: "bambustudio-bridge",
-    version: "5.31.2",
+    version: "5.31.3",
     main: "server.js",
     type: "commonjs",
     scripts: { start: "node server.js" },

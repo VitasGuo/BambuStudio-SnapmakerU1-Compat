@@ -909,6 +909,13 @@
 
 ---
 
+#118 ✅
+**现象**：LMStudio 模型从 `google/gemma-4-e2b` 升级为 `google/gemma-4-e4b` 后，AI Lab 提示无法连接
+**根因**：`slice_agent.js:34` 硬编码 `defaultModel: "google/gemma-4-e2b"`，`aiConfig.model` 为空时 fallback 到此默认值。用户升级模型后 LMStudio 不再加载旧模型，请求的模型名不匹配导致 404。`testAiConnection` 虽然会自动发现可用模型列表（第 1325-1336 行），但只更新了 `provider.availableModels` 和 `provider.defaultModel`，没有更新 `aiConfig.model`
+**解决方案**（v5.31.3）：`testAiConnection` 发现模型后，若当前 `aiConfig.model` 不在可用列表中，自动切换到第一个可用模型并返回 `currentModel` 字段；前端测试连接成功后，若后端返回了 `currentModel` 且与输入框不同，自动更新输入框并提示"模型已自动更新"
+
+---
+
 #117 ✅
 **现象**：安装后 Bridge 无法自启动，`start-hidden.vbs` 报错 `800A03EA`（VBScript 语法错误）
 **根因**：install.ps1/reinstall.ps1 生成 VBS 时，PowerShell here-string 展开 `$nodePath` 变量到 `WshShell.Run` 参数中。当 Node.js 安装在 `C:\Program Files (x86)\nodejs\` 时，展开后的 VBS 代码为 `WshShell.Run """C:\Program Files (x86)\nodejs\node.exe"" ..."`，VBScript 把 `(x86)` 中的括号解析为函数调用语法，导致 800A03EA 语法错误
