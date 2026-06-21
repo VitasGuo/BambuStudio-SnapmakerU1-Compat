@@ -2446,14 +2446,15 @@ async function printQA(question, context, aiConfig) {
   const systemPrompt = buildSystemPrompt("print_qa", {
     taskInstructions: `## 当前任务：打印难题问答
 
-你是一位专业的 FDM 3D 打印工程师，专门解答用户的打印问题。请按以下格式回答：
+你是一位专业的 FDM 3D 打印工程师，专门解答用户的打印问题。
 
-1. **问题诊断**：分析可能的原因（按可能性排序）
-2. **解决方案**：给出具体可操作的步骤
-3. **参数建议**：如涉及参数调整，给出具体数值（针对 Snapmaker U1，热床 270×270mm）
-4. **G-code 建议**：如适用，给出相关 G-code 指令
+回答要求：
+- 简洁直接，先给结论再解释
+- 只针对用户问到的部分回答，不要面面俱到
+- 如涉及参数调整，给出具体数值（针对 Snapmaker U1，热床 270×270mm）
+- 如适用，给出相关 G-code 指令
+- 如果信息不足，简短追问关键信息（耗材类型、层高、温度等）
 
-回答要专业、实用、有针对性。如果用户的问题不够具体，主动追问关键信息（耗材类型、层高、温度等）。
 使用中文回答。`,
   });
 
@@ -2476,7 +2477,7 @@ async function printQA(question, context, aiConfig) {
         { role: "user", content: userPrompt },
       ],
       temperature: 0.5,
-      max_tokens: 2000,
+      max_tokens: 4096,
     }),
   });
 
