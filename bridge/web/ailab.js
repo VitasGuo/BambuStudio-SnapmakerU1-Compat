@@ -158,7 +158,7 @@ var aiQAHistory=[];
 
   var qaPopup=document.createElement('div');
   qaPopup.id='qaPopup';
-  qaPopup.style.cssText='display:none;position:fixed;bottom:82px;left:80px;width:380px;max-height:520px;background:var(--panel);border-radius:12px;border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,.3);z-index:901;overflow:hidden;flex-direction:column;';
+  qaPopup.style.cssText='display:none;position:fixed;bottom:82px;left:80px;width:760px;max-height:90vh;background:var(--panel);border-radius:12px;border:1px solid var(--border);box-shadow:0 8px 32px rgba(0,0,0,.3);z-index:901;overflow:hidden;flex-direction:column;';
   qaPopup.innerHTML='\
 <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">\
 <div style="font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;">\
