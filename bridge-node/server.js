@@ -8,7 +8,7 @@ const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.31.4";
+const BRIDGE_VERSION = "5.32.0";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -1287,6 +1287,45 @@ app.get("/api/ai/print_qa.js", async (req, res) => {
     res.send(`${cb}(${JSON.stringify({ ok: true, answer })});`);
   } catch (e) {
     log("ERROR", `AI Lab print_qa error: ${aiErrMsg(e)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+// ─── 流式打印问答（JSONP 轮询模式） ───
+app.get("/api/ai/qa_stream_start.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const question = req.query.question;
+    if (!question) throw new Error("question parameter required");
+    const context = req.query.context || "";
+    const streamId = await sliceAgent.printQAStream(question, context, aiConfig);
+    log("INFO", `AI Lab: stream QA started: ${streamId}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, streamId })});`);
+  } catch (e) {
+    log("ERROR", `AI Lab qa_stream_start error: ${aiErrMsg(e)}`);
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+app.get("/api/ai/qa_stream_poll.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const streamId = req.query.stream_id;
+    if (!streamId) throw new Error("stream_id parameter required");
+    const result = sliceAgent.pollQAStream(streamId);
+    if (result.done && result.error) {
+      // 流出错，清理
+      sliceAgent.cleanupQAStream(streamId);
+    } else if (result.done && !result.error) {
+      // 流完成，延迟清理（确保最后一个 poll 能取到数据）
+      setTimeout(() => sliceAgent.cleanupQAStream(streamId), 5000);
+    }
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify(result)});`);
+  } catch (e) {
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
   }

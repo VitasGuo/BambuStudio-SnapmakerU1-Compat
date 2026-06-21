@@ -10,7 +10,7 @@ $Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.3
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.31.4 - Reinstall" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.32.0 - Reinstall" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 

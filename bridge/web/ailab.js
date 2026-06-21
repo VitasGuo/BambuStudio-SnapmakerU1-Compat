@@ -760,32 +760,134 @@ function aiSendQuestion(){
   // Add user message
   aiQAHistory.push({role:'user',content:q});
   hist.innerHTML+=aiRenderChatMessage('user',q);
-  // Add typing indicator
-  var typingId='qaTyping'+Date.now();
-  hist.innerHTML+='<div class="qa-msg ai" id="'+typingId+'"><div class="qa-avatar">AI</div><div class="qa-bubble"><div class="qa-typing"><span></span><span></span><span></span></div></div></div>';
+
+  // Add streaming AI bubble (starts with typing dots, auto-detects thinking mode)
+  var bubbleId='qaBubble'+Date.now();
+  hist.innerHTML+='<div class="qa-msg ai"><div class="qa-avatar">AI</div><div class="qa-bubble" id="'+bubbleId+'"><div class="qa-typing"><span></span><span></span><span></span></div></div></div>';
   hist.scrollTop=hist.scrollHeight;
 
   // Build context from history
   var ctx=aiQAHistory.filter(function(m){return m.role==='user';}).slice(-3).map(function(m){return m.content;}).join('\n');
 
-  bridgeGET('/api/ai/print_qa?question='+encodeURIComponent(q)+'&context='+encodeURIComponent(ctx)+'&provider='+encodeURIComponent(aiCfg.provider||'')+'&customBaseUrl='+encodeURIComponent(aiCfg.customBaseUrl||'')+'&model='+encodeURIComponent(aiCfg.model||''),function(d){
-    var typing=document.getElementById(typingId);if(typing)typing.remove();
-    input.disabled=false;
-    if(btn)btn.disabled=false;
-    input.focus();
-
+  // Start streaming
+  bridgeGET('/api/ai/qa_stream_start?question='+encodeURIComponent(q)+'&context='+encodeURIComponent(ctx)+'&provider='+encodeURIComponent(aiCfg.provider||'')+'&customBaseUrl='+encodeURIComponent(aiCfg.customBaseUrl||'')+'&model='+encodeURIComponent(aiCfg.model||''),function(d){
     if(!d||!d.ok){
-      var errMsg=d&&d.error||'抱歉，无法连接 AI 服务，请检查配置。';
-      aiQAHistory.push({role:'ai',content:errMsg});
-      hist.innerHTML+=aiRenderChatMessage('ai',errMsg);
-    }else{
-      var reply=d.answer||d.response||(d.text||'');
-      if(!reply)reply='AI 返回了空响应，请重试。';
-      aiQAHistory.push({role:'ai',content:reply});
-      hist.innerHTML+=aiRenderChatMessage('ai',reply);
+      var bubble=document.getElementById(bubbleId);
+      if(bubble)bubble.innerHTML=aiRenderInline(d&&d.error||'抱歉，无法连接 AI 服务，请检查配置。');
+      input.disabled=false;if(btn)btn.disabled=false;input.focus();
+      aiQAHistory.push({role:'ai',content:d&&d.error||'抱歉，无法连接 AI 服务，请检查配置。'});
+      hist.scrollTop=hist.scrollHeight;
+      return;
     }
-    hist.scrollTop=hist.scrollHeight;
+    var streamId=d.streamId;
+    var thinkingText='';
+    var answerText='';
+    var isThinkingMode=false; // detected from stream
+    var thinkingShown=false;
+    var answerStarted=false;
+    var pollTimer=null;
+
+    function renderBubble(){
+      var bubble=document.getElementById(bubbleId);
+      if(!bubble)return;
+      var html='';
+      // Thinking section (only if thinking mode detected)
+      if(isThinkingMode&&thinkingText){
+        html+='<div class="qa-thinking-block'+(thinkingShown?' open':'')+'">';
+        html+='<div class="qa-thinking-toggle" onclick="this.parentElement.classList.toggle(\'open\')">';
+        html+='<span class="qa-thinking-arrow">&#9654;</span> 思考过程';
+        html+='</div>';
+        html+='<div class="qa-thinking-body">'+aiRenderInline(thinkingText)+'</div>';
+        html+='</div>';
+      }
+      // Answer section
+      if(answerText){
+        html+=aiRenderInline(answerText);
+      }
+      // Cursor or thinking indicator
+      if(!answerStarted){
+        if(isThinkingMode&&!answerText){
+          html+='<span class="qa-thinking-label">思考中...</span>';
+        }
+        html+='<span class="qa-stream-cursor" style="display:inline-block;width:2px;height:1em;background:var(--accent,#4a9eff);animation:qaBlink 1s infinite;vertical-align:text-bottom;margin-left:2px;"></span>';
+      }else{
+        html+='<span class="qa-stream-cursor" style="display:inline-block;width:2px;height:1em;background:var(--accent,#4a9eff);animation:qaBlink 1s infinite;vertical-align:text-bottom;margin-left:2px;"></span>';
+      }
+      bubble.innerHTML=html;
+      hist.scrollTop=hist.scrollHeight;
+    }
+
+    function pollStream(){
+      bridgeGET('/api/ai/qa_stream_poll?stream_id='+encodeURIComponent(streamId),function(pd){
+        if(!pd||!pd.ok){
+          clearTimeout(pollTimer);
+          var bubble=document.getElementById(bubbleId);
+          if(bubble){
+            var errSuffix=pd&&pd.error?'\n\n[错误: '+pd.error+']':'';
+            bubble.innerHTML=(isThinkingMode&&thinkingText?'<div class="qa-thinking-block open"><div class="qa-thinking-toggle" onclick="this.parentElement.classList.toggle(\'open\')"><span class="qa-thinking-arrow">&#9654;</span> 思考过程</div><div class="qa-thinking-body">'+aiRenderInline(thinkingText)+'</div></div>':'')+aiRenderInline(answerText+errSuffix);
+          }
+          input.disabled=false;if(btn)btn.disabled=false;input.focus();
+          if(answerText)aiQAHistory.push({role:'ai',content:answerText});
+          hist.scrollTop=hist.scrollHeight;
+          return;
+        }
+        // Detect thinking mode from stream
+        if(pd.thinking&&pd.thinking.length>0){
+          if(!isThinkingMode){
+            isThinkingMode=true;
+            thinkingShown=true; // expand thinking block when first detected
+          }
+          thinkingText+=pd.thinking.join('');
+          renderBubble();
+        }
+        // Append answer chunks
+        if(pd.chunks&&pd.chunks.length>0){
+          answerText+=pd.chunks.join('');
+          if(!answerStarted){
+            answerStarted=true;
+            thinkingShown=false; // auto-collapse thinking when answer starts
+          }
+          renderBubble();
+        }
+        if(pd.done){
+          clearTimeout(pollTimer);
+          var bubble=document.getElementById(bubbleId);
+          if(bubble){
+            var finalHtml='';
+            if(isThinkingMode&&thinkingText){
+              finalHtml+='<div class="qa-thinking-block"><div class="qa-thinking-toggle" onclick="this.parentElement.classList.toggle(\'open\')"><span class="qa-thinking-arrow">&#9654;</span> 思考过程</div><div class="qa-thinking-body">'+aiRenderInline(thinkingText)+'</div></div>';
+            }
+            finalHtml+=aiRenderInline(answerText||'AI 返回了空响应，请重试。');
+            bubble.innerHTML=finalHtml;
+          }
+          input.disabled=false;if(btn)btn.disabled=false;input.focus();
+          if(answerText)aiQAHistory.push({role:'ai',content:answerText});
+          else aiQAHistory.push({role:'ai',content:'AI 返回了空响应，请重试。'});
+          hist.scrollTop=hist.scrollHeight;
+          return;
+        }
+        pollTimer=setTimeout(pollStream,200);
+      });
+    }
+    pollTimer=setTimeout(pollStream,300);
   });
+}
+
+/** 渲染流式文本（与 aiRenderChatMessage 相同的 markdown 规则，但不包裹外层 div） */
+function aiRenderInline(text){
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/```([\s\S]*?)```/g,function(m,code){return '<pre><code>'+code.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')+'</code></pre>';})
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/^### (.+)$/gm,'<div style="font-size:14px;font-weight:700;margin:8px 0 4px;">$1</div>')
+    .replace(/^## (.+)$/gm,'<div style="font-size:15px;font-weight:700;margin:10px 0 4px;">$1</div>')
+    .replace(/^# (.+)$/gm,'<div style="font-weight:700;margin:8px 0 4px;">$1</div>')
+    .replace(/^(\d+)\.\s+(.+)$/gm,'<div style="padding-left:16px;text-indent:-16px;margin:2px 0;">$1. $2</div>')
+    .replace(/^[•\-*]\s+(.+)$/gm,'<div style="padding-left:14px;text-indent:-14px;margin:2px 0;">&bull; $1</div>')
+    .replace(/\n{2,}/g,'<div style="height:6px;"></div>')
+    .replace(/\n/g,'<br>');
 }
 
 function aiRenderChatMessage(role,content){

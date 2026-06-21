@@ -54,6 +54,17 @@
 .qa-typing span:nth-child(2){animation-delay:.2s}
 .qa-typing span:nth-child(3){animation-delay:.4s}
 @keyframes qaDot{0%,80%,100%{opacity:.3;transform:scale(.8)}40%{opacity:1;transform:scale(1)}}
+@keyframes qaBlink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* --- Thinking Block (collapsible) --- */
+.qa-thinking-label{color:var(--text3);font-size:12px;font-style:italic}
+.qa-thinking-block{margin-bottom:8px}
+.qa-thinking-toggle{display:inline-flex;align-items:center;gap:4px;color:var(--text3);font-size:12px;cursor:pointer;user-select:none;padding:2px 6px;border-radius:4px;transition:background .15s}
+.qa-thinking-toggle:hover{background:var(--border)}
+.qa-thinking-arrow{font-size:8px;transition:transform .2s}
+.qa-thinking-block.open .qa-thinking-arrow{transform:rotate(90deg)}
+.qa-thinking-body{display:none;margin-top:4px;padding:8px 10px;border-radius:6px;background:var(--bg);color:var(--text3);font-size:12px;line-height:1.5;max-height:200px;overflow-y:auto}
+.qa-thinking-block.open .qa-thinking-body{display:block}
 
 /* --- AI Config Modal --- */
 .ai-config-modal{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:950}

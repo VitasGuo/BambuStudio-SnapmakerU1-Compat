@@ -1,11 +1,11 @@
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.31.4 Uninstaller"
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.32.0 Uninstaller"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.31.4 Uninstall" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.32.0 Uninstall" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 

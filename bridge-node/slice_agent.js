@@ -2494,6 +2494,132 @@ async function printQA(question, context, aiConfig) {
   return content;
 }
 
+/** 流式打印问答 — 返回 streamId，通过 qaStreams 供轮询读取 */
+const qaStreams = new Map();
+
+async function printQAStream(question, context, aiConfig) {
+  const provider = AI_PROVIDERS[aiConfig.provider];
+  if (!provider) throw new Error(`Unknown AI provider: ${aiConfig.provider}`);
+
+  const model = aiConfig.model || provider.defaultModel;
+  const apiKey = aiConfig.apiKey || (provider.isLocal ? "no-key" : "");
+  if (!apiKey && !provider.isLocal) throw new Error(`API key not configured for ${provider.name}`);
+
+  const baseUrl = aiConfig.customBaseUrl || provider.baseUrl;
+
+  const systemPrompt = buildSystemPrompt("print_qa", {
+    taskInstructions: `## 当前任务：打印难题问答
+
+你是一位专业的 FDM 3D 打印工程师，专门解答用户的打印问题。
+
+回答要求：
+- 简洁直接，先给结论再解释
+- 只针对用户问到的部分回答，不要面面俱到
+- 如涉及参数调整，给出具体数值（针对 Snapmaker U1，热床 270×270mm）
+- 如适用，给出相关 G-code 指令
+- 如果信息不足，简短追问关键信息（耗材类型、层高、温度等）
+
+使用中文回答。`,
+  });
+
+  let userPrompt = `## 用户问题\n${question}`;
+  if (context) {
+    userPrompt += `\n\n## 附加上下文\n${context}`;
+  }
+
+  const streamId = "qa_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+  const streamState = { thinkingChunks: [], answerChunks: [], done: false, error: null };
+  qaStreams.set(streamId, streamState);
+
+  // 后台启动流式请求
+  (async () => {
+    try {
+      const url = `${baseUrl}/chat/completions`;
+      const headers = { "Content-Type": "application/json" };
+      if (apiKey && apiKey !== "no-key") headers["Authorization"] = `Bearer ${apiKey}`;
+
+      const resp = await fetch(url, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt },
+          ],
+          temperature: 0.5,
+          max_tokens: 4096,
+          stream: true,
+        }),
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => "");
+        throw new Error(`AI API error: ${resp.status} ${errText.slice(0, 200)}`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop(); // 保留未完成的行
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data:")) continue;
+          const data = trimmed.slice(5).trim();
+          if (data === "[DONE]") {
+            streamState.done = true;
+            return;
+          }
+          try {
+            const parsed = JSON.parse(data);
+            const choice = parsed.choices?.[0];
+            if (!choice) continue;
+            const thinkingDelta = choice.delta?.reasoning_content || "";
+            const answerDelta = choice.delta?.content || "";
+            if (thinkingDelta) streamState.thinkingChunks.push(thinkingDelta);
+            if (answerDelta) streamState.answerChunks.push(answerDelta);
+          } catch { /* skip malformed JSON */ }
+        }
+      }
+      streamState.done = true;
+    } catch (e) {
+      streamState.error = e.message || String(e);
+      streamState.done = true;
+    }
+  })();
+
+  return streamId;
+}
+
+/** 轮询流式会话 — 返回分类的新 chunk 列表和完成状态 */
+function pollQAStream(streamId) {
+  const state = qaStreams.get(streamId);
+  if (!state) return { ok: false, error: "stream not found" };
+
+  const newThinking = state.thinkingChunks.splice(0);
+  const newAnswer = state.answerChunks.splice(0);
+  return {
+    ok: true,
+    thinking: newThinking,
+    chunks: newAnswer,
+    done: state.done,
+    error: state.error || null,
+  };
+}
+
+/** 清理已完成的流式会话 */
+function cleanupQAStream(streamId) {
+  qaStreams.delete(streamId);
+}
+
 // ─── G-code 格式转换（BambuStudio → OrcaSlicer 兼容） ───
 
 function convertGcode(gcodeName) {
@@ -2863,6 +2989,9 @@ module.exports = {
   extractGcodeStats,
   reviewGcode,
   printQA,
+  printQAStream,
+  pollQAStream,
+  cleanupQAStream,
   generateRecommendationReason,
   testAiConnection,
   saveModelFile,

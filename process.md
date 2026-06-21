@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.31.4 (2026-06-21)
+## 当前版本: v5.32.0 (2026-06-21)
 
 ---
 
@@ -57,6 +57,12 @@
 ---
 
 ## 版本历史
+
+### v5.32.0 (2026-06-21) — AI 打印助手流式输出
+- **新增流式输出**：AI 打印助手改为流式响应，回答逐步显示，无需等待完整生成。后端 `printQAStream` 调用 AI API 的 `stream: true` 模式，前端每 200ms 轮询新 chunk 逐步渲染
+- **架构**：由于 BambuStudio WebView 阻止 fetch/XHR，采用 JSONP 轮询模式——`qa_stream_start` 返回 streamId，`qa_stream_poll` 返回新 chunk 列表
+- **流式光标**：生成中显示闪烁光标，完成后移除
+- **保留非流式端点**：`/api/ai/print_qa.js` 仍可用，供其他场景调用
 
 ### v5.31.4 (2026-06-21) — 修复本地模型 API Key 检查误拦截
 - **修复本地模型（LMStudio）始终提示"请先配置 LLM 连接"**：API Key 检查逻辑 `!aiCfg._hasKey && !aiCfg.apiKey` 对本地 provider 也生效，但本地模型不需要 API Key，`hasKey` 永远为 `false`，导致已配置的本地模型被误拦截。改为本地 provider 跳过 API Key 检查（traps.md #119）
