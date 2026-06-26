@@ -3,7 +3,7 @@
 ## 项目上下文
 
 - **项目名称**: VoxelFlow AI — BambuStudio Bridge for Snapmaker U1
-- **当前版本**: v5.32.0
+- **当前版本**: v5.32.1
 - **打印机型号**: Snapmaker U1
 - **打印体积**: 270 × 270 × 270 mm
 - **挤出机数量**: 4

@@ -927,3 +927,10 @@
 **现象**：安装后 Bridge 无法自启动，`start-hidden.vbs` 报错 `800A03EA`（VBScript 语法错误）
 **根因**：install.ps1/reinstall.ps1 生成 VBS 时，PowerShell here-string 展开 `$nodePath` 变量到 `WshShell.Run` 参数中。当 Node.js 安装在 `C:\Program Files (x86)\nodejs\` 时，展开后的 VBS 代码为 `WshShell.Run """C:\Program Files (x86)\nodejs\node.exe"" ..."`，VBScript 把 `(x86)` 中的括号解析为函数调用语法，导致 800A03EA 语法错误
 **解决方案**（v5.31.2）：VBS 中先用变量赋值路径再拼接，避免括号直接出现在 `Run` 参数中：`nodePath = "C:\Program Files (x86)\nodejs\node.exe"` → `WshShell.Run """" & nodePath & """ ..."`
+
+---
+
+#120
+**现象**：Node.js v26.4.0 安装后，`install.bat`/`reinstall.bat` 中 npm install 失败，日志显示 `SyntaxError: 意外的字符串`，Bridge 无法启动
+**根因**：install.ps1 第 352-354 行用 `Get-Command npm` 获取 npm 命令。Node.js v26 的安装包中新增了 `npm.ps1`，PowerShell 的 `Get-Command` 按优先级返回了 `npm.ps1`，而不是 `npm.cmd`。实际执行变成了 `node.exe "C:\Program Files\nodejs\npm.ps1" install --production`，Node.js 把 PowerShell 脚本当 JavaScript 解析，第一行 `Set-StrictMode -Version 'Latest'` 直接报错
+**解决方案**（v5.32.1）：去掉 `Get-Command` 间接层，从已知的 `$nodePath` 直接推导 `npm.cmd` 路径：`$npmCmd = Join-Path (Split-Path $nodePath) 'npm.cmd'`。`node.exe` 和 `npm.cmd` 永远在同一个目录，可靠兼容所有 Node.js 版本
