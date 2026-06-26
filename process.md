@@ -58,10 +58,10 @@
 
 ## 版本历史
 
-### v5.32.1 (2026-06-21) — 修复 Node.js v26 npm.ps1 兼容性
+### v5.32.1 (2026-06-27) — 修复 Node.js v26 npm.ps1 兼容性
 - **修复 npm install 失败**：Node.js v26 中 `Get-Command npm` 返回 `npm.ps1`，脚本用 `node.exe npm.ps1` 执行导致 PowerShell 语法错误。改为从 `$nodePath` 推导 `npm.cmd` 路径直接调用，不依赖 `Get-Command` 解析（traps.md #120）
 
-### v5.32.0 (2026-06-21) — AI 打印助手流式输出
+### v5.32.0 (2026-06-27) — AI 打印助手流式输出
 - **新增流式输出**：AI 打印助手改为流式响应，回答逐步显示，无需等待完整生成。后端 `printQAStream` 调用 AI API 的 `stream: true` 模式，前端每 200ms 轮询新 chunk 逐步渲染
 - **架构**：由于 BambuStudio WebView 阻止 fetch/XHR，采用 JSONP 轮询模式——`qa_stream_start` 返回 streamId，`qa_stream_poll` 返回新 chunk 列表
 - **流式光标**：生成中显示闪烁光标，完成后移除
