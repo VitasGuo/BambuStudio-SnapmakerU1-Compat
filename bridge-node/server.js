@@ -306,6 +306,24 @@ app.post("/api/bridge/disconnect", (req, res) => {
   res.json({ disconnected: true });
 });
 
+app.get("/api/bridge/save_config.js", (req, res) => {
+  const cb = req.query.cb || "callback";
+  res.type("application/javascript");
+  try {
+    const host = (req.query.host || "").trim();
+    if (!host) throw new Error("host is required");
+    printerConfig.host = host;
+    printerConfig.port = parseInt(req.query.port) || 80;
+    if (req.query.apikey !== undefined && req.query.apikey !== "") {
+      printerConfig.apikey = req.query.apikey;
+    }
+    saveConfig();
+    res.send(`${cb}(${JSON.stringify({ ok: true })});`);
+  } catch (e) {
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: e.message })});`);
+  }
+});
+
 app.get("/api/bridge/pending_print", (req, res) => {
   res.json({ filename: pendingPrintFile });
 });

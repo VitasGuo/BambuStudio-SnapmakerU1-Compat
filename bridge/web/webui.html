@@ -257,6 +257,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-u
 <span class="dev-name">U1</span>
 <span class="dev-status" id="connStatus">Loading...</span>
 <span class="dev-ip" id="devIp" style="font-size:13px;color:var(--text3);margin-left:4px"></span>
+<button class="topbar-icon-btn" onclick="showPrinterConfig()" title="Printer Settings" style="background:none;border:none;cursor:pointer;color:var(--text3);padding:2px;margin-left:4px;display:inline-flex;vertical-align:middle"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg></button>
 <span id="devVer" style="font-size:12px;color:var(--text3);margin-left:8px;background:var(--bg);padding:2px 8px;border-radius:4px"></span>
 <span class="spacer"></span>
 <svg class="wifi-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0114.08 0"/><path d="M1.42 9a16 16 0 0121.16 0"/><path d="M8.53 16.11a6 6 0 016.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
@@ -1297,6 +1298,79 @@ function loadDebugLogs(){
 function toggleDebugAuto(){
   if(dbgAutoInterval){clearInterval(dbgAutoInterval);dbgAutoInterval=null;$('dbgAutoBtn').textContent='Auto: OFF';$('dbgAutoBtn').style.color='#0f8bff';}
   else{dbgAutoInterval=setInterval(loadDebugLogs,2000);$('dbgAutoBtn').textContent='Auto: ON';$('dbgAutoBtn').style.color='#4caf50';loadDebugLogs();}
+}
+
+// Printer Settings Modal
+function showPrinterConfig(){
+  var existing=document.getElementById('printerConfigModal');
+  if(existing)existing.remove();
+  bridgeGET('/api/bridge/config',function(d){
+    var curHost=(d&&d.printer_host)||'';
+    var curPort=(d&&d.printer_port)||80;
+    var overlay=document.createElement('div');
+    overlay.className='modal-overlay';
+    overlay.id='printerConfigModal';
+    overlay.onclick=function(e){if(e.target===this)this.remove();};
+    overlay.innerHTML='<div class="modal modal-dark" style="max-width:460px"><div class="modal-body"><div class="modal-section"><h3>Printer Connection</h3>'+
+      '<label style="display:block;margin-bottom:4px;font-size:12px;color:#aaa;margin-top:12px">IP Address</label>'+
+      '<div style="display:flex;gap:6px"><input id="cfgHost" value="'+curHost+'" placeholder="192.168.1.12" style="flex:1;padding:8px 10px;border:1px solid #444;border-radius:6px;background:#0d1117;color:#e0e0e0;font-size:13px">'+
+      '<button onclick="scanPrinterConfig()" id="cfgScanBtn" style="padding:8px 14px;border:none;border-radius:6px;background:#0f8bff;color:#fff;font-size:13px;cursor:pointer;white-space:nowrap">Scan</button></div>'+
+      '<div id="cfgScanResult" style="display:none;margin-top:4px;font-size:12px"></div>'+
+      '<label style="display:block;margin-bottom:4px;font-size:12px;color:#aaa;margin-top:8px">Port</label>'+
+      '<input id="cfgPort" value="'+curPort+'" type="number" style="width:100%;padding:8px 10px;border:1px solid #444;border-radius:6px;background:#0d1117;color:#e0e0e0;font-size:13px;box-sizing:border-box">'+
+      '<label style="display:block;margin-bottom:4px;font-size:12px;color:#aaa;margin-top:8px">API Key <span style="color:#666;font-size:11px">(optional)</span></label>'+
+      '<input id="cfgApiKey" value="'+(d&&d.has_apikey?'[saved]':'')+'" placeholder="Optional" style="width:100%;padding:8px 10px;border:1px solid #444;border-radius:6px;background:#0d1117;color:#e0e0e0;font-size:13px;box-sizing:border-box">'+
+      '</div><div class="modal-actions" style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid #333">'+
+      '<button class="modal-btn modal-btn-cancel" onclick="document.getElementById(\'printerConfigModal\').remove()">Cancel</button>'+
+      '<button class="modal-btn modal-btn-print" onclick="applyPrinterConfig()">Apply & Reconnect</button></div></div></div>';
+    document.body.appendChild(overlay);
+  });
+}
+function closePrinterConfig(){
+  var el=document.getElementById('printerConfigModal');
+  if(el)el.remove();
+}
+function scanPrinterConfig(){
+  var btn=document.getElementById('cfgScanBtn');
+  if(!btn)return;
+  btn.disabled=true;btn.textContent='Scanning...';
+  var result=document.getElementById('cfgScanResult');
+  result.style.display='block';result.textContent='Scanning network for Snapmaker printers...';result.style.color='#aaa';
+  bridgeGET('/api/bridge/scan?timeout=5',function(d){
+    btn.disabled=false;btn.textContent='Scan';
+    if(!d||d.error){
+      result.textContent='Scan error: '+(d&&d.error||'no response');result.style.color='#f44336';return;
+    }
+    var printers=d.printers||[];
+    if(printers.length===0){
+      result.textContent='No Snapmaker printers found. Make sure the printer is on and on the same network.';result.style.color='#ff9800';return;
+    }
+    if(printers.length===1){
+      document.getElementById('cfgHost').value=printers[0].ip;
+      result.innerHTML='Found: <b>'+printers[0].name+'</b> at <b>'+printers[0].ip+'</b>. Click Apply to connect.';result.style.color='#4caf50';
+    }else{
+      var html='Found '+printers.length+' printers:<br>';
+      printers.forEach(function(p){html+='<div onclick="document.getElementById(\'cfgHost\').value=\''+p.ip+'\';this.style.background=\'rgba(15,139,255,.15)\'" style="padding:4px 6px;border-radius:4px;cursor:pointer;margin:2px 0;font-size:12px"><b>'+p.ip+'</b> <span style="color:#888">'+p.name+'</span></div>';});
+      result.innerHTML=html;result.style.color='#e0e0e0';
+    }
+  });
+}
+function applyPrinterConfig(){
+  var host=document.getElementById('cfgHost').value.trim();
+  if(!host){document.getElementById('cfgHost').style.borderColor='#f44336';return;}
+  var port=document.getElementById('cfgPort').value||'80';
+  var hostBtn=document.querySelector('#printerConfigModal .modal-btn-print');
+  if(hostBtn){hostBtn.disabled=true;hostBtn.textContent='Connecting...';}
+  bridgeGET('/api/bridge/save_config?host='+encodeURIComponent(host)+'&port='+port+'&apikey=',function(d){
+    closePrinterConfig();
+    if(d&&d.ok){
+      $('devIp').textContent=host+':'+port;
+      location.reload();
+    }else{
+      alert('Save failed: '+(d&&d.error||'no response'));
+      if(hostBtn){hostBtn.disabled=false;hostBtn.textContent='Apply & Reconnect';}
+    }
+  });
 }
 
 </script>
