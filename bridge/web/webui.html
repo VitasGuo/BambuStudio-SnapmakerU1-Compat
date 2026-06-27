@@ -1359,9 +1359,12 @@ function applyPrinterConfig(){
   var host=document.getElementById('cfgHost').value.trim();
   if(!host){document.getElementById('cfgHost').style.borderColor='#f44336';return;}
   var port=document.getElementById('cfgPort').value||'80';
+  var apikeyInput=document.getElementById('cfgApiKey').value.trim();
+  // Only send API key if user typed a new value (don't overwrite saved key with empty)
+  var apikeyParam=apikeyInput&&apikeyInput!=='[saved]'?'&apikey='+encodeURIComponent(apikeyInput):'';
   var hostBtn=document.querySelector('#printerConfigModal .modal-btn-print');
   if(hostBtn){hostBtn.disabled=true;hostBtn.textContent='Connecting...';}
-  bridgeGET('/api/bridge/save_config?host='+encodeURIComponent(host)+'&port='+port+'&apikey=',function(d){
+  bridgeGET('/api/bridge/save_config?host='+encodeURIComponent(host)+'&port='+port+apikeyParam,function(d){
     closePrinterConfig();
     if(d&&d.ok){
       $('devIp').textContent=host+':'+port;
