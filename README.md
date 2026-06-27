@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.32.1
+# Snapmaker U1 BambuStudio 兼容包 v5.33.0
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -210,6 +210,7 @@ A: v5.18.1 已修复此问题，安装脚本不再删除用户自定义预设。
 
 ## 版本历史
 
+- **v5.33.0** (2026-06-27) - WebUI 顶栏新增打印机设置弹窗（齿轮图标），可手动修改 IP/Port/API Key
 - **v5.32.1** (2026-06-27) - 修复 Node.js v26 上 npm install 失败（`Get-Command` 返回 `npm.ps1` 导致语法错误）
 - **v5.32.0** (2026-06-27) - AI 打印助手流式输出 + Thinking 模式支持（自动检测 reasoning_content，折叠展示思考过程）
 - **v5.31.4** (2026-06-21) - 修复本地模型 API Key 检查误拦截

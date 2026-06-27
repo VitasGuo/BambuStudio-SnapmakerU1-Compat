@@ -729,7 +729,7 @@ function switchTab(tab){
   $('ailab-content').style.display=tab==='ailab'?'block':'none';
   $('gcvt-content').style.display=tab==='gcvt'?'block':'none';
   if(tab==='debug') loadDebugLogs();
-  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.32.1';checkUpdate();}
+  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.33.0';checkUpdate();}
   if(tab==='ailab') aiLoadConfig();
   if(tab==='gcvt') gcvtInit();
 }
@@ -1313,9 +1313,7 @@ function showPrinterConfig(){
     overlay.onclick=function(e){if(e.target===this)this.remove();};
     overlay.innerHTML='<div class="modal modal-dark" style="max-width:460px"><div class="modal-body"><div class="modal-section"><h3>Printer Connection</h3>'+
       '<label style="display:block;margin-bottom:4px;font-size:12px;color:#aaa;margin-top:12px">IP Address</label>'+
-      '<div style="display:flex;gap:6px"><input id="cfgHost" value="'+curHost+'" placeholder="192.168.1.12" style="flex:1;padding:8px 10px;border:1px solid #444;border-radius:6px;background:#0d1117;color:#e0e0e0;font-size:13px">'+
-      '<button onclick="scanPrinterConfig()" id="cfgScanBtn" style="padding:8px 14px;border:none;border-radius:6px;background:#0f8bff;color:#fff;font-size:13px;cursor:pointer;white-space:nowrap">Scan</button></div>'+
-      '<div id="cfgScanResult" style="display:none;margin-top:4px;font-size:12px"></div>'+
+      '<input id="cfgHost" value="'+curHost+'" placeholder="192.168.1.12" style="width:100%;padding:8px 10px;border:1px solid #444;border-radius:6px;background:#0d1117;color:#e0e0e0;font-size:13px;box-sizing:border-box">'+
       '<label style="display:block;margin-bottom:4px;font-size:12px;color:#aaa;margin-top:8px">Port</label>'+
       '<input id="cfgPort" value="'+curPort+'" type="number" style="width:100%;padding:8px 10px;border:1px solid #444;border-radius:6px;background:#0d1117;color:#e0e0e0;font-size:13px;box-sizing:border-box">'+
       '<label style="display:block;margin-bottom:4px;font-size:12px;color:#aaa;margin-top:8px">API Key <span style="color:#666;font-size:11px">(optional)</span></label>'+
@@ -1329,31 +1327,6 @@ function showPrinterConfig(){
 function closePrinterConfig(){
   var el=document.getElementById('printerConfigModal');
   if(el)el.remove();
-}
-function scanPrinterConfig(){
-  var btn=document.getElementById('cfgScanBtn');
-  if(!btn)return;
-  btn.disabled=true;btn.textContent='Scanning...';
-  var result=document.getElementById('cfgScanResult');
-  result.style.display='block';result.textContent='Scanning network for Snapmaker printers...';result.style.color='#aaa';
-  bridgeGET('/api/bridge/scan?timeout=5',function(d){
-    btn.disabled=false;btn.textContent='Scan';
-    if(!d||d.error){
-      result.textContent='Scan error: '+(d&&d.error||'no response');result.style.color='#f44336';return;
-    }
-    var printers=d.printers||[];
-    if(printers.length===0){
-      result.textContent='No Snapmaker printers found. Make sure the printer is on and on the same network.';result.style.color='#ff9800';return;
-    }
-    if(printers.length===1){
-      document.getElementById('cfgHost').value=printers[0].ip;
-      result.innerHTML='Found: <b>'+printers[0].name+'</b> at <b>'+printers[0].ip+'</b>. Click Apply to connect.';result.style.color='#4caf50';
-    }else{
-      var html='Found '+printers.length+' printers:<br>';
-      printers.forEach(function(p){html+='<div onclick="document.getElementById(\'cfgHost\').value=\''+p.ip+'\';this.style.background=\'rgba(15,139,255,.15)\'" style="padding:4px 6px;border-radius:4px;cursor:pointer;margin:2px 0;font-size:12px"><b>'+p.ip+'</b> <span style="color:#888">'+p.name+'</span></div>';});
-      result.innerHTML=html;result.style.color='#e0e0e0';
-    }
-  });
 }
 function applyPrinterConfig(){
   var host=document.getElementById('cfgHost').value.trim();

@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.32.1 (2026-06-21)
+## 当前版本: v5.33.0 (2026-06-27)
 
 ---
 
@@ -57,6 +57,11 @@
 ---
 
 ## 版本历史
+
+### v5.33.0 (2026-06-27) — WebUI 顶栏添加打印机设置弹窗
+- **新增打印机设置弹窗**：WebUI 顶栏 IP 地址旁新增齿轮图标，点击弹窗可修改打印机 IP/Port/API Key。解决系统更新后打印机 IP 变化导致 Bridge 连接失败的问题
+- **后端新增端点**：`/api/bridge/save_config.js` 支持 JSONP 方式更新打印机配置
+- **保留旧的 API Key**：只传空值时不覆盖已有的 API Key
 
 ### v5.32.1 (2026-06-27) — 修复 Node.js v26 npm.ps1 兼容性
 - **修复 npm install 失败**：Node.js v26 中 `Get-Command npm` 返回 `npm.ps1`，脚本用 `node.exe npm.ps1` 执行导致 PowerShell 语法错误。改为从 `$nodePath` 推导 `npm.cmd` 路径直接调用，不依赖 `Get-Command` 解析（traps.md #120）

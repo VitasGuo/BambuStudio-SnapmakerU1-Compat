@@ -8,7 +8,7 @@ const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.32.1";
+const BRIDGE_VERSION = "5.33.0";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
