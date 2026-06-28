@@ -17,8 +17,9 @@
 - Fluidd 集成（侧栏一键切换）
 - 中英文切换
 - About 页面（使用说明 + 版本更新检测）
-- AI 实验室（G-code 优化 + 打印助手浮动窗口，Workspace Markdown 系统）
+- AI 实验室（G-code 优化 + 打印助手，流式输出 + Thinking 模式，Workspace Markdown 系统）
 - G-code 转换（独立侧栏标签页，BambuStudio→OrcaSlicer 兼容格式转换）
+- 单元测试覆盖（node:test 框架，29 个测试覆盖 patchGcodeContent + convertGcodeContent 纯函数）
 
 ### ✅ 打印流程（对齐 OrcaSlicer）
 1. `SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=x MAP_EXTRUDER=y` — 设置映射
@@ -38,21 +39,19 @@
 2. **旧 gcode 无层进度**：`layer_change_gcode` 修复只影响新切片的 gcode，旧文件需重新切片。见 traps.md #105
 
 ### 📝 下一步
-1. 实测 GitHub 版本更新检测（server.js:496 + webui.html:1040 已实现，未验证）
-2. 对齐 OrcaSlicer 挤出头取出/放回功能（server.js 中无相关代码，未开始）
+1. 对齐 OrcaSlicer 挤出头取出/放回功能（server.js 中无相关代码，未开始）
+2. 优化 knowledge.md 按技能按需注入（当前全量 1254 行，每次 AI 调用消耗约 4000-6000 tokens）
+3. 扩充单元测试覆盖面（当前覆盖 patchGcode/convertGcode 纯函数，可扩展至 CIEDE2000 颜色匹配、extractGcodeStats 等）
 
-### 🔍 代码审查待改进项（v5.31.1 审查，暂不修复）
+### 🔍 代码审查待改进项（v5.37.2 审查后剩余）
 | # | 问题 | 重要性 | 必要性 | 说明 |
 |---|------|--------|--------|------|
-| 1 | node-fetch v2 停止维护 | 中 | 中 | 9 处 `timeout:` 选项是 v2 专有 API，升级 v3 需改为 `AbortController`。当前无已知安全漏洞，未来版本统一处理 |
-| 2 | 无自动化测试 | 中 | 中 | 核心逻辑（patchGcode 12 种操作、convertGcode 格式检测+EXEC 重组、CIEDE2000 颜色匹配）缺乏测试保护。建议优先为 patchGcode + convertGcode 添加测试 |
 | 3 | knowledge.md 全量注入 system prompt | 中 | 中 | 1254 行全量注入，每次 AI 调用消耗约 4000-6000 tokens。可优化为按技能按需注入相关段落 |
 | 4 | JSONP 错误处理薄弱 | 中 | 低 | `<script>` 标签加载时服务端 500 或超时只能靠 timeout 回调，用户看到"未知错误"。受限于 BambuStudio WebView 限制，改造成本高 |
-| 5 | ~~API Key 通过 GET URL query 传递~~ ✅ v5.36.0 已解决 | 低 | 低 | ailab.js optimize_gcode 删除 4 个多余 query 参数（provider/customBaseUrl/model/api_key），后端直接用全局 aiConfig，消除 apiKey GET URL 泄露风险（traps.md #137） |
-| 6 | slice_agent.js 单文件 2880 行 | 低 | 低 | 代码组织偏好，非 bug。拆分引入大量 diff 增加回归风险，已稳定迭代至 v5.31.1 |
+| 6 | slice_agent.js 单文件 ~1618 行 | 低 | 低 | v5.35.0 已从 2880 行减至 1618 行（-47%）。代码组织偏好，非 bug。拆分引入大量 diff 增加回归风险 |
 | 7 | API Key 明文存储 | 低 | 低 | 配置在 `%APPDATA%\BambuStudio-Bridge\bridge_config.json`，本地单用户工具，攻击者能读此文件已能做更多事 |
-| 8 | ~~install.ps1 / reinstall.ps1 80% 代码重复~~ ✅ v5.36.0 已解决 | 低 | 低 | 已提取 `install-common.psm1` 公共模块（14 个函数），三个脚本改为 Import-Module 导入 |
-| 9 | ~~patchGcodeLayout 嵌套在请求处理函数内~~ ✅ v5.37.0 已解决 | 低 | 低 | 从 handleUploadWithConfirm 内提取为 server.js 顶层函数 |
+
+> 已解决项：#1 node-fetch timeout（v5.37.0 fetchWithTimeout）、#2 无自动化测试（v5.37.0 29 个单元测试）、#5 API Key GET URL 泄露（v5.36.0）、#8 PS1 重复代码（v5.36.0 install-common.psm1）、#9 patchGcodeLayout 嵌套（v5.37.0 顶层函数）
 
 ---
 
