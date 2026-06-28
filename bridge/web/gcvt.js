@@ -8,6 +8,8 @@ var gcvtState={originalGcodeName:null,convertedGcodeName:null};
 var gcvtUploadedName=null;
 var _gcvtInited=false;
 
+function gcvtEsc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+
 // ─── HTML Injection (runs on load) ───
 (function initGcvt(){
   var ct=document.getElementById('gcvt-content');
@@ -144,7 +146,7 @@ function gcvtLoadOriginal(gcodeName){
   if(right)right.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text3);">转换后在此显示</div>';
   bridgeGET('/api/ai/read_gcode?gcode_name='+encodeURIComponent(gcodeName)+'&max_lines=200',function(d){
     if(!d||!d.ok){
-      if(left)left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--danger);">加载失败: '+(d&&d.error||'未知错误')+'</div>';
+      if(left)left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--danger);">加载失败: '+gcvtEsc(d&&d.error||'未知错误')+'</div>';
       return;
     }
     if(left)left.textContent=d.content||'';
@@ -196,7 +198,7 @@ function gcvtConvert(){
     var info=document.getElementById('gcvtInfo');
     if(info){
       var inf=d.info||{};
-      info.innerHTML='喷头: <b style="color:var(--primary);">'+inf.hotend_temp+'°C</b> 热床: <b style="color:var(--primary);">'+inf.bed_temp+'°C</b> 工具: <b>T'+inf.first_tool+'</b> 层数: <b>'+inf.total_layers+'</b>';
+      info.innerHTML='喷头: <b style="color:var(--primary);">'+gcvtEsc(inf.hotend_temp)+'°C</b> 热床: <b style="color:var(--primary);">'+gcvtEsc(inf.bed_temp)+'°C</b> 工具: <b>T'+gcvtEsc(inf.first_tool)+'</b> 层数: <b>'+gcvtEsc(inf.total_layers)+'</b>';
     }
     var convs=document.getElementById('gcvtConversions');
     if(convs&&d.conversions){

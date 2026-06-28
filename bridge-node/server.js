@@ -3,12 +3,13 @@ const http = require("http");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const { spawn } = require("child_process");
 const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.33.0";
+const BRIDGE_VERSION = "5.37.2";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -89,12 +90,24 @@ function moonrakerHeaders() {
   return h;
 }
 
+/**
+ * fetch wrapper with AbortController-based timeout.
+ * Replaces node-fetch v2's non-standard `timeout` option with the standard
+ * Web API (AbortController + signal), which is compatible with node-fetch v2,
+ * node-fetch v3, and Node.js built-in fetch. (traps.md #139)
+ */
+function fetchWithTimeout(url, options = {}, timeoutMs = MOONRAKER_TIMEOUT) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
+
 async function moonrakerFetch(urlPath, options = {}) {
   const baseUrl = getBaseUrl();
   if (!baseUrl) throw new Error("No printer configured");
   const url = `${baseUrl}${urlPath}`;
   const headers = { ...moonrakerHeaders(), ...(options.headers || {}) };
-  const resp = await fetch(url, { ...options, headers, timeout: MOONRAKER_TIMEOUT });
+  const resp = await fetchWithTimeout(url, { ...options, headers });
   return resp;
 }
 
@@ -181,6 +194,15 @@ app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   res.setHeader("Pragma", "no-cache");
   log("INFO", `>>> ${req.method} ${req.path} from ${req.ip}`);
+  next();
+});
+
+// JSONP callback sanitization — prevent cb parameter injection (XSS via <script> tag)
+// Only allow valid JS identifier characters; reject everything else with default "callback"
+app.use((req, res, next) => {
+  if (req.query && req.query.cb && !/^[A-Za-z_$][\w$]*$/.test(req.query.cb)) {
+    req.query.cb = "callback";
+  }
   next();
 });
 
@@ -286,26 +308,6 @@ app.get("/api/bridge/config.js", (req, res) => {
   })});`);
 });
 
-app.get("/api/bridge/status", async (req, res) => {
-  if (!printerConfig.host) return res.json({ connected: false, reason: "no_printer" });
-  try {
-    const r = await moonrakerFetch("/api/version");
-    if (r.ok) {
-      const data = await r.json();
-      return res.json({ connected: true, klipper_version: data.klipper_version || "" });
-    }
-    return res.json({ connected: false, reason: `http_${r.status}` });
-  } catch (e) {
-    return res.json({ connected: false, reason: e.message });
-  }
-});
-
-app.post("/api/bridge/disconnect", (req, res) => {
-  printerConfig = { host: "", port: 80, apikey: "", mode: "webui" };
-  saveConfig();
-  res.json({ disconnected: true });
-});
-
 app.get("/api/bridge/save_config.js", (req, res) => {
   const cb = req.query.cb || "callback";
   res.type("application/javascript");
@@ -338,7 +340,7 @@ app.get("/api/bridge/proxy.js", async (req, res) => {
   }
   try {
     const url = `${getBaseUrl()}${targetPath}`;
-    const r = await fetch(url, { headers: moonrakerHeaders(), timeout: MOONRAKER_TIMEOUT });
+    const r = await fetchWithTimeout(url, { headers: moonrakerHeaders() });
     const data = await r.json();
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify(data)});`);
@@ -358,7 +360,7 @@ app.get("/api/bridge/init-data.js", async (req, res) => {
   }
   try {
     const url = `${getBaseUrl()}/printer/objects/query?extruder&extruder1&extruder2&extruder3&heater_bed&filament_feed%20left&filament_feed%20right&filament_parameters&gcode_move&fan&fan_generic%20cavity_fan&led%20cavity_led&print_stats&display_status`;
-    const r = await fetch(url, { headers: moonrakerHeaders(), timeout: MOONRAKER_TIMEOUT });
+    const r = await fetchWithTimeout(url, { headers: moonrakerHeaders() });
     const data = await r.json();
     res.type("application/javascript");
     res.send(`onInitData(${JSON.stringify(data)});`);
@@ -443,7 +445,11 @@ app.get("/api/bridge/confirm_print.js", async (req, res) => {
   const timelapse = req.query.time_lapse_camera === "1" ? 1 : 0;
   let mapTable = [];
   if (req.query.extruder_map_table) {
-    try { mapTable = JSON.parse(req.query.extruder_map_table); } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); }
+    try {
+      if (req.query.extruder_map_table.length > 4096) throw new Error("extruder_map_table too large");
+      mapTable = JSON.parse(req.query.extruder_map_table);
+      if (!Array.isArray(mapTable)) throw new Error("extruder_map_table not an array");
+    } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); mapTable = []; }
   }
   const filename = pendingPrintFile;
   pendingPrintFile = "";
@@ -481,7 +487,11 @@ app.get("/api/bridge/start_print.js", async (req, res) => {
   const timelapse = req.query.time_lapse_camera === "1" ? 1 : 0;
   let mapTable = [];
   if (req.query.extruder_map_table) {
-    try { mapTable = JSON.parse(req.query.extruder_map_table); } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); }
+    try {
+      if (req.query.extruder_map_table.length > 4096) throw new Error("extruder_map_table too large");
+      mapTable = JSON.parse(req.query.extruder_map_table);
+      if (!Array.isArray(mapTable)) throw new Error("extruder_map_table not an array");
+    } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); mapTable = []; }
   }
   log("INFO", `start_print: path=${path} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)}`);
   try {
@@ -514,10 +524,9 @@ app.get("/api/bridge/cancel_pending.js", (req, res) => {
 app.get("/api/bridge/check_update.js", async (req, res) => {
   const cb = req.query.cb || "callback";
   try {
-    const r = await fetch("https://api.github.com/repos/VitasGuo/BambuStudio-SnapmakerU1-Compat/releases/latest", {
+    const r = await fetchWithTimeout("https://api.github.com/repos/VitasGuo/BambuStudio-SnapmakerU1-Compat/releases/latest", {
       headers: { "User-Agent": "BambuStudio-Bridge" },
-      timeout: 8000,
-    });
+    }, 8000);
     if (!r.ok) throw new Error(`GitHub API ${r.status}`);
     const data = await r.json();
     const latest = (data.tag_name || "").replace(/^v/, "");
@@ -530,7 +539,43 @@ app.get("/api/bridge/check_update.js", async (req, res) => {
   }
 });
 
-app.get("/api/bridge/open_external.js", (req, res) => {
+// Open a path (URL or directory) using the OS default handler — spawn-based, no shell, no injection
+function openPathExternally(target) {
+  return new Promise((resolve) => {
+    let cmd, args;
+    if (process.platform === "win32") {
+      // explorer.exe handles both URLs (default browser) and directories
+      cmd = "explorer";
+      args = [target];
+    } else if (process.platform === "darwin") {
+      cmd = "open";
+      args = [target];
+    } else {
+      cmd = "xdg-open";
+      args = [target];
+    }
+    const child = spawn(cmd, args, { windowsHide: false });
+    let settled = false;
+    const done = (err) => {
+      if (settled) return;
+      settled = true;
+      resolve(err);
+    };
+    child.on("error", done);
+    child.on("exit", (code) => {
+      // Windows explorer returns non-zero even on success — treat as success on Windows
+      if (code !== 0 && process.platform !== "win32") {
+        done(new Error(`${cmd} exited with code ${code}`));
+      } else {
+        done(null);
+      }
+    });
+    // Safety timeout in case neither event fires (explorer may detach)
+    setTimeout(() => done(null), 2000);
+  });
+}
+
+app.get("/api/bridge/open_external.js", async (req, res) => {
   const cb = req.query.cb || "callback";
   const url = req.query.url;
   if (!url || !/^https?:\/\//i.test(url)) {
@@ -538,22 +583,19 @@ app.get("/api/bridge/open_external.js", (req, res) => {
     res.send(`${cb}(${JSON.stringify({ error: "Invalid URL" })});`);
     return;
   }
-  const { exec } = require("child_process");
-  const cmd = process.platform === "win32" ? `start "" "${url}"` : process.platform === "darwin" ? `open "${url}"` : `xdg-open "${url}"`;
-  exec(cmd, (err) => {
-    res.type("application/javascript");
-    if (err) {
-      log("WARN", `open_external failed: ${err.message}`);
-      res.send(`${cb}(${JSON.stringify({ error: err.message })});`);
-    } else {
-      log("INFO", `Opened external URL: ${url}`);
-      res.send(`${cb}(${JSON.stringify({ success: true })});`);
-    }
-  });
+  const err = await openPathExternally(url);
+  res.type("application/javascript");
+  if (err) {
+    log("WARN", `open_external failed: ${err.message}`);
+    res.send(`${cb}(${JSON.stringify({ error: err.message })});`);
+  } else {
+    log("INFO", `Opened external URL: ${url}`);
+    res.send(`${cb}(${JSON.stringify({ success: true })});`);
+  }
 });
 
 // 打开本地文件夹
-app.get("/api/ai/open_folder.js", (req, res) => {
+app.get("/api/ai/open_folder.js", async (req, res) => {
   const cb = req.query.cb || "callback";
   const target = req.query.target; // workspace | gcode | stl
   let dir;
@@ -562,18 +604,14 @@ app.get("/api/ai/open_folder.js", (req, res) => {
     case "stl": dir = sliceAgent.STL_DIR(); break;
     default: dir = sliceAgent.WORKSPACE_DIR(); break;
   }
-  const { exec } = require("child_process");
-  const cmd = process.platform === "win32" ? `explorer "${dir}"` : process.platform === "darwin" ? `open "${dir}"` : `xdg-open "${dir}"`;
-  exec(cmd, (err, stdout, stderr) => {
-    res.type("application/javascript");
-    // Windows explorer 返回 exit code 1 即使成功打开，所以只检查 stderr
-    const failed = (err && process.platform !== "win32") || (err && stderr);
-    if (failed) {
-      res.send(`${cb}(${JSON.stringify({ error: err.message })});`);
-    } else {
-      res.send(`${cb}(${JSON.stringify({ success: true, path: dir })});`);
-    }
-  });
+  const err = await openPathExternally(dir);
+  res.type("application/javascript");
+  // Windows explorer always returns non-zero even on success — treat as success on Windows
+  if (err && process.platform !== "win32") {
+    res.send(`${cb}(${JSON.stringify({ error: err.message })});`);
+  } else {
+    res.send(`${cb}(${JSON.stringify({ success: true, path: dir })});`);
+  }
 });
 
 async function ensureCamMonitor() {
@@ -598,10 +636,9 @@ app.get("/api/bridge/cam_snapshot", async (req, res) => {
   const baseUrl = getBaseUrl();
   const url = `${baseUrl}/server/files/camera/monitor.jpg?_t=${Date.now()}`;
   try {
-    const r = await fetch(url, {
+    const r = await fetchWithTimeout(url, {
       method: "GET",
       headers: moonrakerHeaders(),
-      timeout: MOONRAKER_TIMEOUT,
     });
     if (!r.ok) {
       log("DEBUG", `cam_snapshot: Moonraker returned ${r.status}`);
@@ -735,16 +772,10 @@ app.get("/api/bridge/scan", async (req, res) => {
   }
 });
 
-async function handleUploadWithConfirm(req, res) {
-  if (!printerConfig.host) return res.status(400).json({ error: "no_printer_configured" });
-
-  const contentType = req.headers["content-type"] || "";
-  log("INFO", `Upload request: content_type=${contentType}`);
-
-  if (!contentType.includes("multipart")) {
-    return proxyToMoonraker(req, res, "/api/files/local");
-  }
-
+/**
+ * Reorder G-code block layout: move CONFIG_BLOCK to end of file.
+ * Moonraker searches for CONFIG_BLOCK at file end; BambuStudio puts it at start.
+ */
 function patchGcodeLayout(content) {
   const headerStart = content.indexOf("; HEADER_BLOCK_START");
   const headerEnd = content.indexOf("; HEADER_BLOCK_END");
@@ -766,11 +797,6 @@ function patchGcodeLayout(content) {
 
   let beforeHeader = headerStart > 0 ? content.substring(0, headerStart) : "";
   let afterExecEnd = execEnd >= 0 ? content.substring(execEnd + "; EXECUTABLE_BLOCK_END".length) : "";
-  let betweenBlocks = "";
-
-  if (headerEnd >= 0 && configStart >= 0 && configStart > headerEnd) {
-    betweenBlocks = content.substring(headerEnd + "; HEADER_BLOCK_END".length, configStart);
-  }
 
   let result = beforeHeader;
   if (headerBlock) result += headerBlock + "\n";
@@ -782,6 +808,17 @@ function patchGcodeLayout(content) {
   return result;
 }
 
+async function handleUploadWithConfirm(req, res) {
+  if (!printerConfig.host) return res.status(400).json({ error: "no_printer_configured" });
+
+  const contentType = req.headers["content-type"] || "";
+  log("INFO", `Upload request: content_type=${contentType}`);
+
+  if (!contentType.includes("multipart")) {
+    return proxyToMoonraker(req, res, "/api/files/local");
+  }
+
+  let uploadedFiles = null;
   try {
     const formidable = require("formidable");
     const form = new formidable.IncomingForm({ maxFileSize: 500 * 1024 * 1024 });
@@ -791,6 +828,7 @@ function patchGcodeLayout(content) {
         else resolve([fields, files]);
       });
     });
+    uploadedFiles = files;
 
     const file = files.gcode?.[0] || files.file?.[0];
     if (!file) {
@@ -815,12 +853,11 @@ function patchGcodeLayout(content) {
     formData.append("file", fileContent, { filename: file.originalFilename });
 
     const uploadHeaders = { ...moonrakerHeaders(), ...formData.getHeaders() };
-    const uploadResp = await fetch(`${getBaseUrl()}/server/files/upload`, {
+    const uploadResp = await fetchWithTimeout(`${getBaseUrl()}/server/files/upload`, {
       method: "POST",
       headers: uploadHeaders,
       body: formData,
-      timeout: 120000,
-    });
+    }, 120000);
 
     const respData = await uploadResp.json();
     log("INFO", `Moonraker upload: status=${uploadResp.status}`);
@@ -872,13 +909,16 @@ function patchGcodeLayout(content) {
     log("ERROR", `Upload parse error: ${e.message}`);
     return res.status(500).json({ error: `Upload failed: ${e.message}` });
   } finally {
+    // Clean up formidable temp files — iterate all fields (file, gcode, etc.)
     try {
-      const tmpFiles = req.files?.file;
-      if (tmpFiles) {
-        const arr = Array.isArray(tmpFiles) ? tmpFiles : [tmpFiles];
-        for (const f of arr) {
-          if (f.filepath && fs.existsSync(f.filepath)) {
-            try { fs.unlinkSync(f.filepath); } catch (_) {}
+      if (uploadedFiles && typeof uploadedFiles === "object") {
+        for (const key of Object.keys(uploadedFiles)) {
+          const val = uploadedFiles[key];
+          const arr = Array.isArray(val) ? val : [val];
+          for (const f of arr) {
+            if (f && f.filepath && fs.existsSync(f.filepath)) {
+              try { fs.unlinkSync(f.filepath); } catch (_) {}
+            }
           }
         }
       }
@@ -903,7 +943,7 @@ async function proxyToMoonraker(req, res, targetPath) {
   }
 
   try {
-    const opts = { method: req.method, headers, timeout: MOONRAKER_TIMEOUT };
+    const opts = { method: req.method, headers };
     if (req.method !== "GET" && req.method !== "HEAD") {
       if (Buffer.isBuffer(req.body) && req.body.length > 0) {
         opts.body = req.body;
@@ -914,7 +954,7 @@ async function proxyToMoonraker(req, res, targetPath) {
         opts.headers["content-type"] = "application/json";
       }
     }
-    const r = await fetch(url, opts);
+    const r = await fetchWithTimeout(url, opts);
     const contentType = r.headers.get("content-type") || "";
     const body = Buffer.from(await r.arrayBuffer());
     log("DEBUG", `Proxy ${req.method} ${targetPath} → ${r.status} (${contentType}, ${body.length}b)`);
@@ -1066,118 +1106,6 @@ app.post("/api/ai/test_connection", express.json(), async (req, res) => {
   }
 });
 
-app.post("/api/ai/upload_model", async (req, res) => {
-  try {
-    const formidable = require("formidable");
-    const form = new formidable.IncomingForm({ maxFileSize: 500 * 1024 * 1024 });
-    const [fields, files] = await new Promise((resolve, reject) => {
-      form.parse(req, (err, fields, files) => {
-        if (err) reject(err);
-        else resolve([fields, files]);
-      });
-    });
-    const file = files.file?.[0];
-    if (!file) return res.status(400).json({ error: "no_file" });
-    const buffer = fs.readFileSync(file.filepath);
-    const info = sliceAgent.saveModelFile(file.originalFilename, buffer);
-    log("INFO", `AI Lab: model uploaded: ${info.originalName} (${info.size} bytes) → ${info.id}`);
-    try { fs.unlinkSync(file.filepath); } catch (_) {}
-    res.json({ ok: true, model: info });
-  } catch (e) {
-    log("ERROR", `AI Lab upload error: ${aiErrMsg(e)}`);
-    res.status(500).json({ error: aiErrMsg(e) });
-  }
-});
-
-app.get("/api/ai/analyze.js", async (req, res) => {
-  const cb = req.query.cb || "callback";
-  try {
-    const modelId = req.query.model_id;
-    const info = sliceAgent.getStlInfo(modelId);
-    if (!info) throw new Error("Model not found: " + modelId);
-    const analysis = await sliceAgent.analyzeModel(info.path);
-    log("INFO", `AI Lab: model analyzed: ${modelId}`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: true, analysis })});`);
-  } catch (e) {
-    log("ERROR", `AI Lab analyze error: ${aiErrMsg(e)}`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
-  }
-});
-
-app.get("/api/ai/suggest_params.js", async (req, res) => {
-  const cb = req.query.cb || "callback";
-  try {
-    const analysis = req.query.analysis ? JSON.parse(req.query.analysis) : null;
-    if (!analysis) throw new Error("analysis parameter required");
-    const params = await sliceAgent.suggestParameters(analysis, aiConfig, null);
-    log("INFO", `AI Lab: params suggested: layer_height=${params.layer_height} walls=${params.walls} infill=${params.infill}`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: true, params })});`);
-  } catch (e) {
-    log("ERROR", `AI Lab suggest_params error: ${aiErrMsg(e)}`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
-  }
-});
-
-app.get("/api/ai/ai_slice.js", async (req, res) => {
-  const cb = req.query.cb || "callback";
-  try {
-    const modelId = req.query.model_id;
-    const analysis = req.query.analysis ? JSON.parse(req.query.analysis) : null;
-    const params = req.query.params ? JSON.parse(req.query.params) : {};
-    if (!analysis) throw new Error("analysis parameter required");
-    // 查找模型文件路径
-    const modelInfo = modelId ? sliceAgent.getStlInfo(modelId) : null;
-    const modelPath = modelInfo ? modelInfo.path : null;
-    const result = await sliceAgent.generateGcodeFromAnalysis(analysis, params, aiConfig, modelPath);
-    log("INFO", `AI Lab: AI slice done: ${modelId} → ${result.gcodeName} (${result.stats?.layers || '?'} layers, ${result.lines} lines)`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: true, ...result })});`);
-  } catch (e) {
-    log("ERROR", `AI Lab ai_slice error: ${aiErrMsg(e)}`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
-  }
-});
-
-app.get("/api/ai/review_gcode.js", async (req, res) => {
-  const cb = req.query.cb || "callback";
-  try {
-    const gcodeName = req.query.gcode_name;
-    const gcodePath = sliceAgent.getGcodePath(gcodeName);
-    if (!gcodePath) throw new Error("G-code not found: " + gcodeName);
-    const content = fs.readFileSync(gcodePath, "utf-8");
-    const stats = sliceAgent.extractGcodeStats(content);
-    const review = await sliceAgent.reviewGcode(stats, aiConfig, null, null);
-    log("INFO", `AI Lab: gcode reviewed: ${gcodeName} score=${review.overall_score} risk=${review.risk_level}`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: true, review, stats })});`);
-  } catch (e) {
-    log("ERROR", `AI Lab review_gcode error: ${aiErrMsg(e)}`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
-  }
-});
-
-app.get("/api/ai/patch_gcode.js", async (req, res) => {
-  const cb = req.query.cb || "callback";
-  try {
-    const gcodeName = req.query.gcode_name;
-    const patchPlan = req.query.patch_plan ? JSON.parse(req.query.patch_plan) : [];
-    const result = sliceAgent.patchGcode(gcodeName, patchPlan);
-    log("INFO", `AI Lab: gcode patched: ${gcodeName} patches=${result.patches_applied}`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: true, result })});`);
-  } catch (e) {
-    log("ERROR", `AI Lab patch_gcode error: ${aiErrMsg(e)}`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
-  }
-});
-
 app.get("/api/ai/download/:name", (req, res) => {
   const gcodeName = req.params.name;
   const gcodePath = sliceAgent.getGcodePath(gcodeName);
@@ -1216,11 +1144,11 @@ app.get("/api/ai/upload_to_printer.js", async (req, res) => {
     const FD = require("form-data");
     const formData = new FD();
     formData.append("file", fileContent, { filename: gcodeName });
-    const uploadResp = await fetch(`${getBaseUrl()}/server/files/upload`, {
+    const uploadResp = await fetchWithTimeout(`${getBaseUrl()}/server/files/upload`, {
       method: "POST",
       headers: { ...moonrakerHeaders(), ...formData.getHeaders() },
       body: formData,
-    });
+    }, 120000);
     const respData = await uploadResp.json();
     if (uploadResp.status === 200 || uploadResp.status === 201) {
       const uploadedPath = respData?.result?.item?.path || gcodeName;
@@ -1293,23 +1221,6 @@ app.get("/api/ai/convert_gcode.js", async (req, res) => {
   }
 });
 
-app.get("/api/ai/print_qa.js", async (req, res) => {
-  const cb = req.query.cb || "callback";
-  try {
-    const question = req.query.question;
-    if (!question) throw new Error("question parameter required");
-    const context = req.query.context || "";
-    const answer = await sliceAgent.printQA(question, context, aiConfig);
-    log("INFO", `AI Lab: print QA: "${question.slice(0, 50)}..."`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: true, answer })});`);
-  } catch (e) {
-    log("ERROR", `AI Lab print_qa error: ${aiErrMsg(e)}`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
-  }
-});
-
 // ─── 流式打印问答（JSONP 轮询模式） ───
 app.get("/api/ai/qa_stream_start.js", async (req, res) => {
   const cb = req.query.cb || "callback";
@@ -1349,25 +1260,6 @@ app.get("/api/ai/qa_stream_poll.js", async (req, res) => {
   }
 });
 
-app.get("/api/ai/advanced_slice.js", async (req, res) => {
-  const cb = req.query.cb || "callback";
-  try {
-    const modelId = req.query.model_id;
-    const analysis = req.query.analysis ? JSON.parse(req.query.analysis) : null;
-    if (!analysis) throw new Error("analysis parameter required");
-    const modelInfo = modelId ? sliceAgent.getStlInfo(modelId) : null;
-    const modelPath = modelInfo ? modelInfo.path : null;
-    const result = await sliceAgent.advancedSlice(modelPath, analysis, aiConfig);
-    log("INFO", `AI Lab: advanced slice done: ${modelId} → ${result.gcodeName}`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: true, result })});`);
-  } catch (e) {
-    log("ERROR", `AI Lab advanced_slice error: ${aiErrMsg(e)}`);
-    res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
-  }
-});
-
 // Upload G-code file for optimization
 app.post("/api/ai/upload_gcode", async (req, res) => {
   try {
@@ -1401,7 +1293,7 @@ app.get("/api/ai/list_printer_gcode.js", async (req, res) => {
       res.send(`${cb}(${JSON.stringify({ ok: false, error: "No printer configured" })});`);
       return;
     }
-    const resp = await fetch(`${getBaseUrl()}/server/files/list?root=gcodes`, {
+    const resp = await fetchWithTimeout(`${getBaseUrl()}/server/files/list?root=gcodes`, {
       headers: moonrakerHeaders(),
     });
     const data = await resp.json();
@@ -1437,9 +1329,9 @@ app.get("/api/ai/fetch_printer_gcode.js", async (req, res) => {
     if (!printerConfig.host) throw new Error("No printer configured");
     // Download from Moonraker — encode path segments for URLs with spaces/CJK
     const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
-    const resp = await fetch(`${getBaseUrl()}/server/files/gcodes/${encodedPath}`, {
+    const resp = await fetchWithTimeout(`${getBaseUrl()}/server/files/gcodes/${encodedPath}`, {
       headers: moonrakerHeaders(),
-    });
+    }, 60000);
     if (!resp.ok) throw new Error(`Moonraker download failed: ${resp.status} ${await resp.text().catch(()=>"")}`);
 
     const contentLength = parseInt(resp.headers.get("content-length") || "0");
@@ -1467,23 +1359,20 @@ app.get("/api/ai/fetch_printer_gcode.js", async (req, res) => {
 });
 
 // Open gcode folder in system file explorer
-app.get("/api/ai/open_gcode_folder.js", (req, res) => {
+app.get("/api/ai/open_gcode_folder.js", async (req, res) => {
   const cb = req.query.cb || "callback";
-  const { exec } = require("child_process");
   const gcodeDir = (sliceAgent.GCODE_DIR && sliceAgent.GCODE_DIR()) || path.join(osAppData, "ai-lab", "gcode");
   // Ensure directory exists
   if (!fs.existsSync(gcodeDir)) fs.mkdirSync(gcodeDir, { recursive: true });
-  const cmd = process.platform === "win32" ? `explorer "${gcodeDir}"` : process.platform === "darwin" ? `open "${gcodeDir}"` : `xdg-open "${gcodeDir}"`;
-  exec(cmd, (err) => {
-    res.type("application/javascript");
-    // Windows explorer always returns exit code 1 even on success — treat as success if directory exists
-    if (err && process.platform !== "win32") {
-      log("WARN", `open_gcode_folder failed: ${err.message}`);
-      res.send(`${cb}(${JSON.stringify({ ok: false, error: err.message })});`);
-    } else {
-      res.send(`${cb}(${JSON.stringify({ ok: true, path: gcodeDir })});`);
-    }
-  });
+  const err = await openPathExternally(gcodeDir);
+  res.type("application/javascript");
+  // Windows explorer always returns exit code 1 even on success — treat as success if directory exists
+  if (err && process.platform !== "win32") {
+    log("WARN", `open_gcode_folder failed: ${err.message}`);
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: err.message })});`);
+  } else {
+    res.send(`${cb}(${JSON.stringify({ ok: true, path: gcodeDir })});`);
+  }
 });
 
 // ─── End AI Lab Endpoints ───
@@ -1513,7 +1402,7 @@ app.get("/webcam/{*path}", async (req, res) => {
   const qs = req.url.includes("?") ? `?${req.url.split("?")[1]}` : "";
   const url = `${getBaseUrl()}/webcam/${p}${qs}`;
   try {
-    const r = await fetch(url, { headers: moonrakerHeaders(), timeout: 30000 });
+    const r = await fetchWithTimeout(url, { headers: moonrakerHeaders() }, 30000);
     const body = Buffer.from(await r.arrayBuffer());
     const skipHeaders = ["transfer-encoding", "connection"];
     for (const [k, v] of r.headers.entries()) {
@@ -1546,7 +1435,7 @@ function renderSetupPage() {
 <div class="divider">or enter manually</div>
 <form id="setup"><label>Printer IP Address</label><div class="ip-row"><input id="host" placeholder="192.168.1.12"></div><label>Moonraker Port</label><input id="port" value="80" type="number"><label>API Key (optional)</label><input id="apikey" placeholder="Leave empty if trusted_clients is configured"><button type="submit">Connect</button></form>
 <p class="hint">Tip: Make sure your printer is powered on and connected to the same network. Add <code>trusted_clients: 192.168.0.0/16</code> to your <code>moonraker.conf</code> [authorization] section to skip API Key.</p></div>
-<script>function scanPrinters(){var btn=document.getElementById('scanBtn');var result=document.getElementById('scanResult');btn.disabled=true;btn.innerHTML='\\u23F3 Scanning...';result.className='scan-result';result.style.display='none';fetch('/api/bridge/scan?timeout=5').then(function(r){return r.json()}).then(function(d){btn.disabled=false;btn.innerHTML='\\uD83D\\uDD0D Scan Network';if(d.error){result.className='scan-result error';result.style.display='block';result.textContent='Scan error: '+d.error;return;}var printers=d.printers||[];if(printers.length===0){result.className='scan-result none';result.style.display='block';result.textContent='No Snapmaker printers found on your network.';return;}if(printers.length===1){var p=printers[0];document.getElementById('host').value=p.ip;result.className='scan-result found';result.style.display='block';result.innerHTML='Found: <b>'+p.name+'</b> at <b>'+p.ip+'</b>. Click Connect below.';}else{var html='Found '+printers.length+' printers (click to select):<br>';printers.forEach(function(p){html+='<div class="printer-item" data-ip="'+p.ip+'"><span class="p-name">'+p.name+'</span> <span class="p-ip">'+p.ip+'</span></div>';});result.className='scan-result found';result.style.display='block';result.innerHTML=html;result.querySelectorAll('.printer-item').forEach(function(el){el.onclick=function(){document.getElementById('host').value=el.dataset.ip;};});}}).catch(function(e){btn.disabled=false;btn.innerHTML='\\uD83D\\uDD0D Scan Network';result.className='scan-result error';result.style.display='block';result.textContent='Scan failed: '+e.message;});}document.getElementById('setup').onsubmit=function(e){e.preventDefault();var h=document.getElementById('host').value;var p=document.getElementById('port').value||'80';var k=document.getElementById('apikey').value;window.location.href='/?host='+encodeURIComponent(h)+'&port='+p+'&apikey='+encodeURIComponent(k);};</script></body></html>`;
+<script>function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}function scanPrinters(){var btn=document.getElementById('scanBtn');var result=document.getElementById('scanResult');btn.disabled=true;btn.innerHTML='\\u23F3 Scanning...';result.className='scan-result';result.style.display='none';fetch('/api/bridge/scan?timeout=5').then(function(r){return r.json()}).then(function(d){btn.disabled=false;btn.innerHTML='\\uD83D\\uDD0D Scan Network';if(d.error){result.className='scan-result error';result.style.display='block';result.textContent='Scan error: '+d.error;return;}var printers=d.printers||[];if(printers.length===0){result.className='scan-result none';result.style.display='block';result.textContent='No Snapmaker printers found on your network.';return;}if(printers.length===1){var p=printers[0];document.getElementById('host').value=p.ip;result.className='scan-result found';result.style.display='block';result.innerHTML='Found: <b>'+escHtml(p.name)+'</b> at <b>'+escHtml(p.ip)+'</b>. Click Connect below.';}else{var html='Found '+printers.length+' printers (click to select):<br>';printers.forEach(function(p){html+='<div class="printer-item" data-ip="'+escHtml(p.ip)+'"><span class="p-name">'+escHtml(p.name)+'</span> <span class="p-ip">'+escHtml(p.ip)+'</span></div>';});result.className='scan-result found';result.style.display='block';result.innerHTML=html;result.querySelectorAll('.printer-item').forEach(function(el){el.onclick=function(){document.getElementById('host').value=el.dataset.ip;};});}}).catch(function(e){btn.disabled=false;btn.innerHTML='\\uD83D\\uDD0D Scan Network';result.className='scan-result error';result.style.display='block';result.textContent='Scan failed: '+e.message;});}document.getElementById('setup').onsubmit=function(e){e.preventDefault();var h=document.getElementById('host').value;var p=document.getElementById('port').value||'80';var k=document.getElementById('apikey').value;window.location.href='/?host='+encodeURIComponent(h)+'&port='+p+'&apikey='+encodeURIComponent(k);};</script></body></html>`;
 }
 
 function renderFallbackPage() {

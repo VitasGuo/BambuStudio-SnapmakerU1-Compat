@@ -15,7 +15,7 @@ build({
   outfile: path.join(OUT_DIR, "server.js"),
   format: "cjs",
   banner: {
-    js: "// BambuStudio Bridge v5.33.0 - Bundled\n",
+    js: "// BambuStudio Bridge v5.37.2 - Bundled\n",
   },
   external: [
     "bonjour-service",
@@ -31,7 +31,7 @@ build({
 
   const pkg = {
     name: "bambustudio-bridge",
-    version: "5.31.3",
+    version: "5.37.2",
     main: "server.js",
     type: "commonjs",
     scripts: { start: "node server.js" },

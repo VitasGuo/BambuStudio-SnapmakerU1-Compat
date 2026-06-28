@@ -1,42 +1,21 @@
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-[Console]::InputEncoding = [System.Text.Encoding]::UTF8
+Import-Module "$PSScriptRoot\install-common.psm1"
+Set-ConsoleUtf8
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.33.0 Uninstaller"
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.37.2 Uninstaller"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.32.0 Uninstall" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.37.2 Uninstall" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 
-$bambuProcess = Get-Process -Name "bambustudio" -ErrorAction SilentlyContinue
-if ($bambuProcess) {
-    Write-Host "  [!] BambuStudio is running. Please close it first." -ForegroundColor Red
-    Read-Host "Press Enter to exit"
+try {
+    Assert-BambuStudioNotRunning
+} catch {
     exit 1
 }
 
-$bambuDir = $null
-$searchPaths = @(
-    "C:\Program Files\Bambu Studio",
-    "C:\Program Files (x86)\Bambu Studio",
-    "D:\Program Files\Bambu Studio",
-    "D:\Bambu Studio"
-)
-
-foreach ($p in $searchPaths) {
-    if ((Test-Path "$p\resources\profiles\Snapmaker.json") -or (Test-Path "$p\resources\profiles\Snapmaker") -or (Test-Path "$p\bridge")) {
-        $bambuDir = $p
-        break
-    }
-}
-
-if (-not $bambuDir) {
-    Write-Host "  [!] Cannot auto-detect BambuStudio installation." -ForegroundColor Yellow
-    Write-Host ""
-    $input = Read-Host "  Enter BambuStudio install path"
-    $bambuDir = $input.Trim('"').Trim()
-}
+$bambuDir = Find-BambuStudioDir -DetectionMode Uninstall
 
 $profilesDir = "$bambuDir\resources\profiles"
 $hasVendor = Test-Path "$profilesDir\Snapmaker.json"
@@ -100,40 +79,13 @@ if ($hasDir) {
 }
 
 Write-Host "  [3/7] Stopping and removing Bridge Server..." -ForegroundColor White
-$portProc = Get-NetTCPConnection -LocalPort 13628 -ErrorAction SilentlyContinue | Where-Object { $_.State -eq "Listen" } | Select-Object -First 1
-if ($portProc) {
-    try {
-        Stop-Process -Id $portProc.OwningProcess -Force -ErrorAction Stop
-        Start-Sleep -Milliseconds 500
-        Write-Host "  Stopped Bridge process (PID $($portProc.OwningProcess))" -ForegroundColor DarkGray
-    } catch {
-        try {
-            Start-Process powershell -Verb RunAs -ArgumentList "-Command Stop-Process -Id $($portProc.OwningProcess) -Force" -Wait
-            Start-Sleep -Milliseconds 500
-            Write-Host "  Stopped Bridge process (elevated)" -ForegroundColor DarkGray
-        } catch {
-            Write-Host "  [!] Failed to stop Bridge process. Please stop it manually." -ForegroundColor Yellow
-        }
-    }
-} else {
-    $bridgeProc = Get-Process -Name "node" -ErrorAction SilentlyContinue
-    if ($bridgeProc) {
-        foreach ($bp in $bridgeProc) { try { Stop-Process -Id $bp.Id -Force -ErrorAction SilentlyContinue } catch {} }
-        Write-Host "  Stopped node process(es)" -ForegroundColor DarkGray
-    }
-}
+Stop-BridgeProcess -IncludeNodeProcess | Out-Null
 
-$startupFolder = [System.Environment]::GetFolderPath('Startup')
-$shortcutPath = "$startupFolder\BambuStudio Bridge.lnk"
-if (Test-Path $shortcutPath) {
-    Remove-Item $shortcutPath -Force
-    Write-Host "  Removed startup shortcut" -ForegroundColor Green
-}
+Remove-BridgeStartupShortcut | Out-Null
 
 # Remove watchdog scheduled task
-$watchdogTask = Get-ScheduledTask -TaskName "BambuStudio Bridge Watchdog" -ErrorAction SilentlyContinue
-if ($watchdogTask) {
-    Unregister-ScheduledTask -TaskName "BambuStudio Bridge Watchdog" -Confirm:$false
+$watchdogRemoved = Unregister-BridgeWatchdog
+if ($watchdogRemoved) {
     Write-Host "  Removed watchdog scheduled task" -ForegroundColor Green
 }
 
@@ -170,50 +122,18 @@ if (Test-Path $bridgeConfigDir) {
 }
 
 Write-Host "  [5/7] Clearing BambuStudio system cache..." -ForegroundColor White
-$cacheDir = "$env:APPDATA\BambuStudioBeta\system\Snapmaker"
-$cacheVendor = "$env:APPDATA\BambuStudioBeta\system\Snapmaker.json"
-if (Test-Path $cacheDir) { Remove-Item $cacheDir -Recurse -Force }
-if (Test-Path $cacheVendor) { Remove-Item $cacheVendor -Force }
+Clear-BambuSystemCache | Out-Null
 Write-Host "  [OK] System cache cleared" -ForegroundColor Green
 Write-Host "  Note: User custom presets are preserved" -ForegroundColor DarkGray
 
 Write-Host "  [6/7] Cleaning BambuStudio.conf..." -ForegroundColor White
 $confPath = "$env:APPDATA\BambuStudioBeta\BambuStudio.conf"
 if (Test-Path $confPath) {
-    try {
-        $confRaw = [System.IO.File]::ReadAllText($confPath, [System.Text.UTF8Encoding]::new($false))
-        $conf = $confRaw | ConvertFrom-Json
-        $changed = $false
-
-        if ($conf.filaments) {
-            $filamentList = @($conf.filaments)
-            $cleanedList = @($filamentList | Where-Object {
-                $_ -notmatch '@U1' -and $_ -notmatch '^Snapmaker '
-            })
-            if ($cleanedList.Count -ne $filamentList.Count) {
-                $conf.filaments = $cleanedList
-                $changed = $true
-            }
-        }
-
-        if ($conf.nozzle_volume_types) {
-            $keysToRemove = @($conf.nozzle_volume_types.PSObject.Properties | Where-Object { $_.Name -match 'Snapmaker' })
-            foreach ($key in $keysToRemove) {
-                $conf.nozzle_volume_types.PSObject.Properties.Remove($key.Name)
-                $changed = $true
-            }
-        }
-
-        if ($changed) {
-            Copy-Item $confPath "$confPath.bak" -Force
-            $jsonOutput = $conf | ConvertTo-Json -Depth 10
-            [System.IO.File]::WriteAllText($confPath, $jsonOutput, [System.Text.UTF8Encoding]::new($false))
-            Write-Host "  [OK] Cleaned Snapmaker cache entries (backup: .bak)" -ForegroundColor Green
-        } else {
-            Write-Host "  [--] No Snapmaker cache entries found" -ForegroundColor DarkGray
-        }
-    } catch {
-        Write-Host "  [!] Failed to parse BambuStudio.conf, skipping (user data preserved)" -ForegroundColor Yellow
+    $result = Clean-SnapmakerEntriesFromConf
+    if ($result -eq "Cleaned") {
+        Write-Host "  [OK] Cleaned Snapmaker cache entries (backup: .bak)" -ForegroundColor Green
+    } elseif ($result -eq "NoChange") {
+        Write-Host "  [--] No Snapmaker cache entries found" -ForegroundColor DarkGray
     }
 } else {
     Write-Host "  [--] BambuStudio.conf not found" -ForegroundColor DarkGray

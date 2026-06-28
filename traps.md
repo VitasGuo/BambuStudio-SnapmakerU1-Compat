@@ -20,7 +20,7 @@
 #26 bed_model/bed_texture 为空 | #27 SVG 不渲染 | #41 STL 不居中 | #50 热床模型高度
 
 ### Bridge 代理与通信
-#28 WebView 不注入 API Key | #29 网络插件签名验证 | #30 /moonraker/ 前缀不工作 | #31 /ws 路径错误 | #62 Express 5 {*path} 数组 | #63 /access/token 拦截 | #64 热床温度不显示 | #70 中间件顺序 | #71 只转发 content-type | #72 Fluidd SPA 404 | #73 WS 缺错误处理 | #94 温度不自动更新
+#28 WebView 不注入 API Key | #29 网络插件签名验证 | #30 /moonraker/ 前缀不工作 | #31 /ws 路径错误 | #62 Express 5 {*path} 数组 | #63 /access/token 拦截 | #64 热床温度不显示 | #70 中间件顺序 | #71 只转发 content-type | #72 Fluidd SPA 404 | #73 WS 缺错误处理 | #94 温度不自动更新 | #122 JSONP cb 注入 | #123 open_external 命令注入 | #124 上传临时文件泄漏 | #130 ws.onmessage 无异常保护
 
 ### 打印确认流程
 #47 print_stats 初始查询缺失 | #48 切片不触发确认 | #49 confirm_print 参数解析 | #51 start_local_print 不支持 HTTP | #52 WebUI 未加载通知丢失 | #53 gcode/script HTTP 不可用 | #54 无安全检测 | #56 print_host 被覆盖 | #57 gcode() 用不存在的 HTTP | #58 用户预设覆盖 print_host | #59 python-multipart 缺失 | #61 弹窗体验 | #89 布尔值回归 | #91 JSON-RPC 方法名错误 | #92 热床调平参数名（BED_LEVEL） | #96 耗材匹配缺失 | #97 bridgePOST 数组参数 | #101 MAP_TABLE 不更新 reprint_info | #102 SET_PRINT_USED_EXTRUDERS 参数格式 | #106 耗材信息被 gcode 覆盖
@@ -29,10 +29,13 @@
 #37 webcams/list 返回空 | #39 MJPEG 流代理不工作 | #46 U1 用 snapshot 轮询 | #65 代理破坏二进制 JPEG | #67 Express ETag 缓存 | #85 camera.start_monitor 必须走 WS | #90 摄像头监控需服务端触发 | #93 摄像头参数缺失（domain）
 
 ### WebUI 前端
-#34 Flutter Web DOM 不可读 | #38 SET_LED 缺 WHITE | #40 filament_feed 无类型 | #66 WS 竞态条件 | #78 Fluidd SW 拦截 fetch | #79 WebView 阻止 fetch/XHR | #82 event.stopPropagation | #83 gcode() 不返回值 | #84 EXTRUDER vs INDEX | #95 风扇控制参数范围 | #99 耗材类型品牌前缀 | #100 WebView 外部链接拦截 | #101 MAP_TABLE 不更新 reprint_info | #102 SET_PRINT_USED_EXTRUDERS 参数格式 | #104 颜色匹配精度不足
+#34 Flutter Web DOM 不可读 | #38 SET_LED 缺 WHITE | #40 filament_feed 无类型 | #66 WS 竞态条件 | #78 Fluidd SW 拦截 fetch | #79 WebView 阻止 fetch/XHR | #82 event.stopPropagation | #83 gcode() 不返回值 | #84 EXTRUDER vs INDEX | #95 风扇控制参数范围 | #99 耗材类型品牌前缀 | #100 WebView 外部链接拦截 | #101 MAP_TABLE 不更新 reprint_info | #102 SET_PRINT_USED_EXTRUDERS 参数格式 | #104 颜色匹配精度不足 | #129 loadJS script 标签泄漏 | #134 webui.html XSS 文件名/耗材类型未转义
+
+### AI Lab（G-code 优化 + 打印助手）
+#125 listGcodeFiles 全量读文件 | #126 add_retract 时机错误 | #127 extractGcodeStats G92 E0 误计 | #128 printQAStream qaStreams 泄漏 | #132 slice_agent.js 1448 行死代码 | #133 server.js 10 个死端点 | #135 ailab.js/gcvt.js XSS | #136 AI 调用重复 + 错误处理不一致 | #137 ailab.js apiKey GET 传递泄露 | #138 printQAStream getReader 不兼容导致空响应
 
 ### 安装与部署
-#32 系统无 Python | #33 Fluidd hosted 模式 | #35 CWD 指向已删目录 | #36 curl 下载失败 | #42 Bridge 依赖原目录 | #43 Program Files 权限 | #44 需手动启动 | #45 VBS 权限 | #60 Python 嵌入式限制 | #68 formidable 构造函数 | #69 bridge/web 未复制 | #74 undici 未声明 | #75 node-fetch 不兼容 undici | #76 undici 不导出 Blob | #77 旧进程未重启 | #80 mDNS 端口错误 | #81 VBS 裸 node 命令
+#32 系统无 Python | #33 Fluidd hosted 模式 | #35 CWD 指向已删目录 | #36 curl 下载失败 | #42 Bridge 依赖原目录 | #43 Program Files 权限 | #44 需手动启动 | #45 VBS 权限 | #60 Python 嵌入式限制 | #68 formidable 构造函数 | #69 bridge/web 未复制 | #74 undici 未声明 | #75 node-fetch 不兼容 undici | #76 undici 不导出 Blob | #77 旧进程未重启 | #80 mDNS 端口错误 | #81 VBS 裸 node 命令 | #121 dialog Linux execFileSync 未导入 | #131 reinstall watchdog 文件锁冲突
 
 ### BambuStudio 固有限制
 #25 ooze_prevention 与擦料塔互斥（源码限制）
@@ -934,3 +937,196 @@
 **现象**：Node.js v26.4.0 安装后，`install.bat`/`reinstall.bat` 中 npm install 失败，日志显示 `SyntaxError: 意外的字符串`，Bridge 无法启动
 **根因**：install.ps1 第 352-354 行用 `Get-Command npm` 获取 npm 命令。Node.js v26 的安装包中新增了 `npm.ps1`，PowerShell 的 `Get-Command` 按优先级返回了 `npm.ps1`，而不是 `npm.cmd`。实际执行变成了 `node.exe "C:\Program Files\nodejs\npm.ps1" install --production`，Node.js 把 PowerShell 脚本当 JavaScript 解析，第一行 `Set-StrictMode -Version 'Latest'` 直接报错
 **解决方案**（v5.32.1）：去掉 `Get-Command` 间接层，从已知的 `$nodePath` 直接推导 `npm.cmd` 路径：`$npmCmd = Join-Path (Split-Path $nodePath) 'npm.cmd'`。`node.exe` 和 `npm.cmd` 永远在同一个目录，可靠兼容所有 Node.js 版本
+
+---
+
+#121 ✅
+**现象**：Linux 上点击 BambuStudio 打印按钮，Bridge 弹原生对话框时崩溃，日志显示 `ReferenceError: execFileSync is not defined`
+**根因**：dialog.js:1 只导入了 `execFile`：`const { execFile } = require("child_process")`，但 showLinuxDialog（L275）用 `execFileSync("which", ["zenity"], ...)` 检测 zenity 是否安装。同步函数从未被导入，运行时直接抛 ReferenceError
+**解决方案**（v5.34.0）：dialog.js:1 改为 `const { execFile, execFileSync } = require("child_process")`
+
+---
+
+#122 ✅
+**现象**：所有 JSONP 端点（35 处 `req.query.cb || "callback"`）允许任意字符串作为回调函数名，攻击者可构造 `?cb=alert(document.cookie)//` 注入 JS，通过 `<script>` 标签执行任意代码（XSS）
+**根因**：server.js 35 处 JSONP 端点直接把 `req.query.cb` 拼入响应 `${cb}(...)`，无任何校验。虽然 BambuStudio WebView 是本地工具，但 cb 注入可被恶意网页利用（如钓鱼链接指向 bridge）
+**解决方案**（v5.34.0）：server.js:187-194 加全局中间件 `sanitizeCb`，对 `req.query.cb` 用正则 `/^[A-Za-z_$][\w$]*$/` 校验，非合法 JS 标识符的重置为 `callback`。一处中间件覆盖所有 35 个端点
+
+---
+
+#123 ✅
+**现象**：`/api/bridge/open_external.js?url=...` 端点用 `exec(\`start "" "${url}"\`)` 拼接命令，URL 中含 `&` `|` `;` 等 shell 元字符时可执行任意命令（RCE）。例如 `url=https://evil.com&calc.exe` 会启动计算器
+**根因**：server.js 三个端点（open_external L550、open_folder L574、open_gcode_folder L1481）都用 `exec(cmd)` 拼接 shell 命令，url/dir 直接插入命令字符串。open_external 虽有 `^https?://` 校验但仍允许 `&` 等 query 字符
+**解决方案**（v5.34.0）：新增 `openPathExternally(target)` helper（server.js:544-577），用 `spawn` + 参数数组调用 `explorer`/`open`/`xdg-open`，参数不经 shell 解析。三个端点改用此 helper，删除所有内联 `require("child_process").exec`
+
+---
+
+#124 ✅
+**现象**：每次通过 BambuStudio 上传 gcode 打印后，`%TEMP%` 目录残留 `formidable_xxxxx` 临时文件，长期使用累积数百个文件
+**根因**：server.js handleUploadWithConfirm 的 finally 块引用 `req.files?.file`，但 formidable 解析的 files 是局部变量 `const [fields, files] = ...`，从未写入 `req.files`。`req.files` 永远是 undefined，清理代码永不执行
+**解决方案**（v5.34.0）：try 之前声明 `let uploadedFiles = null`，formidable 解析后 `uploadedFiles = files`。finally 块遍历 `uploadedFiles` 所有字段（file/gcode/等）清理临时文件
+
+---
+
+#125 ✅
+**现象**：AI Lab G-code 文件列表加载缓慢，大文件（>50MB）加载时内存占用飙升
+**根因**：slice_agent.js listGcodeFiles L1466 用 `fs.readFileSync(filePath, "utf-8", { start: 0, end: 32768 })` 只想读前 32KB 做格式检测，但 `readFileSync` 不支持 `start/end` 选项（这是 `createReadStream` 的选项），整个文件被读入内存
+**解决方案**（v5.34.0）：改用 `fs.openSync` + `fs.readSync(fd, buf, 0, 32768, 0)` 只读前 32KB，finally 块 `fs.closeSync(fd)`
+
+---
+
+#126 ✅
+**现象**：AI 优化返回 `add_retract` 补丁后，回抽未生效；即使指定 `min_travel_length: 5.0`，所有 travel 都被加回抽；OrcaSlicer gcode（用 G1 travel）完全不匹配
+**根因**：slice_agent.js add_retract L1568-1586 三处 bug：1) 回抽行 `G1 E-...` 插在 travel 行**之后**（应在之前，否则拉丝已发生）；2) `min_travel_length` 被解构但从未使用，所有 travel 都加回抽；3) 正则 `/G0\s+X.../` 只匹配 G0，OrcaSlicer 用 G1 travel 不匹配
+**解决方案**（v5.34.0）：重写 add_retract：1) 回抽插在 travel 之前；2) 跟踪 curX/curY 计算实际 travel 距离，用 `min_travel_length`（默认 5.0）过滤短距离 travel；3) 正则改为 `/G[01]\s+X.../` 同时匹配 G0/G1
+
+---
+
+#127 ✅
+**现象**：AI 诊断 G-code 时 `stats.retracts` 数值虚高，简单模型也报告"回抽次数过多"
+**根因**：slice_agent.js extractGcodeStats L1122-1130 检测回抽逻辑 `if (e < lastE) stats.retracts++`。但每层插入的 `G92 E0`（重置 E 起点）会使 e=0 < lastE（如 100），被误计为回抽。每层一个 G92 E0 就误计一个回抽，N 层模型虚增 N 次回抽
+**解决方案**（v5.34.0）：在 E 检测前加 `G92 E<value>` 检测分支，匹配到 G92 E 时只更新 `lastE` 不计 retract/extrusion。正则 `/^G92\s+.*?\bE(-?[\d.]+)/i` 兼容 `G92 E0` 和 `G92 X0 Y0 E0`
+
+---
+
+#128 ✅
+**现象**：AI 打印助手流式问答使用后，`qaStreams` Map 持续增长，长时间运行 Bridge 内存占用递增
+**根因**：slice_agent.js printQAStream 后台 IIFE 完成后设置 `streamState.done=true`，但仅依赖 `cleanupQAStream(streamId)` 主动调用清理。客户端关闭浏览器或网络中断后不再轮询，streamState 永远留在 Map 中
+**解决方案**（v5.34.0）：IIFE 加 finally 块，`setTimeout(() => qaStreams.delete(streamId), 30000)` 兜底清理，给客户端 30 秒窗口拉取最终状态后自动驱逐
+
+---
+
+#129 ✅
+**现象**：WebUI 长时间运行后 `<head>` 累积大量 `<script>` 标签，DOM 节点数持续增长
+**根因**：webui.html loadJS L585 每次 JSONP 调用 `document.head.appendChild(s)` 添加新 script 标签，但从不 remove。每次状态轮询、每次 bridgeGET 都会添加一个死 script 标签
+**解决方案**（v5.34.0）：loadJS 提取 `cleanup` 函数，在 JSONP 回调（`window[cbName]`）和 `s.onerror` 中同时 `delete window[cbName]` 和 `s.parentNode.removeChild(s)`
+
+---
+
+#130 ✅
+**现象**：Bridge WebSocket 偶发异常时 WebUI 状态机卡死，温度/进度不再更新，需刷新页面
+**根因**：webui.html ws.onmessage L1177 直接 `var m=JSON.parse(e.data)` 无 try/catch。若服务端推送非 JSON 数据或结构异常（如 Klipper 推送 notify_status_update 缺 params），JSON.parse 抛异常后 onmessage 后续代码不执行，状态机失同步
+**解决方案**（v5.34.0）：ws.onmessage 整体包裹 try/catch，异常时 `console.error('[Bridge] WS message parse error:', err)` 不抛出，状态机继续运行
+
+---
+
+#131 ✅
+**现象**：运行 `reinstall.bat` 重装 Bridge 时，[4/10] 复制 bridge 目录报错 `拒绝访问`，文件被 node.exe 锁定
+**根因**：reinstall.ps1 [2/10] 只停了 bridge 进程，没停 watchdog 计划任务。watchdog 每 2 分钟检测 bridge 是否存活，reinstall 中途（bridge 已停但未完成复制）watchdog 触发，拉起新 bridge 进程锁定文件，导致后续复制失败
+**解决方案**（v5.34.0）：reinstall.ps1 [2/10] 开头先 `Stop-ScheduledTask` + `Unregister-ScheduledTask` 停 watchdog；[10/10] 启动 bridge 后重新 `Register-ScheduledTask` 恢复 watchdog
+
+---
+
+#132 ✅
+**现象**：slice_agent.js 文件 3066 行，但其中约 1448 行（47.2%）是死代码，维护成本高且影响代码可读性
+**根因**：v5.25.0 移除 AI 切片模式后，整个 AI 切片流水线函数链（analyzeModel→sliceModel→suggestParameters→generateGcodeFromAnalysis→advancedSlice 等）变为死代码，但函数本身未被清理。非流式 printQA 被流式版本取代后也成死代码。saveStlFile/listStlFiles 是别名从未被调用
+**解决方案**（v5.35.0）：删除 22 个死函数/常量（updateMemory/analyzeModel/sliceModel/parseSliceOutput/computeSliceAnalysis/suggestParameters/generateGcodeFromAnalysis/aiComputeOverrides/validateGcode/reviewGcode/generateRecommendationReason/saveModelFile/saveStlFile/getStlInfo/listModelFiles/listStlFiles/regenerateFromRawPath/advancedSlice/printQA/SLICE_FILAMENT_RULES/sliceJobs/createJobId）。同步清理 buildSystemPrompt 死任务类型分支和 module.exports。最终 1618 行
+
+---
+
+#133 ✅
+**现象**：server.js 有 10 个死端点，前端 ailab.js/gcvt.js/webui.html 均不调用，占用代码空间且增加攻击面
+**根因**：v5.25.0 移除 AI 切片模式后，8 个 AI 流水线端点（upload_model/analyze/suggest_params/ai_slice/review_gcode/patch_gcode/print_qa/advanced_slice）无前端入口。bridge/status 和 bridge/disconnect 无 .js 版本，bridgeGET/bridgePOST 机制无法触达
+**解决方案**（v5.35.0）：删除全部 10 个死端点。保留 patchGcode 函数（被 optimizeGcode 调用）和 extractGcodeStats 函数（被 optimizeGcode 调用）
+
+---
+
+#134 ✅
+**现象**：webui.html 文件列表和打印模态框中，文件名和耗材类型直接拼接进 innerHTML 未转义。恶意文件名（如 `<script>alert(1)</script>.gcode`）或篡改的耗材类型可注入 HTML/JS
+**根因**：webui.html L861-865 文件列表 name/f.path、L945 打印模态框 name、L977 gType、L985 mFilTypes/mFilSub、L998 mT/mS 均直接字符串拼接进 innerHTML，无 HTML 转义
+**解决方案**（v5.35.0）：新增 `escHtml(s)` 辅助函数（转义 &<>"'）；6 处 innerHTML 拼接点均用 escHtml 包裹数据
+
+---
+
+#135 ✅
+**现象**：ailab.js 和 gcvt.js 多处 innerHTML 拼接未转义，可被注入恶意内容
+**根因**：1) ailab.js aiRenderInline/aiRenderChatMessage 代码块（```code```）在第一次 HTML 转义后又反向解码 `&lt;/&gt;` 还原为 `</>`，AI 返回 `<script>` 标签可直接执行；2) ailab.js L397 下载失败 errMsg 未转义；3) gcvt.js L147 加载失败错误信息、L199 温度/工具值未转义
+**解决方案**（v5.35.0）：1) 删除 aiRenderInline/aiRenderChatMessage 代码块反向解码（保持转义状态）；2) 新增 aiEscapeHtml/gcvtEsc 辅助函数；3) 所有错误信息和动态值用转义函数包裹
+
+---
+
+#136 ✅
+**现象**：slice_agent.js 中 testAiConnection / optimizeGcode / printQAStream 三个函数有约 50 行重复的 AI 调用样板代码（provider 解析、headers 构造、/chat/completions POST、错误处理），且错误处理风格不一致——testAiConnection 用 `return {ok:false, error:e.message}`、printQAStream 用简化版 `e.message||String(e)` 丢失 cause 链（node-fetch 网络错误的真正原因在 `e.cause` 中），导致本地 LLM 连接失败时只显示 "request to ... failed, reason:" 无具体原因
+**根因**：v5.20.0 引入 AI Lab 时三个函数分别实现，未抽象公共调用层；extractErrorMessage 仅在 testAiConnection 中定义，其他函数各自简化处理
+**解决方案**（v5.36.0）：提取 `bridge-node/aiClient.js` 公共模块（150 行），导出 `AiClient` 类 + `AI_PROVIDERS` + `extractErrorMessage`。AiClient 封装 provider 解析/凭证校验/headers 构造/chat/models 请求，extractErrorMessage 统一为 `e.message || e.cause?.message || e.cause?.code || String(e)`。三函数改造：testAiConnection 45→15 行、optimizeGcode AI 调用段 40→6 行、printQAStream AI 调用段 25→3 行
+
+---
+
+#137 ✅
+**现象**：ailab.js optimize_gcode 调用前端拼接了 4 个多余 query 参数（provider/customBaseUrl/model/api_key），后端 server.js optimize_gcode 端点完全不读取这些参数（直接用全局 aiConfig），其中 api_key 通过 GET URL 明文传递有泄露风险（浏览器历史、服务器 access log、Referer header 均可能记录）
+**根因**：v5.20.0 初版 AI Lab 前端按"全配置透传"思路实现，未确认后端实际只读 gcode_name 一个参数；v5.27.0 改为服务端存储 aiConfig 后未清理前端多余参数
+**解决方案**（v5.36.0）：ailab.js L456-460 删除 4 行参数拼接，optimize_gcode 调用只传 `?gcode_name=`。aiConfig 已在服务端全局持有，无需前端透传
+
+---
+
+#138 ✅
+**现象**：AI 打印助手问答始终显示"AI 返回了空响应，请重试"，LMStudio 后台正常收到请求并返回流式响应但前端无内容。日志显示每次 qa_stream_start 后只 poll 1 次就停止（正常应每 200ms 持续轮询直到 done）
+**根因**：
+1. **后端流式读取失败**：`slice_agent.js printQAStream` 用 `resp.body.getReader()` 读取 node-fetch v2 的流式响应，但 node-fetch v2 的 `resp.body` 是 Node.js Readable stream（继承 `stream.Readable`），不是 Web ReadableStream，`getReader()` 方法不存在，调用时抛 `TypeError: resp.body.getReader is not a function`（与 traps.md #114 同类问题，v5.28.1 修了 gcode 下载场景但 printQAStream 漏修）。IIFE catch 捕获异常设置 `streamState.error` + `streamState.done=true`，导致第一次 poll（300ms 后）就收到 `done=true`
+2. **前端吞掉错误**：`ailab.js` done 分支只检查 `answerText` 是否为空，不检查 `pd.error`，即使后端返回了错误信息也显示"AI 返回了空响应"而非实际错误
+**解决方案**（v5.36.1）：
+1. **后端**：流式读取从 `resp.body.getReader()` + `while(true) reader.read()` 改为 `for await (const chunk of resp.body)` async iterator。Node.js Readable stream 从 v10 起支持 `Symbol.asyncIterator`，Web ReadableStream 从 ES2018 起支持，两者双兼容。IIFE catch 加 `log("ERROR", ...)` 便于排查
+2. **前端**：done 分支检查 `pd.error`，有错误时显示 `[错误: ...]` 而非"空响应"；`qa_stream_start` 调用删除多余的 provider/customBaseUrl/model query 参数（和 optimize_gcode 一致，后端不读取）
+
+---
+
+#142 ✅
+**现象**：server.js `renderSetupPage()` 的 mDNS 扫描结果页面中，`p.name` 和 `p.ip` 未转义直接拼入 `innerHTML`（L1430）。同一局域网的攻击者只需广播一个恶意的 mDNS 服务名（如 `<img src=x onerror="...">`），当用户在 setup 页面点击 "Scan Network" 时，恶意 JS 在 bridge 的 origin（localhost）下执行，可窃取配置或重定向打印机连接
+**根因**：setup 页面的内联 `<script>` 中直接用 `+p.name+` 和 `+p.ip+` 拼接 HTML，未调用任何转义函数。mDNS `service.name` 由 LAN 上的设备广播，完全可控
+**解决方案**（v5.37.2）：在 setup 页面 `<script>` 开头添加 `escHtml(s)` 函数（转义 `& < > " '`），将所有 innerHTML 中的 `p.name`/`p.ip` 替换为 `escHtml(p.name)`/`escHtml(p.ip)`（包括 `data-ip` 属性中的 `p.ip`）
+
+---
+
+#143 ✅
+**现象**：dialog.js `fetchPrintTask` 仍使用 node-fetch v2 非标准的 `timeout: 5000` 选项（L18），v5.37.0 标准化了 server.js 中 8 处但遗漏了此处。node-fetch v3 和 Node.js 内置 fetch 会静默忽略此选项，导致 Moonraker 不可达时 `fetchPrintTask` 无限挂起，阻塞打印确认对话框
+**根因**：v5.37.0 fetchWithTimeout 标准化时只检查了 server.js，未检查 dialog.js
+**解决方案**（v5.37.2）：在 `fetchPrintTask` 中改用 `AbortController` + `signal`（与 `fetchWithTimeout` 相同模式），5 秒超时
+
+---
+
+#144 ✅
+**现象**：server.js 三处 AI Lab 端点使用裸 `fetch` 无超时保护：1) `upload_to_printer`（L1139）；2) `list_printer_gcode`（L1288）；3) `fetch_printer_gcode`（L1324）。Moonraker 响应缓慢或网络中断时请求无限挂起，JSONP 响应永不返回，前端 `<script>` 标签永久 pending
+**根因**：v5.37.0 标准化了 Moonraker 相关的 fetch 调用，但这三处 AI Lab 端点的 fetch 被遗漏
+**解决方案**（v5.37.2）：三处 `fetch` 替换为 `fetchWithTimeout`：上传 120s（大文件）、列表默认超时（10s）、下载 60s
+
+---
+
+#145 ✅
+**现象**：webui.html 文件列表 L866 `escHtml(f.path).replace(/'/g,"\\'")` 双重转义失效导致 XSS。`escHtml` 先将 `'` 转为 `&#39;`，后续 `.replace(/'/g,"\\'")` 找不到字面 `'` 是空操作。但浏览器解析 HTML 属性 `onclick="printFile('...')"` 时将 `&#39;` 解码回 `'`，可闭合 JS 字符串。攻击向量：打印机上存在文件名含 `'` 的 G-code（如 `test');alert(1);//.gcode`），用户打开文件列表时触发任意 JS 执行
+**根因**：转义顺序错误——应先 JS 转义再 HTML 转义，或完全避免内联 JS 字符串拼接
+**解决方案**（v5.37.2）：改用 `data-path="'+escHtml(f.path)+'"` 属性 + `onclick="printFile(this.dataset.path)"`。浏览器自动解码 HTML 实体后通过 `dataset.path` 获取原始值，无注入风险
+
+---
+
+#146 ✅
+**现象**：ailab.js `aiEscapeHtml`（L879）和 gcvt.js `gcvtEsc`（L11）只转义 4 个字符（`& < > "`），缺少 `'` → `&#39;`，与 webui.html `escHtml` 的 5 个字符不一致。当前用途下（内容进入 innerHTML 文本节点）风险较低，但是一个不一致的"地雷"——未来如果开发者将输出放入单引号属性上下文就会触发 XSS
+**根因**：v5.35.0 XSS 修复时未统一所有转义函数
+**解决方案**（v5.37.2）：两个函数都补齐 `.replace(/'/g,'&#39;')`，与 `escHtml` 保持一致
+
+---
+
+#147 ✅
+**现象**：server.js `confirm_print.js` 和 `start_print.js` 端点从 GET URL query 参数 `extruder_map_table` 直接 `JSON.parse`，无长度限制和类型校验（L447-448、L485-486）。攻击者可发送超长 query 参数导致 `JSON.parse` 消耗大量 CPU/内存（DoS），或传入非数组类型导致后续 `.map()` 崩溃
+**根因**：Express 默认不对 query string 设长度上限，解析后未校验类型
+**解决方案**（v5.37.2）：添加 `length > 4096` 检查（抛出 "too large"）+ `Array.isArray` 校验（抛出 "not an array"），catch 分支将 mapTable 重置为 `[]`
+
+---
+
+#141 ✅
+**现象**：G-code 转换工具转换后的文件 `EXECUTABLE_BLOCK` 只包含启动代码（~80 行），`PRINT_END` 和整个打印过程在 `EXECUTABLE_BLOCK` 之外。对比 OrcaSlicer 原生文件，其 `EXECUTABLE_BLOCK` 包含了从 `PRINT_START` 到 `PRINT_END` 的整个打印过程。这可能导致 U1 设备面板无法正确识别打印范围。
+**根因**：`slice_agent.js convertGcodeContent` 函数在 `newExecBlock` 末尾添加了 `EXECUTABLE_BLOCK_END`（L1356），然后删除了 printBody 中的原始 `EXECUTABLE_BLOCK_END`（L1417），导致 EXEC 块只包含 OrcaSlicer 启动代码，body 在 EXEC 外。
+**解决方案**（v5.37.1）：1) `newExecBlock` 不再添加 `EXECUTABLE_BLOCK_END`；2) 在 `convertedBody` 末尾（PRINT_END 之后）添加 `EXECUTABLE_BLOCK_END`，包裹整个打印过程（EXEC_START → 启动代码 → body → PRINT_END → EXEC_END），与 OrcaSlicer 原生格式一致。新增单元测试验证 EXEC_END 在 PRINT_END 之后。
+
+---
+
+#139 ✅
+**现象**：server.js 中 8 处 fetch 调用使用 node-fetch v2 非标准的 `timeout` 选项（`fetch(url, { timeout: 10000 })`），这是 v2 专有 API，node-fetch v3 和 Node.js 内置 fetch 均不支持。未来升级 node-fetch 或切换内置 fetch 时所有超时将失效
+**根因**：node-fetch v2 在 options 中提供了非标准的 `timeout` 字段，但这不是 Fetch 规范的一部分。标准做法是使用 `AbortController` + `signal`
+**解决方案**（v5.37.0）：新增 `fetchWithTimeout(url, options, timeoutMs)` helper 函数，内部用 `AbortController` + `setTimeout` 实现超时，返回标准 fetch Promise。8 处 fetch 调用全部替换：moonrakerFetch / proxy.js / init-data.js / check_update / cam_snapshot / upload / proxyToMoonraker / webcam proxy。未升级 node-fetch 版本（v3 是纯 ESM，不兼容 CommonJS 项目），但专有 API 依赖已消除
+
+---
+
+#140 ✅
+**现象**：patchGcode 和 convertGcode 函数将文件 I/O（读文件 + 写文件）和核心逻辑混在一起，无法直接单元测试。测试需要创建临时文件、设置目录路径，脆弱且慢
+**根因**：v5.20.0 初版实现时函数直接操作文件系统，未分离 I/O 和逻辑
+**解决方案**（v5.37.0）：提取纯函数 `patchGcodeContent(content, patchPlan)` 和 `convertGcodeContent(content)`，只接受字符串内容、返回结果字符串，无文件 I/O 副作用。原 patchGcode/convertGcode 改为读文件 + 调用纯函数 + 写文件的薄包装。纯函数导出到 module.exports 供测试直接调用，28 个单元测试覆盖 5 种 patch 操作 + 格式检测 + 转换逻辑

@@ -1,10 +1,10 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.33.0
+# Snapmaker U1 BambuStudio 兼容包 v5.37.2
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
 ---
 
-本项目使用字节跳动旗下的 Solo，配合智谱的 GLM-5.1 开发。
+本项目使用字节跳动旗下的 Solo，配合智谱的 GLM-5.1&5.2 开发。
 
 ---
 
@@ -71,6 +71,7 @@
 |------|------|
 | `bridge-node/server.js` | Express HTTP/WebSocket 代理服务器 |
 | `bridge-node/slice_agent.js` | AI Lab 核心：G-code 优化引擎 + G-code 转换引擎 + Workspace 系统 |
+| `bridge-node/aiClient.js` | AI 调用公共模块（AiClient 类 + AI_PROVIDERS + extractErrorMessage，v5.36.0+） |
 | `bridge-node/dialog.js` | 跨平台原生打印确认对话框 |
 | `bridge-node/package.json` | Node.js 依赖声明 |
 | `bridge-node/workspace/` | AI Agent Workspace（Soul/Knowledge/Skills/Memory Markdown） |
@@ -86,6 +87,7 @@ BambuStudio-SnapmakerU1-Compat/
 ├── install.bat / install.ps1       # 安装脚本
 ├── reinstall.bat / reinstall.ps1   # 重装脚本
 ├── uninstall.bat / uninstall.ps1   # 卸载脚本
+├── install-common.psm1             # 安装脚本公共模块（v5.36.0+，14 个共享函数）
 ├── Snapmaker.json                  # 品牌配置入口
 ├── Snapmaker/                      # 切片配置目录
 │   ├── machine/                    # 打印机配置
@@ -94,6 +96,7 @@ BambuStudio-SnapmakerU1-Compat/
 ├── bridge-node/                    # Bridge 服务器（Node.js）
 │   ├── server.js                   # 核心服务器
 │   ├── slice_agent.js              # AI Lab 优化引擎
+│   ├── aiClient.js                 # AI 调用公共模块（AiClient 类）
 │   ├── dialog.js                   # 原生对话框
 │   ├── package.json                # 依赖声明
 │   └── workspace/                  # AI Agent Workspace
@@ -210,6 +213,13 @@ A: v5.18.1 已修复此问题，安装脚本不再删除用户自定义预设。
 
 ## 版本历史
 
+- **v5.37.2** (2026-06-29) - 全量代码审查安全修复（traps.md #142-#147）：setup 页面 mDNS XSS（H1，添加 escHtml 转义）；dialog.js fetch timeout 遗漏标准化（M1，AbortController）；server.js 三处 AI Lab 端点裸 fetch 无超时（M2，fetchWithTimeout）；webui.html 文件列表双重转义失效 XSS（M3，data-path + dataset）；ailab.js/gcvt.js 转义函数缺单引号（M4，补齐 &#39;）；extruder_map_table GET query 无大小限制（M5，4096 字节 + Array 校验）；打印机设置弹窗 curHost/curPort 未转义（L1）
+- **v5.37.1** (2026-06-29) - 修复 G-code 转换 EXECUTABLE_BLOCK 范围错误（traps.md #141）：`EXECUTABLE_BLOCK_END` 从启动代码后移到 `PRINT_END` 后，包裹整个打印过程，与 OrcaSlicer 原生格式一致；新增单元测试验证
+- **v5.37.0** (2026-06-29) - 阶段 4 单元测试 + fetch 超时标准化 + 代码组织：1) 新建 `test/` 目录 + `node:test` 框架，28 个测试覆盖 patchGcodeContent 5 种操作 + convertGcodeContent 格式检测/转换；提取纯函数 `patchGcodeContent`/`convertGcodeContent`（无文件 I/O）供测试调用；2) 新增 `fetchWithTimeout` helper 用标准 AbortController 替代 node-fetch v2 非标准 `timeout` 选项，8 处 fetch 调用全部替换；3) 从 handleUploadWithConfirm 内提取 patchGcodeLayout 为顶层函数
+- **v5.36.1** (2026-06-29) - 修复 AI 问答流式空响应（traps.md #138）：后端 `printQAStream` 流式读取从 `resp.body.getReader()` 改为 `for await` async iterator（node-fetch v2 兼容）；前端 done 分支检查 `pd.error` 显示错误信息而非"空响应"；qa_stream_start 去掉多余 query 参数
+- **v5.36.0** (2026-06-29) - 阶段 3 AI 调用公共模块提取 + PowerShell 脚本重构：1) 提取 `bridge-node/aiClient.js`（AiClient 类 + AI_PROVIDERS + extractErrorMessage），slice_agent.js 三函数（testAiConnection/optimizeGcode/printQAStream）改造消除 ~50 行重复 + 统一错误处理（修复 cause 链丢失）；2) ailab.js optimize_gcode 删除 4 个多余 query 参数，消除 apiKey GET URL 泄露风险；3) 提取 `install-common.psm1` 模块（14 个公共函数，558 行），install.ps1 508→199 / reinstall.ps1 524→228 / uninstall.ps1 236→157；参数化设计；`exit 1` → `throw` + 调用方 try/catch；统一启用 regex fallback
+- **v5.35.0** (2026-06-29) - 阶段 2 死代码清理 + 前端 XSS 修复：删除 slice_agent.js 22 个死函数（-1448 行/-47.2%）+ server.js 10 个死端点；修复 10 处 XSS（ailab.js 代码块反向解码 / webui.html 文件名耗材类型未转义 / gcvt.js 错误信息温度值未转义）
+- **v5.34.0** (2026-06-29) - 阶段 1 安全加固 + 资源泄漏修复（11 项）：JSONP cb 注入 / open_external 命令注入 / 上传临时文件泄漏 / listGcodeFiles 全量读 / add_retract 时机 / extractGcodeStats G92 E0 误计 / printQAStream 泄漏 / loadJS DOM 泄漏 / ws.onmessage 异常保护 / dialog Linux 崩溃 / reinstall watchdog 文件锁
 - **v5.33.0** (2026-06-27) - WebUI 顶栏新增打印机设置弹窗（齿轮图标），可手动修改 IP/Port/API Key
 - **v5.32.1** (2026-06-27) - 修复 Node.js v26 上 npm install 失败（`Get-Command` 返回 `npm.ps1` 导致语法错误）
 - **v5.32.0** (2026-06-27) - AI 打印助手流式输出 + Thinking 模式支持（自动检测 reasoning_content，折叠展示思考过程）

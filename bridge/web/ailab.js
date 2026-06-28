@@ -394,7 +394,7 @@ function aiOptFetchAndPreview(printerPath){
     if(_fetchProgressTimer){clearInterval(_fetchProgressTimer);_fetchProgressTimer=null;}
     if(!d||!d.ok){
       var errMsg=d&&d.error?d.error:'未知错误';
-      left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--danger);">下载失败: '+errMsg+'</div>';
+      left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--danger);">下载失败: '+aiEscapeHtml(errMsg)+'</div>';
       if(info)info.textContent='下载失败';
       if(btn){btn.disabled=false;btn.textContent='优化';}
       return;
@@ -454,10 +454,6 @@ function aiOptDoOptimize(gcodeName){
   var res=document.getElementById('aiOptResult');if(res)res.style.display='none';
 
   var params='?gcode_name='+encodeURIComponent(gcodeName);
-  if(aiCfg.provider)params+='&provider='+encodeURIComponent(aiCfg.provider);
-  if(aiCfg.customBaseUrl)params+='&customBaseUrl='+encodeURIComponent(aiCfg.customBaseUrl);
-  if(aiCfg.model)params+='&model='+encodeURIComponent(aiCfg.model);
-  if(aiCfg.apiKey)params+='&api_key='+encodeURIComponent(aiCfg.apiKey);
 
   bridgeGET('/api/ai/optimize_gcode'+params,function(r){
     if(prog)prog.style.display='none';
@@ -770,7 +766,7 @@ function aiSendQuestion(){
   var ctx=aiQAHistory.filter(function(m){return m.role==='user';}).slice(-3).map(function(m){return m.content;}).join('\n');
 
   // Start streaming
-  bridgeGET('/api/ai/qa_stream_start?question='+encodeURIComponent(q)+'&context='+encodeURIComponent(ctx)+'&provider='+encodeURIComponent(aiCfg.provider||'')+'&customBaseUrl='+encodeURIComponent(aiCfg.customBaseUrl||'')+'&model='+encodeURIComponent(aiCfg.model||''),function(d){
+  bridgeGET('/api/ai/qa_stream_start?question='+encodeURIComponent(q)+'&context='+encodeURIComponent(ctx),function(d){
     if(!d||!d.ok){
       var bubble=document.getElementById(bubbleId);
       if(bubble)bubble.innerHTML=aiRenderInline(d&&d.error||'抱歉，无法连接 AI 服务，请检查配置。');
@@ -857,12 +853,18 @@ function aiSendQuestion(){
             if(isThinkingMode&&thinkingText){
               finalHtml+='<div class="qa-thinking-block"><div class="qa-thinking-toggle" onclick="this.parentElement.classList.toggle(\'open\')"><span class="qa-thinking-arrow">&#9654;</span> 思考过程</div><div class="qa-thinking-body">'+aiRenderInline(thinkingText)+'</div></div>';
             }
-            finalHtml+=aiRenderInline(answerText||'AI 返回了空响应，请重试。');
+            // Show error if present (traps.md #138) — previously error was swallowed
+            // and user saw "AI 返回了空响应" instead of the actual error message
+            if(pd.error){
+              finalHtml+=aiRenderInline(answerText?(''+answerText+'\n\n[错误: '+pd.error+']'):('[错误: '+pd.error+']'));
+            }else{
+              finalHtml+=aiRenderInline(answerText||'AI 返回了空响应，请重试。');
+            }
             bubble.innerHTML=finalHtml;
           }
           input.disabled=false;if(btn)btn.disabled=false;input.focus();
-          if(answerText)aiQAHistory.push({role:'ai',content:answerText});
-          else aiQAHistory.push({role:'ai',content:'AI 返回了空响应，请重试。'});
+          var histContent=answerText||(pd.error?('[错误: '+pd.error+']'):'AI 返回了空响应，请重试。');
+          aiQAHistory.push({role:'ai',content:histContent});
           hist.scrollTop=hist.scrollHeight;
           return;
         }
@@ -874,10 +876,14 @@ function aiSendQuestion(){
 }
 
 /** 渲染流式文本（与 aiRenderChatMessage 相同的 markdown 规则，但不包裹外层 div） */
+function aiEscapeHtml(text){
+  return String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 function aiRenderInline(text){
   return text
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/```([\s\S]*?)```/g,function(m,code){return '<pre><code>'+code.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')+'</code></pre>';})
+    .replace(/```([\s\S]*?)```/g,function(m,code){return '<pre><code>'+code+'</code></pre>';})
     .replace(/`([^`]+)`/g,'<code>$1</code>')
     .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
     .replace(/\*(.+?)\*/g,'<em>$1</em>')
@@ -896,7 +902,7 @@ function aiRenderChatMessage(role,content){
   var label=isUser?'你':'AI';
   var html=content
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/```([\s\S]*?)```/g,function(m,code){return '<pre><code>'+code.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')+'</code></pre>';})
+    .replace(/```([\s\S]*?)```/g,function(m,code){return '<pre><code>'+code+'</code></pre>';})
     .replace(/`([^`]+)`/g,'<code>$1</code>')
     .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
     .replace(/\*(.+?)\*/g,'<em>$1</em>')

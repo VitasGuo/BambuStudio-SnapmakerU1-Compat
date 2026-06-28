@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.33.0 (2026-06-27)
+## 当前版本: v5.37.2 (2026-06-29)
 
 ---
 
@@ -48,15 +48,145 @@
 | 2 | 无自动化测试 | 中 | 中 | 核心逻辑（patchGcode 12 种操作、convertGcode 格式检测+EXEC 重组、CIEDE2000 颜色匹配）缺乏测试保护。建议优先为 patchGcode + convertGcode 添加测试 |
 | 3 | knowledge.md 全量注入 system prompt | 中 | 中 | 1254 行全量注入，每次 AI 调用消耗约 4000-6000 tokens。可优化为按技能按需注入相关段落 |
 | 4 | JSONP 错误处理薄弱 | 中 | 低 | `<script>` 标签加载时服务端 500 或超时只能靠 timeout 回调，用户看到"未知错误"。受限于 BambuStudio WebView 限制，改造成本高 |
-| 5 | API Key 通过 GET URL query 传递 | 低 | 低 | optimize_gcode 前端传了 apiKey 但后端未读取（server.js:1251 直接用 aiConfig），去掉前端 ailab.js:452 一行即可。本地工具泄露面极小 |
+| 5 | ~~API Key 通过 GET URL query 传递~~ ✅ v5.36.0 已解决 | 低 | 低 | ailab.js optimize_gcode 删除 4 个多余 query 参数（provider/customBaseUrl/model/api_key），后端直接用全局 aiConfig，消除 apiKey GET URL 泄露风险（traps.md #137） |
 | 6 | slice_agent.js 单文件 2880 行 | 低 | 低 | 代码组织偏好，非 bug。拆分引入大量 diff 增加回归风险，已稳定迭代至 v5.31.1 |
 | 7 | API Key 明文存储 | 低 | 低 | 配置在 `%APPDATA%\BambuStudio-Bridge\bridge_config.json`，本地单用户工具，攻击者能读此文件已能做更多事 |
-| 8 | install.ps1 / reinstall.ps1 80% 代码重复 | 低 | 低 | 两个脚本独立运行，重复不影响功能。提取公共模块增加 PowerShell 复杂度 |
-| 9 | patchGcodeLayout 嵌套在请求处理函数内 | 低 | 低 | server.js:730-765，代码组织问题，不影响功能 |
+| 8 | ~~install.ps1 / reinstall.ps1 80% 代码重复~~ ✅ v5.36.0 已解决 | 低 | 低 | 已提取 `install-common.psm1` 公共模块（14 个函数），三个脚本改为 Import-Module 导入 |
+| 9 | ~~patchGcodeLayout 嵌套在请求处理函数内~~ ✅ v5.37.0 已解决 | 低 | 低 | 从 handleUploadWithConfirm 内提取为 server.js 顶层函数 |
 
 ---
 
 ## 版本历史
+
+### v5.37.2 (2026-06-29) — 全量代码审查安全修复
+全量代码审查发现 1 个 High + 5 个 Medium + 1 个 Low 安全/正确性问题，全部修复（traps.md #142-#147）。
+
+**High（1 项）**：
+- setup 页面 mDNS 扫描结果 XSS（#142）：`p.name`/`p.ip` 未转义直接拼入 innerHTML，同一局域网攻击者可广播恶意 mDNS 服务名执行任意 JS。添加 `escHtml` 函数转义所有插入点
+
+**Medium（5 项）**：
+- dialog.js `fetchPrintTask` 遗漏 timeout 标准化（#143）：仍用 node-fetch v2 非标准 `timeout` 选项，改用 AbortController
+- server.js 三处 AI Lab 端点裸 `fetch` 无超时（#144）：upload_to_printer / list_printer_gcode / fetch_printer_gcode，替换为 `fetchWithTimeout`（120s/默认/60s）
+- webui.html 文件列表双重转义失效导致 XSS（#145）：`escHtml(f.path).replace(/'/g,"\\'")` 中 replace 是空操作（`'` 已被 escHtml 转为 `&#39;`），浏览器解码 `&#39;` 后闭合 JS 字符串。改用 `data-path` 属性 + `onclick="printFile(this.dataset.path)"`
+- ailab.js/gcvt.js 转义函数缺单引号转义（#146）：`aiEscapeHtml`/`gcvtEsc` 只转义 4 个字符（`& < > "`），与 `escHtml` 的 5 个不一致，补齐 `'` → `&#39;`
+- server.js `extruder_map_table` GET query 无大小限制（#147）：添加 4096 字节长度限制 + Array 类型校验，防止 DoS 和类型错误崩溃
+
+**Low（1 项）**：
+- webui.html 打印机设置弹窗 `curHost`/`curPort` 未转义拼入 input value 属性，用 `escHtml` 转义
+
+**验证**：29 个单元测试全部通过；所有 JS 文件 `node --check` 通过；14 处版本号统一到 v5.37.2
+
+### v5.37.1 (2026-06-29) — 修复 G-code 转换 EXECUTABLE_BLOCK 范围错误
+**问题**（traps.md #141）：对比 BambuStudio 原始 / 转换后 / OrcaSlicer 原生三个 G-code 文件发现，转换后文件的 `EXECUTABLE_BLOCK_END` 在启动代码后（L119），而 `PRINT_END` 在 L561333（在 EXEC 块外）。OrcaSlicer 原生和 BambuStudio 原始的 `EXECUTABLE_BLOCK` 都包含整个打印过程（EXEC_START → 启动代码 → 打印过程 → PRINT_END → EXEC_END）。
+
+**根因**：`convertGcodeContent` 在 `newExecBlock` 末尾添加了 `EXECUTABLE_BLOCK_END`（L1356），然后删除了 printBody 中的原始 `EXECUTABLE_BLOCK_END`（L1417），导致 EXEC 块只包含启动代码。
+
+**修复**：
+1. `newExecBlock` 不再添加 `EXECUTABLE_BLOCK_END`（移到 body 末尾）
+2. 在 `convertedBody` 末尾（PRINT_END 之后）添加 `EXECUTABLE_BLOCK_END`，包裹整个打印过程
+3. 新增单元测试验证 `EXECUTABLE_BLOCK_END` 在 `PRINT_END` 之后
+
+**验证**：29 个单元测试全部通过；14 处版本号统一到 v5.37.1
+
+### v5.37.0 (2026-06-29) — 阶段 4：单元测试 + fetch 超时标准化 + 代码组织
+全量代码审查后系统性优化的第四阶段，添加单元测试回归保护网 + 消除 node-fetch v2 专有 API + 提取嵌套函数（traps.md #139）。
+
+**单元测试**（待改进项 #2 解决）
+- 新建 `bridge-node/test/` 目录，使用 Node.js 18+ 内置 `node:test` 框架（零依赖）
+- 新增 `test/patch_gcode.test.js`（17 个测试）：覆盖 patchGcodeContent 5 种操作（replace_speed / add_retract / replace_fan / modify_temperature / insert_line）+ 边界情况（空 patchPlan / null / 缺失参数）+ mm/s 自动转换 + overhang 区域定向替换 + 短行程过滤 + 自定义 min_travel_length + 多层温度替换
+- 新增 `test/convert_gcode.test.js`（11 个测试）：覆盖 convertGcodeContent 格式检测（无效格式 / 已是 OrcaSlicer / 无层标记）+ 成功转换（; FEATURE: → ;TYPE: 替换 / EXEC 块重建 / 布局重排 / 温度提取 / 层数统计 / 工具检测 / 缺失 THUMB/CONFIG 块 / End G-code 生成）
+- package.json 新增 `"test": "node --test test/"` 脚本
+- **重构**：提取 `patchGcodeContent(content, patchPlan)` 和 `convertGcodeContent(content)` 纯函数（无文件 I/O），原 patchGcode/convertGcode 改为读文件 + 调用纯函数 + 写文件。纯函数导出供测试直接调用
+
+**node-fetch timeout → AbortController**（待改进项 #1 解决）
+- 新增 `fetchWithTimeout(url, options, timeoutMs)` helper：用标准 AbortController + signal 替代 node-fetch v2 非标准的 `timeout` 选项，兼容 node-fetch v2/v3 + Node.js 内置 fetch
+- 替换 server.js 中 8 处 `fetch(..., { timeout: X })` 调用：moonrakerFetch / proxy.js / init-data.js / check_update / cam_snapshot / upload / proxyToMoonraker / webcam proxy
+- 不升级 node-fetch 版本（v3 是纯 ESM，当前项目是 CommonJS，升级需大规模重构动态 import，风险高无性能收益）
+
+**patchGcodeLayout 提取**（待改进项 #9 解决）
+- 从 server.js `handleUploadWithConfirm` 请求处理函数内提取 `patchGcodeLayout` 为顶层函数，添加 JSDoc 注释
+- 删除原嵌套定义中未使用的 `betweenBlocks` 变量
+
+**验证**：28 个单元测试全部通过；`node --check` 通过；14 处版本号统一到 v5.37.0
+
+### v5.36.1 (2026-06-29) — 修复 AI 问答流式空响应
+**问题**（traps.md #138）：AI 问答始终返回"AI 返回了空响应，请重试"，LMStudio 后台正常但前端无内容。
+
+**根因**：
+1. **后端**：`printQAStream` 用 `resp.body.getReader()` 读取流式响应，但 node-fetch v2 的 `resp.body` 是 Node.js Readable stream（非 Web ReadableStream），`getReader()` 可能不存在导致 TypeError，IIFE catch 设置 `done=true` + `error`
+2. **前端**：`ailab.js` done 分支只检查 `answerText` 是否为空，不检查 `pd.error`，错误信息被吞掉显示"空响应"
+
+**修复**：
+- **slice_agent.js**：流式读取从 `resp.body.getReader()` + `while(true) reader.read()` 改为 `for await (const chunk of resp.body)` async iterator（Node stream + Web ReadableStream 双兼容）；IIFE catch 加 `log("ERROR", ...)` 便于排查
+- **ailab.js**：done 分支检查 `pd.error`，有错误时显示 `[错误: ...]` 而非"空响应"；`qa_stream_start` 调用删除多余的 provider/customBaseUrl/model query 参数（后端不读取，直接用全局 aiConfig）
+
+**验证**：`node --check` 通过；14 处版本号统一到 v5.36.1
+
+### v5.36.0 (2026-06-29) — 阶段 3：AI 调用公共模块提取 + PowerShell 脚本重构
+全量代码审查后系统性优化的第三阶段，提取两个公共模块消除重复代码 + 修复 1 处 API Key 泄露风险（traps.md #136/#137）。
+
+**AI 调用公共模块提取**（traps.md #136）
+- **新增 `bridge-node/aiClient.js`**（150 行）：导出 `AiClient` 类 + `AI_PROVIDERS` + `extractErrorMessage`
+  - `AiClient` 构造函数封装 provider 解析 + 凭证校验 + baseUrl 推导；本地 provider（LMStudio）跳过 API Key 检查
+  - `_headers()` 统一构造 Authorization Bearer
+  - `listModels()` 封装 GET /models（保留 testAiConnection 副作用：回写 provider.availableModels/defaultModel/aiConfig.model）
+  - `chat({systemPrompt, userPrompt, temperature, maxTokens, stream})` 封装 POST /chat/completions，返回原始 Response（供 printQAStream IIFE 消费 reader 实现流式）
+  - `static parseJsonContent(aiContent)` 剥离 ```json 围栏 + JSON.parse
+  - `extractErrorMessage(e)` 统一错误提取：`e.message || e.cause?.message || e.cause?.code || String(e)`（修复原 printQAStream 丢失 cause 链问题）
+- **slice_agent.js 三函数改造**：testAiConnection 45→15 行、optimizeGcode AI 调用段 40→6 行、printQAStream AI 调用段 25→3 行，错误处理全部统一用 extractErrorMessage
+- **ailab.js apiKey GET 传递修复**（traps.md #137）：optimize_gcode 调用删除 4 个多余 query 参数（provider/customBaseUrl/model/api_key），后端直接用全局 aiConfig，消除 apiKey 通过 GET URL 明文传递的泄露风险
+
+**PowerShell 脚本重构**
+三个安装脚本（install.ps1 / reinstall.ps1 / uninstall.ps1）有约 500 行重复代码，提取到 `install-common.psm1` 模块（14 个公共函数，558 行），三个脚本改为 `Import-Module` 导入。
+
+**新增模块**
+- **install-common.psm1**（558 行，14 个公共函数）：Set-ConsoleUtf8 / Assert-BambuStudioNotRunning / Find-BambuStudioDir / Clear-BambuSystemCache / Clean-SnapmakerEntriesFromConf / Stop-BridgeProcess / Register-BridgeWatchdog / Unregister-BridgeWatchdog / Resolve-NodePath / Install-NpmDependencies / New-BridgeVbsLauncher / New-BridgeStartupShortcut / Remove-BridgeStartupShortcut / Start-BridgeAndWait / Copy-ProfilesToBambuDir / Patch-UserMachineConfigs
+- 参数化设计：`Find-BambuStudioDir -DetectionMode Install/Uninstall`、`Stop-BridgeProcess -IncludeNodeProcess`、`Clean-SnapmakerEntriesFromConf -ShowRemovedCount`、`Register-BridgeWatchdog -ReRegister`、`New-BridgeStartupShortcut -Updated`、`Start-BridgeAndWait -StopExistingFirst`
+- 异常改造：函数内 `exit 1` → `throw`（先打印消息 + Read-Host pause），调用方 `try { ... } catch { exit 1 }` 转 clean exit
+- 统一启用 regex fallback：`Clean-SnapmakerEntriesFromConf` 在 JSON 解析失败时统一走 regex 清理（原 reinstall/uninstall 无此兜底）
+
+**脚本改造**
+- **install.ps1**：508 → 199 行（-60.8%），保留 [1/9]-[9/9] 编号、BBL 耗材验证、legacy config 迁移、成功横幅
+- **reinstall.ps1**：524 → 228 行（-56.5%），保留 [1/10]-[10/10] 编号、-AutoConfirm 参数、[2/10] 先停 watchdog 再停 bridge（traps.md #131）、[10/10] 重注册 watchdog、两个 [4/10] 编号、-Updated 消息
+- **uninstall.ps1**：236 → 157 行（-33.5%），保留 [1/7]-[7/7] 编号、兼容包存在性检查、-DetectionMode Uninstall、-IncludeNodeProcess node 进程兜底、旧 vbs 清理
+
+**验证**：`node --check` 校验 aiClient.js/slice_agent.js/server.js/build.js 全部无语法错误；PowerShell AST 解析器校验四个 PS1/PSM1 文件全部无语法错误；14 处版本号统一到 v5.36.0
+
+### v5.35.0 (2026-06-29) — 阶段 2：死代码清理 + 前端 XSS 修复
+全量代码审查后系统性优化的第二阶段，删除 ~1500 行死代码 + 修复 10 处 XSS 漏洞。
+
+**死代码清理**
+- **slice_agent.js**：删除 22 个死函数/常量，从 3066 行减至 1618 行（-47.2%）。包括整个 AI 切片流水线（analyzeModel/sliceModel/suggestParameters/generateGcodeFromAnalysis/advancedSlice 等）、非流式 printQA（被流式取代）、saveModelFile/getStlInfo/listModelFiles 等未调用函数、SLICE_FILAMENT_RULES/sliceJobs/createJobId 等仅被死代码引用的常量。同步清理 buildSystemPrompt 中的死任务类型分支和 module.exports
+- **server.js**：删除 10 个死端点（8 个 AI 流水线端点：upload_model/analyze/suggest_params/ai_slice/review_gcode/patch_gcode/print_qa/advanced_slice + 2 个 bridge 端点：status/disconnect）。前端 ailab.js/gcvt.js/webui.html 均不调用这些端点
+
+**前端 XSS 修复**
+- **ailab.js**：N9a 下载失败 errMsg 用 aiEscapeHtml 转义；N9b aiRenderInline/aiRenderChatMessage 代码块反向解码删除（原代码把 &lt;/&gt; 还原为 </> 后插入 innerHTML，AI 返回 `<script>` 标签可 XSS）；新增 aiEscapeHtml 辅助函数
+- **webui.html**：新增 escHtml 函数；修复 6 处 XSS（文件列表 name/f.path、打印模态框 name/gType/mFilTypes/mFilSub/mT/mS）。所有从 Moonraker 返回的文件名/耗材类型均经 HTML 转义
+- **gcvt.js**：新增 gcvtEsc 函数；修复 2 处 XSS（加载失败错误信息、转换结果温度/工具值）
+
+**版本号统一**：14 处版本号统一到 v5.35.0
+
+### v5.34.0 (2026-06-29) — 阶段 1：安全加固 + 资源泄漏修复
+全量代码审查后系统性优化的第一阶段，修复 11 个安全/资源/正确性问题（traps.md #121-#131）：
+
+**安全加固**
+- **JSONP cb 注入修复**（#122）：server.js 加全局 `sanitizeCb` 中间件，35 处 JSONP 端点的 `cb` 参数用正则校验，非合法 JS 标识符的重置为 `callback`
+- **命令注入修复**（#123）：open_external/open_folder/open_gcode_folder 三个端点从 `exec(cmd)` 改为 `spawn` + 参数数组（新增 `openPathExternally` helper），消除 shell 元字符 RCE 风险
+- **dialog.js Linux 崩溃修复**（#121）：补全 `execFileSync` 导入
+
+**资源泄漏修复**
+- **上传临时文件泄漏**（#124）：handleUploadWithConfirm finally 块原引用 `req.files?.file`（永远 undefined），改用局部变量 `uploadedFiles` 遍历清理所有字段
+- **listGcodeFiles 全量读文件**（#125）：`readFileSync({start,end})` 选项无效，改用 `openSync`+`readSync` 只读前 32KB
+- **printQAStream qaStreams 泄漏**（#128）：后台 IIFE 加 finally 块，30 秒兜底清理
+- **loadJS script 标签泄漏**（#129）：JSONP 回调与 onerror 中同时 remove script 标签
+- **reinstall watchdog 文件锁冲突**（#131）：[2/10] 先停 watchdog 再停 bridge；[10/10] 启动 bridge 后重新注册 watchdog
+
+**正确性修复**
+- **add_retract 时机错误**（#126）：回抽插在 travel 之前（原在之后）；启用 `min_travel_length` 过滤短距离 travel（原解构未用）；正则匹配 G0+G1 travel（原仅 G0，OrcaSlicer 不匹配）
+- **extractGcodeStats G92 E0 误计**（#127）：G92 E0 重置 E 起点被误计为回抽，导致 AI 诊断 stats.retracts 虚高。加 G92 E 检测分支只更新 lastE 不计 retract
+- **ws.onmessage 异常保护**（#130）：JSON.parse 裸调用无 try/catch，异常时状态机卡死。整体包裹 try/catch
+
+**版本号统一**：14 处版本号统一到 v5.34.0（package.json/server.js BRIDGE_VERSION/build.js/install.ps1/reinstall.ps1/uninstall.ps1/webui.html CSS+JS 缓存+fallback）
 
 ### v5.33.0 (2026-06-27) — WebUI 顶栏添加打印机设置弹窗
 - **新增打印机设置弹窗**：WebUI 顶栏 IP 地址旁新增齿轮图标，点击弹窗可修改打印机 IP/Port/API Key。解决系统更新后打印机 IP 变化导致 Bridge 连接失败的问题

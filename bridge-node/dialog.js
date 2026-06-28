@@ -1,4 +1,4 @@
-const { execFile } = require("child_process");
+const { execFile, execFileSync } = require("child_process");
 const crypto = require("crypto");
 const fs = require("fs");
 const os = require("os");
@@ -13,10 +13,13 @@ async function fetchPrintTask(baseUrl, apikey) {
   try {
     const headers = {};
     if (apikey) headers["X-API-Key"] = apikey;
+    // Use AbortController (standard Web API) instead of node-fetch v2's non-standard `timeout` option (traps.md #139)
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 5000);
     const r = await fetch(`${baseUrl}/server/files/config/snapmaker/print_task.json`, {
       headers,
-      timeout: 5000,
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timer));
     if (r.ok) return await r.json();
   } catch (_) {}
   return {};

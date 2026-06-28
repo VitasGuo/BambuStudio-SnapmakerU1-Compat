@@ -8,6 +8,7 @@ const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
+const { AiClient, AI_PROVIDERS, extractErrorMessage } = require("./aiClient");
 
 // Logging — uses server.js log if injected via setLogFn, otherwise console
 let _logFn = null;
@@ -24,84 +25,6 @@ function log(level, msg) {
 // RawPath cache shared with server.js (set via setRawPathCache)
 let rawPathCache = new Map();
 function setRawPathCache(cache) { rawPathCache = cache; }
-
-// ─── AI Provider 配置（移植自 ai_router_module） ───
-
-const AI_PROVIDERS = {
-  local: {
-    name: "本地模型 (LM Studio)",
-    baseUrl: "http://127.0.0.1:1234/v1",
-    defaultModel: "google/gemma-4-e2b",
-    availableModels: ["google/gemma-4-e2b", "qwen/qwen3.6-35b-a3b"],
-    isLocal: true,
-  },
-  deepseek: {
-    name: "DeepSeek",
-    baseUrl: "https://api.deepseek.com/v1",
-    defaultModel: "deepseek-chat",
-    availableModels: ["deepseek-chat", "deepseek-reasoner"],
-  },
-  zhipu: {
-    name: "智谱AI",
-    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
-    defaultModel: "glm-4-flash",
-    availableModels: ["glm-4-flash", "glm-4-plus", "glm-4"],
-  },
-  kimi: {
-    name: "Kimi",
-    baseUrl: "https://api.moonshot.cn/v1",
-    defaultModel: "moonshot-v1-8k",
-    availableModels: ["moonshot-v1-8k", "moonshot-v1-32k"],
-  },
-  sensenova: {
-    name: "SenseNova",
-    baseUrl: "https://token.sensenova.cn/v1",
-    defaultModel: "sensenova-6.7-flash-lite",
-    availableModels: ["sensenova-6.7-flash-lite", "deepseek-v4-flash"],
-  },
-  custom: {
-    name: "自定义接口",
-    baseUrl: "http://localhost:8080/v1",
-    defaultModel: "",
-    availableModels: [],
-    isCustom: true,
-  },
-};
-
-// ─── 切片分析耗材推荐规则 ───
-
-const SLICE_FILAMENT_RULES = {
-  overhang: {
-    threshold: 0.3,  // 30% overhang area
-    recommend: 'petg_basic',
-    reason: '大量悬垂区域 → PETG（层间结合力强，减少悬垂缺陷）'
-  },
-  thin_wall: {
-    threshold: 0.2,  // 20% thin wall ratio
-    recommend: 'pla_basic',
-    reason: '大量薄壁结构 → PLA（细节表现好，薄壁成型稳定）'
-  },
-  high_curvature: {
-    threshold: 0.5,  // high curvature ratio
-    recommend: 'pla_basic',
-    reason: '高曲率表面 → PLA（冷却响应快，非平面微调效果最佳）'
-  },
-  large_volume: {
-    threshold: 100,  // 100cm³
-    recommend: 'pla_matte',
-    reason: '大体积模型 → PLA Matte（减少翘曲，表面均匀）'
-  },
-  flexible: {
-    keywords: ['柔性', '软', 'flexible', 'rubber', 'TPU'],
-    recommend: 'tpu_basic',
-    reason: '需要柔性 → TPU（弹性材料，适合柔性部件）'
-  },
-  heat_resistant: {
-    keywords: ['耐热', '高温', 'heat', 'ABS', 'PC'],
-    recommend: 'abs_basic',
-    reason: '需要耐热 → ABS（耐高温，适合结构件）'
-  }
-};
 
 // ─── 目录配置 ───
 
@@ -190,7 +113,6 @@ function buildSystemPrompt(taskType, extraContext = {}) {
   const skillMap = {
     optimize_gcode: ["optimize_gcode.md", "patch_gcode.md"],
     print_qa: ["print_qa.md"],
-    review_gcode: ["review_gcode.md", "patch_gcode.md"],
   };
   const selectedSkills = skillMap[taskType];
   if (selectedSkills && ws.skills) {
@@ -205,64 +127,15 @@ function buildSystemPrompt(taskType, extraContext = {}) {
     sections.push(Object.values(ws.skills).join("\n\n---\n\n"));
   }
 
-  // 4. Tools — 按任务类型选择相关工具
-  const toolMap = {
-    suggest_params: ["voxelflow_analyze.md"],
-    generate_gcode: ["voxelflow_analyze.md", "voxelflow_slice.md"],
-    review_gcode: [],
-    compute_overrides: ["voxelflow_analyze.md", "voxelflow_slice.md"],
-  };
-  const selectedTools = toolMap[taskType];
-  if (selectedTools && ws.tools && selectedTools.length > 0) {
-    const toolSections = selectedTools
-      .filter(f => ws.tools[f])
-      .map(f => ws.tools[f]);
-    if (toolSections.length > 0) {
-      sections.push("## 可用工具\n\n" + toolSections.join("\n\n---\n\n"));
-    }
-  }
-
-  // 5. Memory — 所有任务都包含
+  // 4. Memory — 所有任务都包含
   if (ws["memory.md"]) sections.push(ws["memory.md"]);
 
-  // 6. 额外上下文（模型分析数据、切片结果等）
+  // 5. 额外上下文（模型分析数据、切片结果等）
   if (extraContext.taskInstructions) {
     sections.push(extraContext.taskInstructions);
   }
 
   return sections.filter(Boolean).join("\n\n---\n\n");
-}
-
-/** 更新 memory.md — 追加切片经验 */
-function updateMemory(entry) {
-  const memoryPath = path.join(WORKSPACE_DIR, "memory.md");
-  let content = "";
-  if (fs.existsSync(memoryPath)) {
-    content = fs.readFileSync(memoryPath, "utf-8");
-  }
-
-  // 在"切片经验"区域的"（暂无记录）"或最后一个条目后追加
-  const timestamp = new Date().toISOString().replace("T", " ").slice(0, 19);
-  const newEntry = `\n### [${timestamp}] ${entry.modelName || "unknown"} — ${entry.filament || "PLA"}\n` +
-    `- 层高: ${entry.layerHeight || "?"}mm, 填充: ${entry.infill || "?"}%, 温度: ${entry.hotendTemp || "?"}/${entry.bedTemp || "?"}°C\n` +
-    `- 结果: ${entry.success ? "✅ 成功" : "❌ 失败"}\n` +
-    `- 关键发现: ${entry.finding || "无"}\n` +
-    `- 参数调整: ${entry.adjustment || "无"}\n`;
-
-  // 替换"（暂无记录）"或追加到切片经验区域末尾
-  if (content.includes("（暂无记录）")) {
-    content = content.replace("（暂无记录）", newEntry.trim());
-  } else {
-    // 在"用户偏好"之前插入
-    const userPrefIdx = content.indexOf("## 用户偏好");
-    if (userPrefIdx > 0) {
-      content = content.slice(0, userPrefIdx) + newEntry + "\n" + content.slice(userPrefIdx);
-    } else {
-      content += newEntry;
-    }
-  }
-
-  fs.writeFileSync(memoryPath, content, "utf-8");
 }
 
 // ─── VoxelFlow 二进制查找 ───
@@ -298,786 +171,6 @@ function findVoxelFlowBinary() {
 }
 
 const VOXELFLOW_BIN = findVoxelFlowBinary();
-
-// ─── 切片任务管理 ───
-
-const sliceJobs = new Map(); // id → { status, progress, result, error, startTime }
-
-function createJobId() {
-  return `slice_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-// ─── 模型分析 ───
-
-function analyzeModel(modelPath) {
-  return new Promise((resolve, reject) => {
-    const ext = path.extname(modelPath).toLowerCase();
-    const args = ["-i", modelPath, "--analyze-only"];
-    // 3MF文件使用 --analyze-only 自动输出JSON格式分析结果（CLI已支持）
-    const proc = spawn(VOXELFLOW_BIN, args, { cwd: path.dirname(modelPath) });
-
-    let stdout = "";
-    let stderr = "";
-
-    // 超时保护：3 分钟
-    const timeout = setTimeout(() => {
-      proc.kill("SIGKILL");
-      reject(new Error("voxelflow slice 超时（3分钟），进程已终止。模型可能过于复杂。"));
-    }, 180000);
-
-    proc.stdout.on("data", (data) => { stdout += data.toString(); });
-    proc.stderr.on("data", (data) => { stderr += data.toString(); });
-
-    proc.on("close", (code) => {
-      clearTimeout(timeout);
-      if (code !== 0) {
-        return reject(new Error(`voxelflow --analyze-only exited with code ${code}: ${stderr}`));
-      }
-      try {
-        const analysis = JSON.parse(stdout.trim());
-        // 标记3MF多色信息
-        if (ext === '.3mf') {
-          analysis.is3mf = true;
-        }
-        resolve(analysis);
-      } catch (e) {
-        reject(new Error(`Failed to parse analyze output: ${e.message}\nstdout: ${stdout.slice(0, 500)}`));
-      }
-    });
-
-    proc.on("error", (err) => {
-      reject(new Error(`Failed to spawn voxelflow: ${err.message}. Binary: ${VOXELFLOW_BIN}`));
-    });
-  });
-}
-
-// ─── 切片执行 ───
-
-function sliceModel(modelPath, params, jobId, notifyFn) {
-  return new Promise((resolve, reject) => {
-    const ext = path.extname(modelPath).toLowerCase();
-    const outputName = path.basename(modelPath, ext) + "_" + jobId + ".gcode";
-    const outputPath = path.join(GCODE_DIR, outputName);
-
-    const args = [
-      "-i", modelPath,
-      "-o", outputPath,
-      "--layer-height", String(params.layer_height || 0.2),
-      "--walls", String(params.walls || 2),
-      "--infill", String(params.infill || 0.15),
-      "--speed", String(params.speed || 60),
-      "--printer", params.printer || "voron",
-      "--solid-top-layers", String(params.solid_top_layers || 3),
-      "--solid-bottom-layers", String(params.solid_bottom_layers || 3),
-      "--bed-size-x", String(params.bed_size_x || 270),
-      "--bed-size-y", String(params.bed_size_y || 270),
-    ];
-
-    if (params.printer_profile) {
-      args.push("--printer-profile", params.printer_profile);
-    }
-
-    // 耗材参数
-    if (params.filament) {
-      args.push("--filament", String(params.filament));
-    }
-    if (params.filaments && Array.isArray(params.filaments)) {
-      args.push("--filaments", params.filaments.join(","));
-    }
-
-    // 3MF多色切片
-    if (ext === '.3mf' && params.multicolor) {
-      args.push("--multicolor");
-      if (params.extruder_count) {
-        args.push("--extruder-count", String(params.extruder_count));
-      }
-    }
-
-    // AI切片策略参数
-    if (params.slice_strategy) {
-      const strategy = params.slice_strategy;
-      if (strategy.support_strategy) args.push("--support-strategy", strategy.support_strategy);
-      if (strategy.support_threshold_angle) args.push("--support-threshold", String(strategy.support_threshold_angle));
-      if (strategy.brim_width && strategy.brim_width > 0) args.push("--brim-width", String(strategy.brim_width));
-      if (strategy.z_seam) args.push("--z-seam", strategy.z_seam);
-      if (strategy.infill_pattern) args.push("--infill-pattern", strategy.infill_pattern);
-    }
-
-    // 温度参数
-    if (params.hotend_temp) args.push("--hotend-temp", String(params.hotend_temp));
-    if (params.bed_temp) args.push("--bed-temp", String(params.bed_temp));
-
-    // AI 参数覆盖（通过 --overrides 传递 JSON）
-    if (params._overrides) {
-      const overrideJson = {};
-      const o = params._overrides;
-      if (o.first_layer_speed) overrideJson.speed = { ...overrideJson.speed, First: o.first_layer_speed / 60 };
-      if (o.outer_wall_speed) overrideJson.speed = { ...overrideJson.speed, Perimeter: o.outer_wall_speed / 60 };
-      if (o.infill_speed) overrideJson.speed = { ...overrideJson.speed, Infill: o.infill_speed / 60 };
-      if (o.travel_speed) overrideJson.speed = { ...overrideJson.speed, Travel: o.travel_speed / 60 };
-      if (o.fan_first_layers !== undefined) overrideJson.fan = { ...overrideJson.fan, first_layers: o.fan_first_layers };
-      if (o.fan_normal !== undefined) overrideJson.fan = { ...overrideJson.fan, normal: o.fan_normal };
-      if (o.retract_length) overrideJson.retract = { ...overrideJson.retract, length: o.retract_length };
-      if (o.retract_speed) overrideJson.retract = { ...overrideJson.retract, speed: o.retract_speed };
-      if (Object.keys(overrideJson).length > 0) {
-        args.push("--overrides", JSON.stringify(overrideJson));
-      }
-    }
-
-    // Save RawPath for regeneration support
-    if (params._saveRawPath) {
-      args.push("--save-rawpath", params._saveRawPath);
-    }
-
-    const proc = spawn(VOXELFLOW_BIN, args, { cwd: path.dirname(modelPath) });
-
-    let stdout = "";
-    let stderr = "";
-
-    // 超时保护：5 分钟
-    const sliceTimeout = setTimeout(() => {
-      proc.kill("SIGKILL");
-      reject(new Error("voxelflow slice 超时（5分钟），进程已终止。模型可能过于复杂。"));
-    }, 300000);
-
-    proc.stdout.on("data", (data) => {
-      stdout += data.toString();
-      // 解析进度
-      const lines = data.toString().split("\n");
-      for (const line of lines) {
-        if (line.includes("Layers:") || line.includes("Slicing")) {
-          if (notifyFn) notifyFn(jobId, "progress", { log: line.trim() });
-        }
-      }
-    });
-
-    proc.stderr.on("data", (data) => { stderr += data.toString(); });
-
-    proc.on("close", (code) => {
-      clearTimeout(sliceTimeout);
-      if (code !== 0) {
-        return reject(new Error(`voxelflow slice exited with code ${code}: ${stderr}`));
-      }
-
-      // 解析输出统计
-      const stats = parseSliceOutput(stdout);
-
-      resolve({
-        gcodePath: outputPath,
-        gcodeName: outputName,
-        stats,
-      });
-    });
-
-    proc.on("error", (err) => {
-      reject(new Error(`Failed to spawn voxelflow: ${err.message}. Binary: ${VOXELFLOW_BIN}`));
-    });
-  });
-}
-
-function parseSliceOutput(stdout) {
-  const stats = {};
-  const lines = stdout.split("\n");
-
-  for (const line of lines) {
-    // "Mesh: 410 triangles, 16.1x29.0x4.4mm"
-    const meshMatch = line.match(/Mesh:\s+(\d+)\s+triangles,\s+([\d.]+)x([\d.]+)x([\d.]+)mm/);
-    if (meshMatch) {
-      stats.triangle_count = parseInt(meshMatch[1]);
-      stats.size_x = parseFloat(meshMatch[2]);
-      stats.size_y = parseFloat(meshMatch[3]);
-      stats.size_z = parseFloat(meshMatch[4]);
-    }
-    // "Layers: 22 | Walls: 2 | Infill: 15%"
-    const layerMatch = line.match(/Layers:\s+(\d+)\s+\|\s+Walls:\s+(\d+)\s+\|\s+Infill:\s+(\d+)%/);
-    if (layerMatch) {
-      stats.layers = parseInt(layerMatch[1]);
-      stats.walls = parseInt(layerMatch[2]);
-      stats.infill_pct = parseInt(layerMatch[3]);
-    }
-    // "Time: ~2min | Filament: ~0.7m (0.9g)"
-    const timeMatch = line.match(/Time:\s+~?([\d.]+)min\s+\|\s+Filament:\s+~?([\d.]+)m\s+\(([\d.]+)g\)/);
-    if (timeMatch) {
-      stats.estimated_time_min = parseFloat(timeMatch[1]);
-      stats.filament_m = parseFloat(timeMatch[2]);
-      stats.filament_g = parseFloat(timeMatch[3]);
-    }
-  }
-
-  return stats;
-}
-
-// ─── 切片分析计算 ───
-
-function computeSliceAnalysis(rawPath) {
-  if (!rawPath || !rawPath.layers) return null;
-
-  let totalSegments = 0;
-  let wallSegments = 0;
-  let fillSegments = 0;
-  let supportSegments = 0;
-  let totalExtrusion = 0;
-
-  for (const layer of rawPath.layers) {
-    for (const seg of layer.segments) {
-      totalSegments++;
-      totalExtrusion += Math.abs(seg.extrusion || 0);
-      switch (seg.path_type) {
-        case 'wall': case 'inner_wall': wallSegments++; break;
-        case 'fill': case 'solid_fill': case 'gap_fill': fillSegments++; break;
-        case 'support': case 'support_interface': supportSegments++; break;
-      }
-    }
-  }
-
-  const overhangRatio = supportSegments / Math.max(totalSegments, 1);
-  const thinWallRatio = wallSegments / Math.max(totalSegments, 1);
-
-  return {
-    overhang_ratio: Math.round(overhangRatio * 100) / 100,
-    thin_wall_ratio: Math.round(thinWallRatio * 100) / 100,
-    curvature_score: 0,  // Will be computed from nonplanar data if available
-    model_volume_cm3: Math.round(totalExtrusion / 1000 * 100) / 100,  // mm³ → cm³
-    total_segments: totalSegments,
-    support_segments: supportSegments,
-  };
-}
-
-// ─── AI 参数推荐 ───
-
-async function suggestParameters(analysisResult, aiConfig, rawPath) {
-  const provider = AI_PROVIDERS[aiConfig.provider];
-  if (!provider) throw new Error(`Unknown AI provider: ${aiConfig.provider}`);
-
-  const model = aiConfig.model || provider.defaultModel;
-  const apiKey = aiConfig.apiKey || (provider.isLocal ? "no-key" : "");
-  if (!apiKey && !provider.isLocal) throw new Error(`API key not configured for ${provider.name}`);
-
-  const baseUrl = aiConfig.customBaseUrl || provider.baseUrl;
-
-  // 计算切片分析指标
-  const sliceAnalysis = computeSliceAnalysis(rawPath);
-
-  const systemPrompt = buildSystemPrompt("suggest_params", {
-    taskInstructions: `你必须返回JSON格式的切片策略，包含以下字段：
-{
-  "layer_height": 0.2,
-  "walls": 2,
-  "infill": 0.15,
-  "speed": 60,
-  "bed_temp": 60,
-  "hotend_temp": 210,
-  "printer": "voron",
-  "multicolor": false,
-  "extruder_count": 1,
-  "filament": "snapmaker_pla_basic",
-  "recommendation_reason": "推荐理由",
-  "reasoning": "整体策略说明",
-  "slice_strategy": {
-    "support_strategy": "auto",
-    "support_threshold_angle": 45,
-    "support_type": "tree",
-    "brim_width": 0,
-    "brim_type": "none",
-    "cooling_overrides": [{"layers": "1-3", "fan_speed": 0, "speed_factor": 0.5, "reason": "首层粘附"}],
-    "speed_overrides": [{"feature": "overhang", "speed_factor": 0.5, "threshold_angle": 45, "reason": "悬垂减速"}],
-    "retraction_overrides": [{"material": "TPU", "retract_length": 0, "reason": "TPU不回抽"}],
-    "z_seam": "aligned",
-    "infill_pattern": "grid",
-    "wall_sequence": "inner-outer",
-    "small_area_flow_compensation": true
-  }
-}
-
-只返回JSON，不要其他文字。`,
-  });
-
-  let userPrompt = `请分析以下STL模型特征并推荐切片参数：
-
-${JSON.stringify(analysisResult, null, 2)}`;
-
-  // 如果有切片分析数据，注入到prompt中
-  if (sliceAnalysis) {
-    userPrompt += `\n\n切片分析结果:\n`;
-    userPrompt += `- 悬垂比例: ${(sliceAnalysis.overhang_ratio * 100).toFixed(0)}%\n`;
-    userPrompt += `- 薄壁比例: ${(sliceAnalysis.thin_wall_ratio * 100).toFixed(0)}%\n`;
-    userPrompt += `- 模型体积: ${sliceAnalysis.model_volume_cm3}cm³\n`;
-    userPrompt += `- 支撑段数: ${sliceAnalysis.support_segments}\n`;
-    userPrompt += `\n基于切片分析的耗材推荐规则:\n`;
-    if (sliceAnalysis.overhang_ratio > SLICE_FILAMENT_RULES.overhang.threshold) {
-      userPrompt += `- 悬垂>${(SLICE_FILAMENT_RULES.overhang.threshold * 100).toFixed(0)}% → 推荐PETG（层间结合力强）\n`;
-    }
-    if (sliceAnalysis.thin_wall_ratio > SLICE_FILAMENT_RULES.thin_wall.threshold) {
-      userPrompt += `- 薄壁>${(SLICE_FILAMENT_RULES.thin_wall.threshold * 100).toFixed(0)}% → 推荐PLA（细节好）\n`;
-    }
-    if (sliceAnalysis.model_volume_cm3 > SLICE_FILAMENT_RULES.large_volume.threshold) {
-      userPrompt += `- 大体积>${SLICE_FILAMENT_RULES.large_volume.threshold}cm³ → 考虑PLA Matte（减少翘曲）\n`;
-    }
-  }
-
-  const url = `${baseUrl}/chat/completions`;
-  const headers = {
-    "Content-Type": "application/json",
-  };
-  if (apiKey && apiKey !== "no-key") headers["Authorization"] = `Bearer ${apiKey}`;
-  const resp = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.3,
-      max_tokens: 2000,
-      frequency_penalty: 0.5,
-      presence_penalty: 0.3,
-    }),
-  });
-
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => "");
-    throw new Error(`AI API error: ${resp.status} ${errText.slice(0, 200)}`);
-  }
-
-  const data = await resp.json();
-  // 兼容不同模型的响应格式：优先取content，如果为空则取reasoning_content
-  const content = data.choices?.[0]?.message?.content
-    || data.choices?.[0]?.message?.reasoning_content
-    || "";
-
-  // 提取JSON（可能被markdown代码块包裹）
-  let jsonStr = content;
-  const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) jsonStr = jsonMatch[1];
-
-  try {
-    const params = JSON.parse(jsonStr.trim());
-    // 附加切片分析数据到返回结果
-    if (sliceAnalysis) {
-      params.slice_analysis = sliceAnalysis;
-    }
-    // 如果AI未返回recommendation_reason，基于规则生成
-    if (!params.recommendation_reason && sliceAnalysis) {
-      params.recommendation_reason = generateRecommendationReason(sliceAnalysis, params.filament);
-    }
-    return params;
-  } catch (e) {
-    throw new Error(`Failed to parse AI response as JSON: ${e.message}\nAI response: ${content.slice(0, 300)}`);
-  }
-}
-
-// ─── AI 切片引擎（CLI 几何计算 + AI 策略决策） ───
-
-async function generateGcodeFromAnalysis(analysisResult, params, aiConfig, modelPath) {
-  const jobId = createJobId();
-
-  // Step 1: AI 决定参数覆盖（速度/温度/风扇/回抽策略）
-  const filament = params.filament || "PLA";
-  const tempMap = { PLA: { hotend: 210, bed: 60 }, PETG: { hotend: 240, bed: 80 }, ABS: { hotend: 250, bed: 100 }, TPU: { hotend: 220, bed: 50 } };
-  const temps = tempMap[filament] || tempMap.PLA;
-  const speed = params.speed || 60;
-
-  let overrides = {};
-  if (aiConfig.provider) {
-    try {
-      overrides = await aiComputeOverrides(analysisResult, params, aiConfig, null);
-    } catch (e) {
-      console.warn(`[VoxelFlow AI] AI override failed, using defaults: ${e.message}`);
-      overrides = {
-        first_layer_speed: 20,
-        outer_wall_speed: Math.round(speed * 0.7),
-        inner_wall_speed: speed,
-        infill_speed: speed,
-        travel_speed: 150,
-        hotend_temp: temps.hotend,
-        bed_temp: temps.bed,
-        fan_first_layers: 0,
-        fan_normal: filament === "ABS" ? 0 : filament === "PETG" ? 80 : 255,
-        retract_length: 1.2,
-        retract_speed: 40,
-      };
-    }
-  } else {
-    overrides = {
-      first_layer_speed: 20,
-      outer_wall_speed: Math.round(speed * 0.7),
-      inner_wall_speed: speed,
-      infill_speed: speed,
-      travel_speed: 150,
-      hotend_temp: temps.hotend,
-      bed_temp: temps.bed,
-      fan_first_layers: 0,
-      fan_normal: filament === "ABS" ? 0 : filament === "PETG" ? 80 : 255,
-      retract_length: 1.2,
-      retract_speed: 40,
-    };
-  }
-
-  // Step 2: CLI 切片，直接用 AI 参数覆盖生成 G-code
-  const sliceParams = {
-    ...params,
-    hotend_temp: overrides.hotend_temp || temps.hotend,
-    bed_temp: overrides.bed_temp || temps.bed,
-    _overrides: overrides,
-  };
-  const sliceResult = await sliceModel(modelPath, sliceParams, jobId);
-
-  // Step 3: G-code 后处理（添加标记 + 修复格式）
-  const gcodePath = sliceResult?.gcodePath || getGcodePath(sliceResult?.gcodeName);
-  if (gcodePath && fs.existsSync(gcodePath)) {
-    let content = fs.readFileSync(gcodePath, "utf-8");
-
-    // 3a: 添加 AI 生成标记
-    if (!content.startsWith(";Generated by VoxelFlow AI")) {
-      content = ";Generated by VoxelFlow AI\n;AI Provider: " + (aiConfig.provider || "default") + "\n;AI Model: " + (aiConfig.model || "default") + "\n" + content;
-    }
-
-    // 3b: 插入 ;LAYER:N + SET_PRINT_STATS_INFO + M73 + 每层 G92 E0 重置
-    const layerHeight = params.layer_height || 0.2;
-    let layerIdx = 0;
-    let totalLayers = 0;
-    const lines = content.split("\n");
-
-    // 第一遍：计算总层数
-    {
-      const seenZCount = new Set();
-      for (const line of lines) {
-        if (line.includes("; --- end ---") || line.match(/^M400\b/)) break;
-        const zMatch = line.match(/Z([\d.]+)/);
-        if (zMatch) {
-          const z = parseFloat(zMatch[1]);
-          const zKey = (Math.round(z / layerHeight) * layerHeight).toFixed(2);
-          if (z > 0 && !seenZCount.has(zKey)) {
-            seenZCount.add(zKey);
-            totalLayers++;
-          }
-        }
-      }
-    }
-
-    // 第二遍：插入层标记和辅助指令
-    let layerIdx2 = 0;
-    const result = [];
-    const seenZ = new Set();
-    let hasStartedPrinting = false; // 标记是否已开始打印移动（用于 LAYER:0 判断）
-    let lastEValue = 0; // 追踪当前 E 值用于 G92 E0 重置
-
-    for (let li = 0; li < lines.length; li++) {
-      const line = lines[li];
-
-      // 跳过 End G-code 区域
-      if (line.includes("; --- end ---") || line.match(/^M400\b/)) {
-        result.push(line);
-        for (let i = li + 1; i < lines.length; i++) result.push(lines[i]);
-        break;
-      }
-
-      // 检测打印移动开始（G1 带 E 值的行）
-      if (!hasStartedPrinting && line.match(/^G1\s/) && line.match(/E[\d.]+/)) {
-        hasStartedPrinting = true;
-      }
-
-      // 检测 Z 高度变化来识别新层
-      const zMatch = line.match(/Z([\d.]+)/);
-      if (zMatch) {
-        const z = parseFloat(zMatch[1]);
-        const zKey = (Math.round(z / layerHeight) * layerHeight).toFixed(2);
-        if (z > 0 && !seenZ.has(zKey)) {
-          seenZ.add(zKey);
-
-          // 插入层标记（包括 LAYER:0）
-          const layerNum = layerIdx2;
-          result.push(";LAYER:" + layerNum);
-          result.push("SET_PRINT_STATS_INFO TOTAL_LAYER=" + totalLayers + " CURRENT_LAYER=" + (layerNum + 1));
-
-          // 每层插入 G92 E0 重置（减少 E 值膨胀）
-          // 找到当前行之前最后一个 E 值，在 ;LAYER 行后插入 G92 E0
-          // 后续所有 E 值需要减去 lastEValue（在第三遍处理）
-          result.push("G92 E0");
-
-          // M73 进度报告
-          if (totalLayers > 0) {
-            const pct = Math.round((layerNum / totalLayers) * 100);
-            const remaining = totalLayers - layerNum;
-            result.push("M73 P" + pct + " R" + remaining);
-          }
-
-          layerIdx2++;
-        }
-      }
-
-      result.push(line);
-    }
-    content = result.join("\n");
-
-    // 第三遍：E 值重置——每层 G92 E0 后，该层所有 E 值减去该层起始 E 值
-    // 这样每层 E 值从 0 重新开始累加，大幅减少数字长度
-    {
-      const finalLines = content.split("\n");
-      const output = [];
-      let eOffset = 0; // 当前层需要减去的 E 偏移量
-      let layerStartE = -1; // 当前层的起始 E 值（G92 E0 前的最后一个 E 值）
-
-      for (let i = 0; i < finalLines.length; i++) {
-        const ln = finalLines[i];
-
-        // 检测 G92 E0（我们插入的层重置标记）
-        if (ln === "G92 E0") {
-          // 找到前一个有 E 值的行，获取当前 E 累计值作为偏移
-          let prevE = 0;
-          for (let j = output.length - 1; j >= 0; j--) {
-            const eMatch = output[j].match(/E([\d.]+)/);
-            if (eMatch) { prevE = parseFloat(eMatch[1]); break; }
-          }
-          eOffset = prevE;
-          output.push(ln);
-          continue;
-        }
-
-        // 检测 End G-code 区域，停止 E 值重置
-        if (ln.includes("; --- end ---") || ln.match(/^M400\b/)) {
-          // End G-code 中也需要重置 E 偏移
-          // 先把 End 区域所有 E 值也减去偏移
-        }
-
-        // 替换 E 值
-        const eMatch = ln.match(/^(G1\s.*E)([\d.]+)(.*)$/);
-        if (eMatch) {
-          const oldE = parseFloat(eMatch[2]);
-          const newE = Math.max(0, oldE - eOffset);
-          // 保留合理精度（3位小数）
-          output.push(eMatch[1] + newE.toFixed(3) + eMatch[3]);
-        } else {
-          output.push(ln);
-        }
-      }
-      content = output.join("\n");
-    }
-
-    // 3c: End G-code 前插入 M106 S0（关闭所有风扇）
-    if (!content.includes("M106 S0\n; --- end ---") && !content.includes("M106 S0\nM400")) {
-      content = content.replace(/(; --- end ---)/, "M106 S0 ; Fan off\nM106 P2 S0 ; Cavity fan off\n$1");
-    }
-
-    fs.writeFileSync(gcodePath, content, "utf-8");
-  }
-
-  // Step 4: 质量验证
-  const gcodeContent = gcodePath && fs.existsSync(gcodePath) ? fs.readFileSync(gcodePath, "utf-8") : "";
-  const validation = validateGcode(gcodeContent, analysisResult, params);
-  const stats = extractGcodeStats(gcodeContent);
-
-  // Step 5: 记录切片经验到 Memory
-  try {
-    updateMemory({
-      modelName: analysisResult?.bounding_box ? "model" : "unknown",
-      filament: filament,
-      layerHeight: params.layer_height || 0.2,
-      infill: Math.round((params.infill || 0.15) * 100),
-      hotendTemp: overrides.hotend_temp || temps.hotend,
-      bedTemp: overrides.bed_temp || temps.bed,
-      success: validation.quality !== "poor",
-      finding: validation.errors.length > 0 ? validation.errors[0] : (validation.warnings.length > 0 ? validation.warnings[0] : "质量良好"),
-      adjustment: aiConfig.provider ? "AI参数覆盖" : "默认参数",
-    });
-  } catch (e) {
-    console.warn(`[VoxelFlow AI] Failed to update memory: ${e.message}`);
-  }
-
-  return {
-    gcodeName: sliceResult?.gcodeName,
-    stats,
-    lines: gcodeContent.split('\n').length,
-    validation,
-    sliceId: jobId,
-    overrides,
-    method: "cli_slice_ai_override",
-  };
-}
-
-// ─── AI 参数覆盖计算 ───
-
-async function aiComputeOverrides(analysisResult, params, aiConfig, sliceResult) {
-  const provider = AI_PROVIDERS[aiConfig.provider];
-  if (!provider) throw new Error(`Unknown AI provider: ${aiConfig.provider}`);
-
-  const model = aiConfig.model || provider.defaultModel;
-  const apiKey = aiConfig.apiKey || (provider.isLocal ? "no-key" : "");
-  if (!apiKey && !provider.isLocal) throw new Error(`API key not configured for ${provider.name}`);
-
-  const baseUrl = aiConfig.customBaseUrl || provider.baseUrl;
-
-  const systemPrompt = buildSystemPrompt("compute_overrides", {
-    taskInstructions: `## 当前任务：参数覆盖
-
-你不需要生成 G-code 路径——几何路径已由 CLI 工具精确计算。你只需要决定打印策略参数。
-
-输出格式：纯 JSON，不要 markdown 代码块，不要注释。
-{
-  "first_layer_speed": 20,
-  "outer_wall_speed": 42,
-  "inner_wall_speed": 60,
-  "infill_speed": 80,
-  "travel_speed": 150,
-  "hotend_temp": 210,
-  "bed_temp": 60,
-  "fan_first_layers": 0,
-  "fan_normal": 255,
-  "retract_length": 0.8,
-  "retract_speed": 40,
-  "reasoning": "简要说明参数选择理由"
-}`,
-  });
-
-  const userPrompt = `## 模型分析
-${JSON.stringify(analysisResult, null, 2)}
-
-## 切片结果
-${JSON.stringify(sliceResult?.stats || {}, null, 2)}
-
-## 用户参数
-- 层高: ${params.layer_height || 0.2}mm
-- 壁数: ${params.walls || 3}
-- 填充: ${Math.round((params.infill || 0.15) * 100)}%
-- 速度: ${params.speed || 60}mm/s
-- 耗材: ${params.filament || "PLA"}
-- 支撑: ${params.slice_strategy?.support_strategy || "auto"}
-
-请输出参数覆盖 JSON：`;
-
-  const url = `${baseUrl}/chat/completions`;
-  const headers = { "Content-Type": "application/json" };
-  if (apiKey && apiKey !== "no-key") headers["Authorization"] = `Bearer ${apiKey}`;
-
-  const resp = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.3,
-      max_tokens: 500,
-    }),
-  });
-
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => "");
-    throw new Error(`AI API error: ${resp.status} ${errText.slice(0, 200)}`);
-  }
-
-  const data = await resp.json();
-  let content = data.choices?.[0]?.message?.content || "";
-  content = content.replace(/^```(?:json)?\s*\n?/i, "").replace(/\n?```\s*$/i, "");
-
-  const overrides = JSON.parse(content);
-  // 移除非参数字段
-  delete overrides.reasoning;
-  return overrides;
-}
-
-// ─── G-code 质量验证 ───
-
-function validateGcode(gcodeContent, analysis, params) {
-  const warnings = [];
-  const errors = [];
-  const lines = gcodeContent.split('\n');
-
-  // 1. 检查是否有重复坐标（AI 常见问题：所有层走线一样）
-  const moveLines = lines.filter(l => /^G[01]\s/.test(l.trim()));
-  const uniqueCoords = new Set();
-  let duplicateCount = 0;
-  for (const line of moveLines) {
-    const xMatch = line.match(/X([\d.]+)/);
-    const yMatch = line.match(/Y([\d.]+)/);
-    if (xMatch && yMatch) {
-      const key = `${xMatch[1]}_${yMatch[1]}`;
-      if (uniqueCoords.has(key)) duplicateCount++;
-      uniqueCoords.add(key);
-    }
-  }
-  if (duplicateCount > moveLines.length * 0.5) {
-    errors.push("重复坐标过多: 超过50%的走线指令使用相同的X/Y坐标，AI可能未根据模型实际尺寸生成路径");
-  }
-
-  // 2. 检查 E 值是否递增（绝对模式下应单调递增）
-  let lastE = 0;
-  let eNotIncreasing = 0;
-  for (const line of moveLines) {
-    const eMatch = line.match(/E([\d.]+)/);
-    if (eMatch) {
-      const e = parseFloat(eMatch[1]);
-      if (e < lastE) eNotIncreasing++;
-      lastE = e;
-    }
-  }
-  if (eNotIncreasing > 0) {
-    warnings.push(`E值非单调递增: ${eNotIncreasing}处E值回退（绝对模式下应递增，回抽除外）`);
-  }
-
-  // 3. 检查是否有 G0 快速移动（空走）
-  const g0Count = lines.filter(l => /^G0\s/.test(l.trim())).length;
-  if (g0Count === 0) {
-    warnings.push("无G0快速移动: 所有移动都在挤出，缺少空走移动会导致拉丝");
-  }
-
-  // 4. 检查是否有回抽
-  const retractCount = lines.filter(l => /G1\s+E-/.test(l.trim()) || /^G10/.test(l.trim())).length;
-  if (retractCount === 0) {
-    warnings.push("无回抽: 层间/空走前没有回抽，会导致拉丝");
-  }
-
-  // 5. 检查层数是否与模型高度匹配
-  const layerCount = (gcodeContent.match(/;LAYER:\d+/gi) || []).length;
-  const modelHeight = analysis?.bounding_box?.max?.[2] || analysis?.height;
-  const layerHeight = params?.layer_height || 0.2;
-  if (modelHeight && layerCount > 0) {
-    const expectedLayers = Math.ceil(modelHeight / layerHeight);
-    if (Math.abs(layerCount - expectedLayers) > expectedLayers * 0.3) {
-      warnings.push(`层数不匹配: 生成${layerCount}层，模型高度${modelHeight}mm预期约${expectedLayers}层`);
-    }
-  }
-
-  // 6. 检查是否有无效命令
-  const invalidCmds = lines.filter(l => {
-    const t = l.trim();
-    return t && !t.startsWith(';') && !t.startsWith('G') && !t.startsWith('M') && !t.startsWith('T') && !t.startsWith(';');
-  }).filter(l => !/^[A-Z]\d+/.test(l.trim()));
-  if (invalidCmds.length > 0) {
-    errors.push(`无效命令: ${invalidCmds.length}行非标准G-code指令`);
-  }
-
-  // 7. 检查模型尺寸范围
-  if (analysis?.bounding_box) {
-    const { min: bmin, max: bmax } = analysis.bounding_box;
-    if (bmin && bmax) {
-      const modelW = bmax[0] - bmin[0];
-      const modelD = bmax[1] - bmin[1];
-      // 检查G-code中是否有坐标超出模型范围
-      let outOfRange = 0;
-      for (const line of moveLines) {
-        const xMatch = line.match(/X([\d.]+)/);
-        const yMatch = line.match(/Y([\d.]+)/);
-        if (xMatch && yMatch) {
-          const x = parseFloat(xMatch[1]);
-          const y = parseFloat(yMatch[1]);
-          if (x > bmax[0] + 10 || y > bmax[1] + 10) outOfRange++;
-        }
-      }
-      if (outOfRange > 0) {
-        warnings.push(`坐标超出模型范围: ${outOfRange}处坐标超出模型尺寸(${modelW.toFixed(1)}×${modelD.toFixed(1)}mm)`);
-      }
-    }
-  }
-
-  const quality = errors.length === 0 && warnings.length <= 1 ? "good" : errors.length > 0 ? "poor" : "fair";
-
-  return { quality, errors, warnings, layerCount, uniqueCoords: uniqueCoords.size, totalMoves: moveLines.length };
-}
 
 // ─── G-code 统计提取 ───
 
@@ -1119,9 +212,19 @@ function extractGcodeStats(gcodeContent) {
     // Tool changes (T0, T1, etc.)
     if (/^T[0-3]/.test(trimmed)) stats.tool_changes++;
 
-    // Retract (negative E or G10)
+    // G92 E<value> — reset extruder position (NOT a retract, NOT an extrusion).
+    // Must be handled before the E-match below, otherwise G92 E0 would look like
+    // a huge retract (e=0 < lastE) and inflate stats.retracts.
+    const g92eMatch = trimmed.match(/^G92\s+.*?\bE(-?[\d.]+)/i);
+    if (g92eMatch) {
+      lastE = parseFloat(g92eMatch[1]);
+      if (lastE > stats.max_e_value) stats.max_e_value = lastE;
+      // Still allow other axes parsing below (fall through, but skip E-stat block)
+    }
+
+    // Retract (negative E or G10) — skip if this line was a G92 E reset
     const eMatch = trimmed.match(/E(-?[\d.]+)/);
-    if (eMatch) {
+    if (eMatch && !g92eMatch) {
       const e = parseFloat(eMatch[1]);
       if (e < lastE) stats.retracts++;
       else stats.total_extrusion_e += (e - lastE);
@@ -1181,236 +284,23 @@ function extractGcodeStats(gcodeContent) {
   return stats;
 }
 
-// ─── AI 审查 G-code ───
-
-async function reviewGcode(gcodeStats, aiConfig, sliceAnalysis, filamentProfile) {
-  const provider = AI_PROVIDERS[aiConfig.provider];
-  if (!provider) throw new Error(`Unknown AI provider: ${aiConfig.provider}`);
-
-  const model = aiConfig.model || provider.defaultModel;
-  const apiKey = aiConfig.apiKey || (provider.isLocal ? "no-key" : "");
-  if (!apiKey && !provider.isLocal) throw new Error(`API key not configured for ${provider.name}`);
-
-  const baseUrl = aiConfig.customBaseUrl || provider.baseUrl;
-
-  const systemPrompt = buildSystemPrompt("review_gcode", {
-    taskInstructions: `## 当前任务：G-code 审查
-
-你必须返回JSON格式的审查报告：
-{
-  "overall_score": 85,
-  "risk_level": "low",
-  "issues": [{"type": "stringing_risk", "severity": "warn", "location": "全局", "message": "描述", "suggestion": "建议"}],
-  "quality_checks": {
-    "thermal": {"status": "pass", "detail": "温度设置合理"},
-    "adhesion": {"status": "pass", "detail": "首层粘附参数正常"},
-    "stringing": {"status": "warn", "detail": "回抽频率较高"},
-    "dimensional": {"status": "pass", "detail": "速度设置在合理范围"},
-    "structural": {"status": "pass", "detail": "填充和壁数合理"}
-  },
-  "summary": "总体评价",
-  "recommendations": ["建议1", "建议2"]
-}
-
-如果审查发现问题，在返回的JSON中包含 patch_plan 字段：
-[
-  {"operation": "replace_speed", "target": "overhang_regions", "original_speed": "F3000", "new_speed": "F1500", "reason": "悬垂区域减速"},
-  {"operation": "add_retract", "target": "long_travels", "min_travel_length": 5.0, "retract_length": 1.2, "reason": "长距离空走增加回抽防拉丝"},
-  {"operation": "replace_fan", "target": "overhang_layers", "new_fan_speed": 255, "reason": "悬垂层增加冷却"},
-  {"operation": "modify_temperature", "target": "first_3_layers", "new_hotend_temp": 225, "reason": "首层温度微调改善粘附"},
-  {"operation": "insert_line", "after_pattern": "; Layer 1", "insert_text": "M106 S0", "reason": "强制首层风扇关闭"}
-]
-
-支持的operation: replace_speed / add_retract / replace_fan / modify_temperature / insert_line
-只在发现问题时才生成patch_plan。质量良好时patch_plan为空数组[]。
-
-只返回JSON，不要其他文字。`,
-  });
-
-  const userPrompt = `请审查以下G-code统计数据：
-
-## G-code 统计
-${JSON.stringify(gcodeStats, null, 2)}
-
-## 切片分析
-${sliceAnalysis ? JSON.stringify(sliceAnalysis, null, 2) : '无切片分析数据'}
-
-## 使用的耗材
-${filamentProfile ? JSON.stringify(filamentProfile, null, 2) : '未指定耗材'}
-
-请给出完整的审查报告。`;
-
-  const url = `${baseUrl}/chat/completions`;
-  const headers = { "Content-Type": "application/json" };
-  if (apiKey && apiKey !== "no-key") headers["Authorization"] = `Bearer ${apiKey}`;
-
-  const resp = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.2,
-      max_tokens: 3000,
-    }),
-  });
-
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => "");
-    throw new Error(`AI API error: ${resp.status} ${errText.slice(0, 200)}`);
-  }
-
-  const data = await resp.json();
-  const content = data.choices?.[0]?.message?.content
-    || data.choices?.[0]?.message?.reasoning_content
-    || "";
-
-  let jsonStr = content;
-  const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) jsonStr = jsonMatch[1];
-
-  try {
-    return JSON.parse(jsonStr.trim());
-  } catch (e) {
-    throw new Error(`Failed to parse AI review response: ${e.message}\nAI response: ${content.slice(0, 300)}`);
-  }
-}
-
-// ─── 基于切片分析生成推荐理由 ───
-
-function generateRecommendationReason(sliceAnalysis, filament) {
-  const reasons = [];
-
-  if (sliceAnalysis.overhang_ratio > SLICE_FILAMENT_RULES.overhang.threshold) {
-    reasons.push(SLICE_FILAMENT_RULES.overhang.reason);
-  }
-  if (sliceAnalysis.thin_wall_ratio > SLICE_FILAMENT_RULES.thin_wall.threshold) {
-    reasons.push(SLICE_FILAMENT_RULES.thin_wall.reason);
-  }
-  if (sliceAnalysis.curvature_score > SLICE_FILAMENT_RULES.high_curvature.threshold) {
-    reasons.push(SLICE_FILAMENT_RULES.high_curvature.reason);
-  }
-  if (sliceAnalysis.model_volume_cm3 > SLICE_FILAMENT_RULES.large_volume.threshold) {
-    reasons.push(SLICE_FILAMENT_RULES.large_volume.reason);
-  }
-
-  if (reasons.length === 0) {
-    return '通用场景 → ' + (filament || 'pla_basic');
-  }
-
-  return reasons.join('；');
-}
-
 // ─── AI 连接测试 ───
 
 async function testAiConnection(aiConfig) {
-  const provider = AI_PROVIDERS[aiConfig.provider];
-  if (!provider) return { ok: false, error: `Unknown provider: ${aiConfig.provider}` };
-
-  // Local providers don't require API key
-  const apiKey = aiConfig.apiKey || (provider.isLocal ? "no-key" : "");
-  if (!apiKey && !provider.isLocal) return { ok: false, error: "API key not set" };
-
   try {
-    const baseUrl = aiConfig.customBaseUrl || provider.baseUrl;
-    const url = `${baseUrl}/models`;
-    const headers = {};
-    if (apiKey && apiKey !== "no-key") headers["Authorization"] = `Bearer ${apiKey}`;
-    const resp = await fetch(url, { headers });
-    if (!resp.ok) return { ok: false, error: `HTTP ${resp.status}` };
-
-    // 自动发现本地模型列表
-    const data = await resp.json();
-    const discoveredModels = (data.data || [])
-      .map((m) => m.id)
-      .filter((id) => !id.includes("embed")); // 排除embedding模型
-
-    if (discoveredModels.length > 0) {
-      provider.availableModels = discoveredModels;
-      if (!discoveredModels.includes(provider.defaultModel)) {
-        provider.defaultModel = discoveredModels[0];
-      }
-      // 如果当前配置的模型不在可用列表中，自动切换到第一个可用模型
-      if (aiConfig.model && !discoveredModels.includes(aiConfig.model)) {
-        aiConfig.model = discoveredModels[0];
-      }
-    }
-
+    const client = new AiClient(aiConfig);
+    const result = await client.listModels();
     return {
       ok: true,
-      provider: provider.name,
-      models: discoveredModels,
-      defaultModel: provider.defaultModel,
-      currentModel: aiConfig.model || provider.defaultModel,
+      provider: client.provider.name,
+      models: result.models,
+      defaultModel: result.defaultModel,
+      currentModel: result.currentModel,
     };
   } catch (e) {
-    const errMsg = e.message || (e.cause && (e.cause.message || e.cause.code || String(e.cause))) || String(e);
-    return { ok: false, error: errMsg };
+    return { ok: false, error: extractErrorMessage(e) };
   }
 }
-
-// ─── 模型文件管理（STL / 3MF） ───
-
-function saveModelFile(filename, buffer) {
-  const id = `model_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-  const ext = path.extname(filename).toLowerCase();
-  const safeName = id + ext;
-  const filePath = path.join(STL_DIR, safeName);
-
-  fs.writeFileSync(filePath, buffer);
-
-  return {
-    id,
-    originalName: filename,
-    path: filePath,
-    size: buffer.length,
-    is3mf: ext === '.3mf',
-  };
-}
-
-// 向后兼容别名
-const saveStlFile = saveModelFile;
-
-function getStlInfo(stlId) {
-  const files = fs.readdirSync(STL_DIR);
-  const match = files.find((f) => f.startsWith(stlId));
-  if (!match) return null;
-  const filePath = path.join(STL_DIR, match);
-  const stat = fs.statSync(filePath);
-  return {
-    id: stlId,
-    path: filePath,
-    filename: match,
-    size: stat.size,
-  };
-}
-
-function listModelFiles() {
-  const files = fs.readdirSync(STL_DIR);
-  return files
-    .filter((f) => {
-      const ext = f.toLowerCase();
-      return ext.endsWith(".stl") || ext.endsWith(".3mf");
-    })
-    .map((f) => {
-      const filePath = path.join(STL_DIR, f);
-      const stat = fs.statSync(filePath);
-      const ext = path.extname(f).toLowerCase();
-      return {
-        id: f.replace(/\.[^.]+$/, ""),
-        filename: f,
-        size: stat.size,
-        modified: stat.mtime,
-        is3mf: ext === '.3mf',
-      };
-    });
-}
-
-// 向后兼容别名
-const listStlFiles = listModelFiles;
 
 // ─── G-code 文件管理 ───
 
@@ -1463,9 +353,17 @@ function listGcodeFiles() {
           // This is the most reliable differentiator — both may contain PRINT_START and U1 proprietary commands
           let format = "unknown";
           try {
-            const head = fs.readFileSync(filePath, "utf-8", { start: 0, end: 32768 });
-            if (head.includes("; FEATURE:")) format = "bambu";
-            else if (head.includes(";TYPE:")) format = "orca";
+            // fs.readFileSync ignores {start,end} options — use openSync+readSync to read only first 32KB
+            const fd = fs.openSync(filePath, "r");
+            try {
+              const buf = Buffer.alloc(32768);
+              const bytesRead = fs.readSync(fd, buf, 0, 32768, 0);
+              const head = buf.slice(0, bytesRead).toString("utf-8");
+              if (head.includes("; FEATURE:")) format = "bambu";
+              else if (head.includes(";TYPE:")) format = "orca";
+            } finally {
+              fs.closeSync(fd);
+            }
           } catch (_) {}
           results.push({ filename: f, size: stat.size, modified: stat.mtime, dir, format });
         } catch (_) {}
@@ -1483,28 +381,17 @@ function saveGcodeFile(filename, buffer) {
   return uniqueName;
 }
 
-// ─── 从 RawPath 重新生成 G-code ───
-
-async function regenerateFromRawPath(sliceId, extruderFilaments, overrides) {
-  // This calls the server's regenerate endpoint internally
-  // Must use absolute URL since this runs in Node.js (not browser)
-  const port = parseInt(process.env.VOXELFLOW_PORT) || 13628;
-  const resp = await fetch(`http://127.0.0.1:${port}/api/regenerate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ slice_id: sliceId, extruder_filaments: extruderFilaments, overrides }),
-  });
-  return resp.json();
-}
-
 // ─── G-code Patcher ───
 
-function patchGcode(gcodeName, patchPlan) {
-  const gcodePath = getGcodePath(gcodeName);
-  if (!gcodePath) throw new Error(`G-code not found: ${gcodeName}`);
-  if (!patchPlan || patchPlan.length === 0) return { patched: false, patches_applied: 0 };
+/**
+ * Apply patch plan to G-code content (pure function, no file I/O).
+ * Extracted from patchGcode for testability. (v5.37.0)
+ * Operations: replace_speed / add_retract / replace_fan / modify_temperature / insert_line
+ * @returns {{ content: string, patchesApplied: number }}
+ */
+function patchGcodeContent(content, patchPlan) {
+  if (!patchPlan || patchPlan.length === 0) return { content, patchesApplied: 0 };
 
-  let content = fs.readFileSync(gcodePath, 'utf-8');
   let patchesApplied = 0;
 
   for (const patch of patchPlan) {
@@ -1558,19 +445,45 @@ function patchGcode(gcodeName, patchPlan) {
       }
 
       case 'add_retract': {
-        const { retract_length, min_travel_length } = patch;
+        // Fixes:
+        // 1. Retract must be inserted BEFORE the travel move (not after) — retracting after travel does nothing
+        // 2. Use min_travel_length to skip short travels (no need to retract for <5mm moves)
+        // 3. Match both G0 and G1 travel moves (OrcaSlicer uses G1 for travel with F but no E)
+        const { retract_length, min_travel_length = 5.0 } = patch;
         const lines = content.split('\n');
         const newLines = [];
+        let curX = null, curY = null;
         for (let i = 0; i < lines.length; i++) {
-          newLines.push(lines[i]);
-          // Detect travel moves (G0 with no E)
-          if (lines[i].match(/G0\s+X[\d.]+\s+Y[\d.]+/) && !lines[i].includes('E')) {
-            // Check if previous line already has retract
-            const prevLine = i > 0 ? lines[i - 1] : '';
-            if (!prevLine.includes('retract')) {
+          const ln = lines[i];
+          // Detect travel moves: G0/G1 with X/Y but no E parameter
+          const travelMatch = ln.match(/G[01]\s+X([\d.-]+)\s+Y([\d.-]+)/);
+          if (travelMatch && !/\bE[\d.-]/.test(ln)) {
+            const targetX = parseFloat(travelMatch[1]);
+            const targetY = parseFloat(travelMatch[2]);
+            // Compute travel distance from last known position
+            let isLongTravel = true;
+            if (curX !== null && curY !== null && typeof min_travel_length === 'number') {
+              const dx = targetX - curX;
+              const dy = targetY - curY;
+              isLongTravel = Math.sqrt(dx * dx + dy * dy) >= min_travel_length;
+            }
+            // Avoid duplicate retract: check last line in output buffer
+            const prevOut = newLines.length > 0 ? newLines[newLines.length - 1] : '';
+            if (isLongTravel && !prevOut.includes('retract')) {
               newLines.push(`G1 E-${retract_length} F2400 ; agent-added retract`);
               patchesApplied++;
             }
+            newLines.push(ln);
+            curX = targetX;
+            curY = targetY;
+          } else {
+            // Track position from any G0/G1 with X/Y (extrusion moves update position too)
+            const xyMatch = ln.match(/G[01]\s+X([\d.-]+)\s+Y([\d.-]+)/);
+            if (xyMatch) {
+              curX = parseFloat(xyMatch[1]);
+              curY = parseFloat(xyMatch[2]);
+            }
+            newLines.push(ln);
           }
         }
         content = newLines.join('\n');
@@ -1666,6 +579,21 @@ function patchGcode(gcodeName, patchPlan) {
     }
   }
 
+  return { content, patchesApplied };
+}
+
+/**
+ * Patch G-code file with patch plan. Reads file, applies patches via
+ * patchGcodeContent, writes result with _patched suffix.
+ */
+function patchGcode(gcodeName, patchPlan) {
+  const gcodePath = getGcodePath(gcodeName);
+  if (!gcodePath) throw new Error(`G-code not found: ${gcodeName}`);
+  if (!patchPlan || patchPlan.length === 0) return { patched: false, patches_applied: 0 };
+
+  const originalContent = fs.readFileSync(gcodePath, 'utf-8');
+  const { content, patchesApplied } = patchGcodeContent(originalContent, patchPlan);
+
   // Write patched file (with _patched suffix)
   const parsed = path.parse(gcodePath);
   const patchedName = `${parsed.name}_patched${parsed.ext}`;
@@ -1680,309 +608,6 @@ function patchGcode(gcodeName, patchPlan) {
   };
 }
 
-// ─── 高级非平面切片（变层高） ───
-
-async function advancedSlice(modelPath, analysis, aiConfig) {
-  const jobId = createJobId();
-
-  // Step 1: AI 分析模型几何，输出变层高方案
-  const provider = AI_PROVIDERS[aiConfig.provider];
-  if (!provider) throw new Error(`Unknown AI provider: ${aiConfig.provider}`);
-
-  const model = aiConfig.model || provider.defaultModel;
-  const apiKey = aiConfig.apiKey || (provider.isLocal ? "no-key" : "");
-  if (!apiKey && !provider.isLocal) throw new Error(`API key not configured for ${provider.name}`);
-
-  const baseUrl = aiConfig.customBaseUrl || provider.baseUrl;
-
-  const systemPrompt = buildSystemPrompt("advanced_slice", {
-    taskInstructions: `## 当前任务：变层高切片方案
-
-你需要分析模型的几何特征，输出一个变层高切片方案。核心思路：
-- 平坦区域（低曲率）使用较厚层高（0.25~0.3mm）加速打印
-- 曲面区域（高曲率）使用较薄层高（0.08~0.16mm）保证精度
-- 首层使用标准层高（0.2mm）保证粘附
-- 相邻段层高差异不超过 0.1mm，避免突变
-
-输出格式：纯 JSON，不要 markdown 代码块，不要注释。
-{
-  "strategy": "variable_layer_height",
-  "segments": [
-    {"z_start": 0, "z_end": 2, "layer_height": 0.2, "reason": "首层标准"},
-    {"z_start": 2, "z_end": 10, "layer_height": 0.3, "reason": "平坦区域加速"},
-    {"z_start": 10, "z_end": 15, "layer_height": 0.12, "reason": "曲面精细"},
-    {"z_start": 15, "z_end": 20, "layer_height": 0.2, "reason": "标准层高"}
-  ],
-  "total_layers": 85,
-  "estimated_savings": "30% faster than uniform 0.12mm"
-}`,
-  });
-
-  const userPrompt = `## 模型分析数据
-${JSON.stringify(analysis, null, 2)}
-
-请输出变层高切片方案 JSON：`;
-
-  const url = `${baseUrl}/chat/completions`;
-  const headers = { "Content-Type": "application/json" };
-  if (apiKey && apiKey !== "no-key") headers["Authorization"] = `Bearer ${apiKey}`;
-
-  const resp = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.3,
-      max_tokens: 1500,
-    }),
-  });
-
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => "");
-    throw new Error(`AI API error: ${resp.status} ${errText.slice(0, 200)}`);
-  }
-
-  const data = await resp.json();
-  let content = data.choices?.[0]?.message?.content
-    || data.choices?.[0]?.message?.reasoning_content
-    || "";
-
-  // 提取 JSON
-  let jsonStr = content;
-  const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) jsonStr = jsonMatch[1];
-
-  let plan;
-  try {
-    plan = JSON.parse(jsonStr.trim());
-  } catch (e) {
-    throw new Error(`Failed to parse AI advanced_slice response: ${e.message}\nAI response: ${content.slice(0, 300)}`);
-  }
-
-  if (!plan.segments || !Array.isArray(plan.segments) || plan.segments.length === 0) {
-    throw new Error("AI returned no segments in variable layer height plan");
-  }
-
-  // Step 2: 逐段切片
-  const segments = plan.segments;
-  const gcodeSegments = [];
-
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i];
-    const segJobId = `${jobId}_seg${i}`;
-    const segParams = {
-      layer_height: seg.layer_height || 0.2,
-      walls: analysis.walls || 2,
-      infill: analysis.infill || 0.15,
-      speed: analysis.speed || 60,
-      printer: analysis.printer || "voron",
-    };
-
-    const sliceResult = await sliceModel(modelPath, segParams, segJobId);
-    const gcodePath = sliceResult.gcodePath;
-
-    if (gcodePath && fs.existsSync(gcodePath)) {
-      let gcodeContent = fs.readFileSync(gcodePath, "utf-8");
-
-      // 提取 Start G-code 和 End G-code 的边界
-      const endMarker = gcodeContent.indexOf("; --- end ---");
-      const m400Marker = gcodeContent.match(/^M400\b/m);
-
-      let startGcode = "";
-      let bodyGcode = "";
-      let endGcode = "";
-
-      if (endMarker >= 0) {
-        startGcode = gcodeContent.slice(0, endMarker);
-        endGcode = gcodeContent.slice(endMarker);
-        bodyGcode = startGcode;
-      } else if (m400Marker) {
-        const m400Idx = m400Marker.index;
-        startGcode = gcodeContent.slice(0, m400Idx);
-        endGcode = gcodeContent.slice(m400Idx);
-        bodyGcode = startGcode;
-      } else {
-        bodyGcode = gcodeContent;
-      }
-
-      gcodeSegments.push({
-        startGcode,
-        bodyGcode,
-        endGcode,
-        layerHeight: seg.layer_height,
-        zStart: seg.z_start,
-        zEnd: seg.z_end,
-        reason: seg.reason,
-      });
-
-      // 清理临时文件（非最后一段）
-      if (i < segments.length - 1) {
-        try { fs.unlinkSync(gcodePath); } catch (_) {}
-      }
-    }
-  }
-
-  // Step 3: 拼接 G-code
-  if (gcodeSegments.length === 0) {
-    throw new Error("No G-code segments generated");
-  }
-
-  let finalGcode = "";
-
-  for (let i = 0; i < gcodeSegments.length; i++) {
-    const seg = gcodeSegments[i];
-
-    if (i === 0) {
-      // 第一段：保留 Start G-code + body
-      finalGcode += seg.bodyGcode;
-    } else {
-      // 后续段：跳过 Start G-code，只追加 body（从第一个 ;LAYER 或 G1 Z 开始）
-      const body = seg.bodyGcode;
-      const layerMarkerIdx = body.indexOf(";LAYER:");
-      const g1zIdx = body.search(/G1\s+Z[\d.]+/);
-
-      let cutIdx = -1;
-      if (layerMarkerIdx >= 0) {
-        cutIdx = layerMarkerIdx;
-      } else if (g1zIdx >= 0) {
-        cutIdx = g1zIdx;
-      }
-
-      if (cutIdx >= 0) {
-        finalGcode += "\n; --- Variable Layer Height Segment: " + seg.layerHeight + "mm (" + seg.reason + ") ---\n";
-        finalGcode += body.slice(cutIdx);
-      } else {
-        finalGcode += "\n; --- Variable Layer Height Segment: " + seg.layerHeight + "mm (" + seg.reason + ") ---\n";
-        finalGcode += body;
-      }
-    }
-
-    // 最后一段：追加 End G-code
-    if (i === gcodeSegments.length - 1 && seg.endGcode) {
-      finalGcode += "\n" + seg.endGcode;
-    }
-  }
-
-  // Step 4: 后处理（层标记 + M73 + G92 E0 + 风扇控制）
-  const defaultLayerHeight = segments[0]?.layer_height || 0.2;
-  let layerIdx = 0;
-  let totalLayers = 0;
-  const lines = finalGcode.split("\n");
-
-  // 第一遍：计算总层数
-  {
-    const seenZCount = new Set();
-    for (const line of lines) {
-      if (line.includes("; --- end ---") || line.match(/^M400\b/)) break;
-      const zMatch = line.match(/Z([\d.]+)/);
-      if (zMatch) {
-        const z = parseFloat(zMatch[1]);
-        const zKey = (Math.round(z / defaultLayerHeight) * defaultLayerHeight).toFixed(2);
-        if (z > 0 && !seenZCount.has(zKey)) {
-          seenZCount.add(zKey);
-          totalLayers++;
-        }
-      }
-    }
-  }
-
-  // 第二遍：插入层标记和辅助指令
-  let layerIdx2 = 0;
-  const result = [];
-  const seenZ = new Set();
-
-  for (let li = 0; li < lines.length; li++) {
-    const line = lines[li];
-
-    if (line.includes("; --- end ---") || line.match(/^M400\b/)) {
-      result.push(line);
-      for (let i = li + 1; i < lines.length; i++) result.push(lines[i]);
-      break;
-    }
-
-    const zMatch = line.match(/Z([\d.]+)/);
-    if (zMatch) {
-      const z = parseFloat(zMatch[1]);
-      const zKey = (Math.round(z / defaultLayerHeight) * defaultLayerHeight).toFixed(2);
-      if (z > 0 && !seenZ.has(zKey)) {
-        seenZ.add(zKey);
-        const layerNum = layerIdx2;
-        result.push(";LAYER:" + layerNum);
-        result.push("SET_PRINT_STATS_INFO TOTAL_LAYER=" + totalLayers + " CURRENT_LAYER=" + (layerNum + 1));
-        result.push("G92 E0");
-        if (totalLayers > 0) {
-          const pct = Math.round((layerNum / totalLayers) * 100);
-          const remaining = totalLayers - layerNum;
-          result.push("M73 P" + pct + " R" + remaining);
-        }
-        layerIdx2++;
-      }
-    }
-
-    result.push(line);
-  }
-  finalGcode = result.join("\n");
-
-  // E 值重置
-  {
-    const finalLines = finalGcode.split("\n");
-    const output = [];
-    let eOffset = 0;
-
-    for (let i = 0; i < finalLines.length; i++) {
-      const ln = finalLines[i];
-
-      if (ln === "G92 E0") {
-        let prevE = 0;
-        for (let j = output.length - 1; j >= 0; j--) {
-          const eMatch = output[j].match(/E([\d.]+)/);
-          if (eMatch) { prevE = parseFloat(eMatch[1]); break; }
-        }
-        eOffset = prevE;
-        output.push(ln);
-        continue;
-      }
-
-      const eMatch = ln.match(/^(G1\s.*E)([\d.]+)(.*)$/);
-      if (eMatch) {
-        const oldE = parseFloat(eMatch[2]);
-        const newE = Math.max(0, oldE - eOffset);
-        output.push(eMatch[1] + newE.toFixed(3) + eMatch[3]);
-      } else {
-        output.push(ln);
-      }
-    }
-    finalGcode = output.join("\n");
-  }
-
-  // End G-code 前关闭风扇
-  if (!finalGcode.includes("M106 S0\n; --- end ---") && !finalGcode.includes("M106 S0\nM400")) {
-    finalGcode = finalGcode.replace(/(; --- end ---)/, "M106 S0 ; Fan off\nM106 P2 S0 ; Cavity fan off\n$1");
-  }
-
-  // Step 5: 写入最终 G-code 文件
-  const outputName = path.basename(modelPath || "model", path.extname(modelPath || "model.stl")) + "_advanced_" + jobId + ".gcode";
-  const outputPath = path.join(GCODE_DIR, outputName);
-  fs.writeFileSync(outputPath, finalGcode, "utf-8");
-
-  // Step 6: 统计
-  const stats = extractGcodeStats(finalGcode);
-
-  return {
-    gcodeName: outputName,
-    gcodePath: outputPath,
-    stats,
-    lines: finalGcode.split('\n').length,
-    sliceId: jobId,
-    plan,
-    method: "advanced_variable_layer_height",
-  };
-}
-
 // ─── AI 优化 G-code ───
 
 async function optimizeGcode(gcodeName, aiConfig) {
@@ -1994,14 +619,7 @@ async function optimizeGcode(gcodeName, aiConfig) {
   const stats = extractGcodeStats(content);
 
   // Step 2: Call AI for diagnosis and patch plan
-  const provider = AI_PROVIDERS[aiConfig.provider];
-  if (!provider) throw new Error(`Unknown AI provider: ${aiConfig.provider}`);
-
-  const model = aiConfig.model || provider.defaultModel;
-  const apiKey = aiConfig.apiKey || (provider.isLocal ? "no-key" : "");
-  if (!apiKey && !provider.isLocal) throw new Error(`API key not configured for ${provider.name}`);
-
-  const baseUrl = aiConfig.customBaseUrl || provider.baseUrl;
+  const client = new AiClient(aiConfig);
 
   const systemPrompt = buildSystemPrompt("optimize_gcode", {
     taskInstructions: `## 当前任务：G-code 局部优化
@@ -2053,41 +671,21 @@ ${gcodeName}
 
 请给出完整的优化诊断报告。`;
 
-  const url = `${baseUrl}/chat/completions`;
-  const headers = { "Content-Type": "application/json" };
-  if (apiKey && apiKey !== "no-key") headers["Authorization"] = `Bearer ${apiKey}`;
-
-  const resp = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.2,
-      max_tokens: 3000,
-    }),
+  const resp = await client.chat({
+    systemPrompt,
+    userPrompt,
+    temperature: 0.2,
+    maxTokens: 3000,
   });
-
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => "");
-    throw new Error(`AI API error: ${resp.status} ${errText.slice(0, 200)}`);
-  }
 
   const data = await resp.json();
   const aiContent = data.choices?.[0]?.message?.content
     || data.choices?.[0]?.message?.reasoning_content
     || "";
 
-  let jsonStr = aiContent;
-  const jsonMatch = aiContent.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) jsonStr = jsonMatch[1];
-
   let aiResult;
   try {
-    aiResult = JSON.parse(jsonStr.trim());
+    aiResult = AiClient.parseJsonContent(aiContent);
   } catch (e) {
     throw new Error(`Failed to parse AI optimize response: ${e.message}\nAI response: ${aiContent.slice(0, 300)}`);
   }
@@ -2431,81 +1029,11 @@ M84 ; Motors off
   };
 }
 
-// ─── AI 打印难题问答 ───
-
-async function printQA(question, context, aiConfig) {
-  const provider = AI_PROVIDERS[aiConfig.provider];
-  if (!provider) throw new Error(`Unknown AI provider: ${aiConfig.provider}`);
-
-  const model = aiConfig.model || provider.defaultModel;
-  const apiKey = aiConfig.apiKey || (provider.isLocal ? "no-key" : "");
-  if (!apiKey && !provider.isLocal) throw new Error(`API key not configured for ${provider.name}`);
-
-  const baseUrl = aiConfig.customBaseUrl || provider.baseUrl;
-
-  const systemPrompt = buildSystemPrompt("print_qa", {
-    taskInstructions: `## 当前任务：打印难题问答
-
-你是一位专业的 FDM 3D 打印工程师，专门解答用户的打印问题。
-
-回答要求：
-- 简洁直接，先给结论再解释
-- 只针对用户问到的部分回答，不要面面俱到
-- 如涉及参数调整，给出具体数值（针对 Snapmaker U1，热床 270×270mm）
-- 如适用，给出相关 G-code 指令
-- 如果信息不足，简短追问关键信息（耗材类型、层高、温度等）
-
-使用中文回答。`,
-  });
-
-  let userPrompt = `## 用户问题\n${question}`;
-  if (context) {
-    userPrompt += `\n\n## 附加上下文\n${context}`;
-  }
-
-  const url = `${baseUrl}/chat/completions`;
-  const headers = { "Content-Type": "application/json" };
-  if (apiKey && apiKey !== "no-key") headers["Authorization"] = `Bearer ${apiKey}`;
-
-  const resp = await fetch(url, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },
-      ],
-      temperature: 0.5,
-      max_tokens: 4096,
-    }),
-  });
-
-  if (!resp.ok) {
-    const errText = await resp.text().catch(() => "");
-    throw new Error(`AI API error: ${resp.status} ${errText.slice(0, 200)}`);
-  }
-
-  const data = await resp.json();
-  const content = data.choices?.[0]?.message?.content
-    || data.choices?.[0]?.message?.reasoning_content
-    || "";
-
-  return content;
-}
-
 /** 流式打印问答 — 返回 streamId，通过 qaStreams 供轮询读取 */
 const qaStreams = new Map();
 
 async function printQAStream(question, context, aiConfig) {
-  const provider = AI_PROVIDERS[aiConfig.provider];
-  if (!provider) throw new Error(`Unknown AI provider: ${aiConfig.provider}`);
-
-  const model = aiConfig.model || provider.defaultModel;
-  const apiKey = aiConfig.apiKey || (provider.isLocal ? "no-key" : "");
-  if (!apiKey && !provider.isLocal) throw new Error(`API key not configured for ${provider.name}`);
-
-  const baseUrl = aiConfig.customBaseUrl || provider.baseUrl;
+  const client = new AiClient(aiConfig);
 
   const systemPrompt = buildSystemPrompt("print_qa", {
     taskInstructions: `## 当前任务：打印难题问答
@@ -2534,39 +1062,23 @@ async function printQAStream(question, context, aiConfig) {
   // 后台启动流式请求
   (async () => {
     try {
-      const url = `${baseUrl}/chat/completions`;
-      const headers = { "Content-Type": "application/json" };
-      if (apiKey && apiKey !== "no-key") headers["Authorization"] = `Bearer ${apiKey}`;
-
-      const resp = await fetch(url, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt },
-          ],
-          temperature: 0.5,
-          max_tokens: 4096,
-          stream: true,
-        }),
+      const resp = await client.chat({
+        systemPrompt,
+        userPrompt,
+        temperature: 0.5,
+        maxTokens: 4096,
+        stream: true,
       });
 
-      if (!resp.ok) {
-        const errText = await resp.text().catch(() => "");
-        throw new Error(`AI API error: ${resp.status} ${errText.slice(0, 200)}`);
-      }
-
-      const reader = resp.body.getReader();
+      // Use async iterator instead of resp.body.getReader() — node-fetch v2
+      // returns a Node.js Readable stream (not Web ReadableStream), so
+      // getReader() may be undefined and throw TypeError. Async iteration
+      // works on both Node streams and Web ReadableStreams. (traps.md #138)
       const decoder = new TextDecoder();
       let buffer = "";
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
+      for await (const chunk of resp.body) {
+        buffer += decoder.decode(chunk, { stream: true });
         const lines = buffer.split("\n");
         buffer = lines.pop(); // 保留未完成的行
 
@@ -2591,8 +1103,16 @@ async function printQAStream(question, context, aiConfig) {
       }
       streamState.done = true;
     } catch (e) {
-      streamState.error = e.message || String(e);
+      log("ERROR", `printQAStream stream error: ${extractErrorMessage(e)}`);
+      streamState.error = extractErrorMessage(e);
       streamState.done = true;
+    } finally {
+      // Fallback cleanup — if client stops polling (browser closed, network drop),
+      // streamState would leak in qaStreams forever. Schedule delayed removal so
+      // clients have a 30s window to poll the final state before eviction.
+      setTimeout(() => {
+        try { qaStreams.delete(streamId); } catch (_) {}
+      }, 30000);
     }
   })();
 
@@ -2622,12 +1142,14 @@ function cleanupQAStream(streamId) {
 
 // ─── G-code 格式转换（BambuStudio → OrcaSlicer 兼容） ───
 
-function convertGcode(gcodeName) {
-  const gcodePath = getGcodePath(gcodeName);
-  if (!gcodePath) throw new Error(`G-code not found: ${gcodeName}`);
-
-  let content = fs.readFileSync(gcodePath, "utf-8");
-
+/**
+ * Convert BambuStudio G-code content to OrcaSlicer-compatible format (pure function, no file I/O).
+ * Extracted from convertGcode for testability. (v5.37.0)
+ * @param {string} content - Original BambuStudio G-code content
+ * @returns {{ content: string, info: object }}
+ * @throws {Error} if content is not valid BambuStudio format or already OrcaSlicer format
+ */
+function convertGcodeContent(content) {
   // Parse block structure
   const headerStart = content.indexOf("; HEADER_BLOCK_START");
   const headerEnd = content.indexOf("; HEADER_BLOCK_END");
@@ -2830,8 +1352,9 @@ function convertGcode(gcodeName) {
   newExecBlock += "G90\n";
   newExecBlock += "G21\n";
   newExecBlock += "M83 ; use relative distances for extrusion\n";
-
-  newExecBlock += "; EXECUTABLE_BLOCK_END\n";
+  // Note: EXECUTABLE_BLOCK_END is NOT added here — it goes after the print body
+  // (PRINT_END), wrapping the entire print process inside EXECUTABLE_BLOCK to
+  // match OrcaSlicer native format. (traps.md #141)
 
   // Convert print body: replace BambuStudio Start G-code with OrcaSlicer format
   // Find where actual printing starts (first ;LAYER:0 or first G1 with E value after EXEC)
@@ -2928,6 +1451,11 @@ function convertGcode(gcodeName) {
     convertedBody = beforeEnd + orcaEnd;
   }
 
+  // Add EXECUTABLE_BLOCK_END at the end of body, wrapping the entire print process
+  // (start code + body + PRINT_END) inside EXECUTABLE_BLOCK. This matches OrcaSlicer
+  // native format where EXECUTABLE_BLOCK encompasses the whole print. (traps.md #141)
+  convertedBody = convertedBody.trimEnd() + "\n; EXECUTABLE_BLOCK_END\n";
+
   // Assemble final file in OrcaSlicer order: HEADER → THUMB → EXEC → body → CONFIG
   let result = "";
   if (headerBlock) result += headerBlock + "\n";
@@ -2940,11 +1468,34 @@ function convertGcode(gcodeName) {
   // This is the critical difference that makes the U1 device panel reject BambuStudio gcode
   result = result.replace(/; FEATURE: /g, ";TYPE:");
 
+  return {
+    content: result,
+    info: {
+      hotend_temp: primaryHotendTemp,
+      bed_temp: primaryBedTemp,
+      first_tool: firstTool,
+      used_tools: usedTools,
+      total_layers: totalLayers,
+    },
+  };
+}
+
+/**
+ * Convert BambuStudio G-code file to OrcaSlicer-compatible format.
+ * Reads file, converts via convertGcodeContent, writes result with _orca suffix.
+ */
+function convertGcode(gcodeName) {
+  const gcodePath = getGcodePath(gcodeName);
+  if (!gcodePath) throw new Error(`G-code not found: ${gcodeName}`);
+
+  const originalContent = fs.readFileSync(gcodePath, "utf-8");
+  const { content, info } = convertGcodeContent(originalContent);
+
   // Write converted file to AI Lab gcode dir (not BambuStudio dir)
   const parsed = path.parse(gcodePath);
   const convertedName = `${parsed.name}_orca${parsed.ext}`;
   const convertedPath = path.join(GCODE_DIR, convertedName);
-  fs.writeFileSync(convertedPath, result, "utf-8");
+  fs.writeFileSync(convertedPath, content, "utf-8");
 
   log("INFO", `G-code convert: saved to ${convertedName}`);
 
@@ -2958,13 +1509,7 @@ function convertGcode(gcodeName) {
       layout: "Reorganized to HEADER→THUMB→EXEC→body→CONFIG",
       feature_type: 'Replaced "; FEATURE:" with ";TYPE:" (critical for U1 device panel)',
     },
-    info: {
-      hotend_temp: primaryHotendTemp,
-      bed_temp: primaryBedTemp,
-      first_tool: firstTool,
-      used_tools: usedTools,
-      total_layers: totalLayers,
-    },
+    info,
   };
 }
 
@@ -2972,41 +1517,23 @@ function convertGcode(gcodeName) {
 
 module.exports = {
   AI_PROVIDERS,
-  SLICE_FILAMENT_RULES,
   VOXELFLOW_BIN,
-  sliceJobs,
-  createJobId,
   setAppDataDir,
   loadWorkspace,
   buildSystemPrompt,
-  updateMemory,
-  analyzeModel,
-  sliceModel,
-  computeSliceAnalysis,
-  suggestParameters,
-  generateGcodeFromAnalysis,
-  validateGcode,
   extractGcodeStats,
-  reviewGcode,
-  printQA,
   printQAStream,
   pollQAStream,
   cleanupQAStream,
-  generateRecommendationReason,
   testAiConnection,
-  saveModelFile,
-  saveStlFile,
-  getStlInfo,
-  listModelFiles,
-  listStlFiles,
   getGcodePath,
   listGcodeFiles,
   saveGcodeFile,
   patchGcode,
+  patchGcodeContent,
   optimizeGcode,
   convertGcode,
-  regenerateFromRawPath,
-  advancedSlice,
+  convertGcodeContent,
   setRawPathCache,
   setLogFn,
   STL_DIR: () => STL_DIR,
