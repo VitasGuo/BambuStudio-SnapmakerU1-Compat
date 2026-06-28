@@ -7,11 +7,13 @@
 
 ## 索引（按类别）
 
+> 统计：共 147 条 — ✅ 已解决 143 | ⚠️ 部分解决 2（#16/#25）| ❌ 未解决 1（#103 固有限制）
+
 ### BambuStudio 配置系统
 #1 跨厂商继承不支持 | #2 filament_list 加载顺序 | #3 PowerShell JSON 格式错误 | #4 AppConfig filaments 缓存 | #5 compatible_printers_condition | #6 厂商匹配检查 | #7 删除 models 段 | #8 Copy-Item 嵌套 | #9 user/default 残留 | #10 conf 写入时机 | #11 filament_vendor 缺失 | #20 只看 @U1 不够 | #21 Orca GitHub 过时
 
 ### G-code 与打印流程
-#12 换色温度不够停机 | #13 auxiliary_fan=0 | #14 enable_pre_heating=0 | #15 preheat delta 符号 | #16 ooze_prevention 与擦料塔互斥 | #22 retract_length_toolchange | #23 Support PLA-PETG 继承错误 | #24 required_nozzle_HRC | #55 G-code 布尔参数格式 | #103 设备面板不识别 BambuStudio gcode | #105 打印层进度不显示 | #116 格式检测误判 OrcaSlicer
+#12 换色温度不够停机 | #13 auxiliary_fan=0 | #14 enable_pre_heating=0 | #15 preheat delta 符号 | #16 ooze_prevention 与擦料塔互斥 | #22 retract_length_toolchange | #23 Support PLA-PETG 继承错误 | #24 required_nozzle_HRC | #55 G-code 布尔参数格式 | #103 设备面板不识别 BambuStudio gcode | #105 打印层进度不显示 | #116 格式检测误判 OrcaSlicer | #141 EXECUTABLE_BLOCK_END 位置错误
 
 ### 耗材参数
 #17 跨材料基类参数缺失 | #18 Snapmaker 基础耗材缺覆盖 | #19 filament_type 缺失
@@ -20,7 +22,7 @@
 #26 bed_model/bed_texture 为空 | #27 SVG 不渲染 | #41 STL 不居中 | #50 热床模型高度
 
 ### Bridge 代理与通信
-#28 WebView 不注入 API Key | #29 网络插件签名验证 | #30 /moonraker/ 前缀不工作 | #31 /ws 路径错误 | #62 Express 5 {*path} 数组 | #63 /access/token 拦截 | #64 热床温度不显示 | #70 中间件顺序 | #71 只转发 content-type | #72 Fluidd SPA 404 | #73 WS 缺错误处理 | #94 温度不自动更新 | #122 JSONP cb 注入 | #123 open_external 命令注入 | #124 上传临时文件泄漏 | #130 ws.onmessage 无异常保护
+#28 WebView 不注入 API Key | #29 网络插件签名验证 | #30 /moonraker/ 前缀不工作 | #31 /ws 路径错误 | #62 Express 5 {*path} 数组 | #63 /access/token 拦截 | #64 热床温度不显示 | #70 中间件顺序 | #71 只转发 content-type | #72 Fluidd SPA 404 | #73 WS 缺错误处理 | #94 温度不自动更新 | #122 JSONP cb 注入 | #123 open_external 命令注入 | #124 上传临时文件泄漏 | #130 ws.onmessage 无异常保护 | #139 node-fetch timeout 非标准 | #142 setup 页面 mDNS XSS | #143 dialog.js fetch timeout 遗漏 | #144 三处 AI Lab 端点裸 fetch 无超时
 
 ### 打印确认流程
 #47 print_stats 初始查询缺失 | #48 切片不触发确认 | #49 confirm_print 参数解析 | #51 start_local_print 不支持 HTTP | #52 WebUI 未加载通知丢失 | #53 gcode/script HTTP 不可用 | #54 无安全检测 | #56 print_host 被覆盖 | #57 gcode() 用不存在的 HTTP | #58 用户预设覆盖 print_host | #59 python-multipart 缺失 | #61 弹窗体验 | #89 布尔值回归 | #91 JSON-RPC 方法名错误 | #92 热床调平参数名（BED_LEVEL） | #96 耗材匹配缺失 | #97 bridgePOST 数组参数 | #101 MAP_TABLE 不更新 reprint_info | #102 SET_PRINT_USED_EXTRUDERS 参数格式 | #106 耗材信息被 gcode 覆盖
@@ -29,10 +31,10 @@
 #37 webcams/list 返回空 | #39 MJPEG 流代理不工作 | #46 U1 用 snapshot 轮询 | #65 代理破坏二进制 JPEG | #67 Express ETag 缓存 | #85 camera.start_monitor 必须走 WS | #90 摄像头监控需服务端触发 | #93 摄像头参数缺失（domain）
 
 ### WebUI 前端
-#34 Flutter Web DOM 不可读 | #38 SET_LED 缺 WHITE | #40 filament_feed 无类型 | #66 WS 竞态条件 | #78 Fluidd SW 拦截 fetch | #79 WebView 阻止 fetch/XHR | #82 event.stopPropagation | #83 gcode() 不返回值 | #84 EXTRUDER vs INDEX | #95 风扇控制参数范围 | #99 耗材类型品牌前缀 | #100 WebView 外部链接拦截 | #101 MAP_TABLE 不更新 reprint_info | #102 SET_PRINT_USED_EXTRUDERS 参数格式 | #104 颜色匹配精度不足 | #129 loadJS script 标签泄漏 | #134 webui.html XSS 文件名/耗材类型未转义
+#34 Flutter Web DOM 不可读 | #38 SET_LED 缺 WHITE | #40 filament_feed 无类型 | #66 WS 竞态条件 | #78 Fluidd SW 拦截 fetch | #79 WebView 阻止 fetch/XHR | #82 event.stopPropagation | #83 gcode() 不返回值 | #84 EXTRUDER vs INDEX | #95 风扇控制参数范围 | #99 耗材类型品牌前缀 | #100 WebView 外部链接拦截 | #104 颜色匹配精度不足 | #129 loadJS script 标签泄漏 | #134 webui.html XSS 文件名/耗材类型未转义 | #145 文件列表双重转义 XSS | #146 转义函数缺单引号
 
 ### AI Lab（G-code 优化 + 打印助手）
-#125 listGcodeFiles 全量读文件 | #126 add_retract 时机错误 | #127 extractGcodeStats G92 E0 误计 | #128 printQAStream qaStreams 泄漏 | #132 slice_agent.js 1448 行死代码 | #133 server.js 10 个死端点 | #135 ailab.js/gcvt.js XSS | #136 AI 调用重复 + 错误处理不一致 | #137 ailab.js apiKey GET 传递泄露 | #138 printQAStream getReader 不兼容导致空响应
+#125 listGcodeFiles 全量读文件 | #126 add_retract 时机错误 | #127 extractGcodeStats G92 E0 误计 | #128 printQAStream qaStreams 泄漏 | #132 slice_agent.js 1448 行死代码 | #133 server.js 10 个死端点 | #135 ailab.js/gcvt.js XSS | #136 AI 调用重复 + 错误处理不一致 | #137 ailab.js apiKey GET 传递泄露 | #138 printQAStream getReader 不兼容导致空响应 | #140 纯函数提取（测试性）
 
 ### 安装与部署
 #32 系统无 Python | #33 Fluidd hosted 模式 | #35 CWD 指向已删目录 | #36 curl 下载失败 | #42 Bridge 依赖原目录 | #43 Program Files 权限 | #44 需手动启动 | #45 VBS 权限 | #60 Python 嵌入式限制 | #68 formidable 构造函数 | #69 bridge/web 未复制 | #74 undici 未声明 | #75 node-fetch 不兼容 undici | #76 undici 不导出 Blob | #77 旧进程未重启 | #80 mDNS 端口错误 | #81 VBS 裸 node 命令 | #121 dialog Linux execFileSync 未导入 | #131 reinstall watchdog 文件锁冲突
