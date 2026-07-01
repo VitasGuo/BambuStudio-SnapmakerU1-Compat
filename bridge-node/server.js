@@ -9,7 +9,7 @@ const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.37.2";
+const BRIDGE_VERSION = "5.37.3";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -853,11 +853,14 @@ async function handleUploadWithConfirm(req, res) {
     formData.append("file", fileContent, { filename: file.originalFilename });
 
     const uploadHeaders = { ...moonrakerHeaders(), ...formData.getHeaders() };
-    const uploadResp = await fetchWithTimeout(`${getBaseUrl()}/server/files/upload`, {
+    // No timeout for uploads: file size × network speed is uncontrollable.
+    // Moonraker offline → TCP fails fast; Moonraker slow → must wait for large files.
+    // Fixed timeout caused regression on large G-code (traps.md #148).
+    const uploadResp = await fetch(`${getBaseUrl()}/server/files/upload`, {
       method: "POST",
       headers: uploadHeaders,
       body: formData,
-    }, 120000);
+    });
 
     const respData = await uploadResp.json();
     log("INFO", `Moonraker upload: status=${uploadResp.status}`);
@@ -1144,11 +1147,12 @@ app.get("/api/ai/upload_to_printer.js", async (req, res) => {
     const FD = require("form-data");
     const formData = new FD();
     formData.append("file", fileContent, { filename: gcodeName });
-    const uploadResp = await fetchWithTimeout(`${getBaseUrl()}/server/files/upload`, {
+    // No timeout for uploads: file size × network speed is uncontrollable (traps.md #148).
+    const uploadResp = await fetch(`${getBaseUrl()}/server/files/upload`, {
       method: "POST",
       headers: { ...moonrakerHeaders(), ...formData.getHeaders() },
       body: formData,
-    }, 120000);
+    });
     const respData = await uploadResp.json();
     if (uploadResp.status === 200 || uploadResp.status === 201) {
       const uploadedPath = respData?.result?.item?.path || gcodeName;
@@ -1329,9 +1333,10 @@ app.get("/api/ai/fetch_printer_gcode.js", async (req, res) => {
     if (!printerConfig.host) throw new Error("No printer configured");
     // Download from Moonraker — encode path segments for URLs with spaces/CJK
     const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
-    const resp = await fetchWithTimeout(`${getBaseUrl()}/server/files/gcodes/${encodedPath}`, {
+    // No timeout for downloads: G-code files can be large, download time is uncontrollable.
+    const resp = await fetch(`${getBaseUrl()}/server/files/gcodes/${encodedPath}`, {
       headers: moonrakerHeaders(),
-    }, 60000);
+    });
     if (!resp.ok) throw new Error(`Moonraker download failed: ${resp.status} ${await resp.text().catch(()=>"")}`);
 
     const contentLength = parseInt(resp.headers.get("content-length") || "0");

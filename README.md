@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.37.2
+# Snapmaker U1 BambuStudio 兼容包 v5.37.3
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -213,6 +213,7 @@ A: v5.18.1 已修复此问题，安装脚本不再删除用户自定义预设。
 
 ## 版本历史
 
+- **v5.37.3** (2026-06-29) - 修复上传超时回归 bug（traps.md #148）：v5.37.2 代码审查修复 M2 给上传/下载加了固定超时（120s/60s），大 G-code 文件在慢网络下超时被 abort，报 `HTTP 500: The user aborted a request`。上传和下载改回裸 `fetch`（无超时），列表操作保留 10s 超时
 - **v5.37.2** (2026-06-29) - 全量代码审查安全修复（traps.md #142-#147）：setup 页面 mDNS XSS（H1，添加 escHtml 转义）；dialog.js fetch timeout 遗漏标准化（M1，AbortController）；server.js 三处 AI Lab 端点裸 fetch 无超时（M2，fetchWithTimeout）；webui.html 文件列表双重转义失效 XSS（M3，data-path + dataset）；ailab.js/gcvt.js 转义函数缺单引号（M4，补齐 &#39;）；extruder_map_table GET query 无大小限制（M5，4096 字节 + Array 校验）；打印机设置弹窗 curHost/curPort 未转义（L1）
 - **v5.37.1** (2026-06-29) - 修复 G-code 转换 EXECUTABLE_BLOCK 范围错误（traps.md #141）：`EXECUTABLE_BLOCK_END` 从启动代码后移到 `PRINT_END` 后，包裹整个打印过程，与 OrcaSlicer 原生格式一致；新增单元测试验证
 - **v5.37.0** (2026-06-29) - 阶段 4 单元测试 + fetch 超时标准化 + 代码组织：1) 新建 `test/` 目录 + `node:test` 框架，28 个测试覆盖 patchGcodeContent 5 种操作 + convertGcodeContent 格式检测/转换；提取纯函数 `patchGcodeContent`/`convertGcodeContent`（无文件 I/O）供测试调用；2) 新增 `fetchWithTimeout` helper 用标准 AbortController 替代 node-fetch v2 非标准 `timeout` 选项，8 处 fetch 调用全部替换；3) 从 handleUploadWithConfirm 内提取 patchGcodeLayout 为顶层函数

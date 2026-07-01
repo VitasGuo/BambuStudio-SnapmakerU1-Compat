@@ -7,7 +7,7 @@
 
 ## 索引（按类别）
 
-> 统计：共 147 条 — ✅ 已解决 143 | ⚠️ 部分解决 2（#16/#25）| ❌ 未解决 1（#103 固有限制）
+> 统计：共 148 条 — ✅ 已解决 144 | ⚠️ 部分解决 2（#16/#25）| ❌ 未解决 1（#103 固有限制）
 
 ### BambuStudio 配置系统
 #1 跨厂商继承不支持 | #2 filament_list 加载顺序 | #3 PowerShell JSON 格式错误 | #4 AppConfig filaments 缓存 | #5 compatible_printers_condition | #6 厂商匹配检查 | #7 删除 models 段 | #8 Copy-Item 嵌套 | #9 user/default 残留 | #10 conf 写入时机 | #11 filament_vendor 缺失 | #20 只看 @U1 不够 | #21 Orca GitHub 过时
@@ -1069,6 +1069,13 @@
 **解决方案**（v5.36.1）：
 1. **后端**：流式读取从 `resp.body.getReader()` + `while(true) reader.read()` 改为 `for await (const chunk of resp.body)` async iterator。Node.js Readable stream 从 v10 起支持 `Symbol.asyncIterator`，Web ReadableStream 从 ES2018 起支持，两者双兼容。IIFE catch 加 `log("ERROR", ...)` 便于排查
 2. **前端**：done 分支检查 `pd.error`，有错误时显示 `[错误: ...]` 而非"空响应"；`qa_stream_start` 调用删除多余的 provider/customBaseUrl/model query 参数（和 optimize_gcode 一致，后端不读取）
+
+---
+
+#148 ✅
+**现象**：网友反馈 G-code 上传失败，BambuStudio 报 `HTTP 500: {"error":"Upload failed: The user aborted a request."}`
+**根因**：v5.37.2 代码审查修复 M2（traps.md #144）时，给上传操作加了 `fetchWithTimeout(..., 120000)`（120 秒固定超时）。大 G-code 文件（50-100MB）在慢 WiFi 下上传可能超过 120 秒，超时触发 `controller.abort()`，node-fetch 抛出 AbortError（message: "The user aborted a request"），catch 后返回 HTTP 500。同样问题影响 AI Lab 上传端点（L1151）和 G-code 下载端点（L1337，60s 超时）
+**解决方案**（v5.37.3）：上传和下载操作改回裸 `fetch`（无超时）。文件大小 × 网速不可控，固定超时不合理；Moonraker 离线时 TCP 会快速失败（RST/FIN），无需超时保护。列表操作（list_printer_gcode）保留 10s 超时（轻量操作）
 
 ---
 
