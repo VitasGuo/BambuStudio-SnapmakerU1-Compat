@@ -7,7 +7,7 @@
 
 ## 索引（按类别）
 
-> 统计：共 148 条 — ✅ 已解决 144 | ⚠️ 部分解决 2（#16/#25）| ❌ 未解决 1（#103 固有限制）
+> 统计：共 150 条 — ✅ 已解决 146 | ⚠️ 部分解决 2（#16/#25）| ❌ 未解决 1（#103 固有限制）
 
 ### BambuStudio 配置系统
 #1 跨厂商继承不支持 | #2 filament_list 加载顺序 | #3 PowerShell JSON 格式错误 | #4 AppConfig filaments 缓存 | #5 compatible_printers_condition | #6 厂商匹配检查 | #7 删除 models 段 | #8 Copy-Item 嵌套 | #9 user/default 残留 | #10 conf 写入时机 | #11 filament_vendor 缺失 | #20 只看 @U1 不够 | #21 Orca GitHub 过时
@@ -25,7 +25,7 @@
 #28 WebView 不注入 API Key | #29 网络插件签名验证 | #30 /moonraker/ 前缀不工作 | #31 /ws 路径错误 | #62 Express 5 {*path} 数组 | #63 /access/token 拦截 | #64 热床温度不显示 | #70 中间件顺序 | #71 只转发 content-type | #72 Fluidd SPA 404 | #73 WS 缺错误处理 | #94 温度不自动更新 | #122 JSONP cb 注入 | #123 open_external 命令注入 | #124 上传临时文件泄漏 | #130 ws.onmessage 无异常保护 | #139 node-fetch timeout 非标准 | #142 setup 页面 mDNS XSS | #143 dialog.js fetch timeout 遗漏 | #144 三处 AI Lab 端点裸 fetch 无超时
 
 ### 打印确认流程
-#47 print_stats 初始查询缺失 | #48 切片不触发确认 | #49 confirm_print 参数解析 | #51 start_local_print 不支持 HTTP | #52 WebUI 未加载通知丢失 | #53 gcode/script HTTP 不可用 | #54 无安全检测 | #56 print_host 被覆盖 | #57 gcode() 用不存在的 HTTP | #58 用户预设覆盖 print_host | #59 python-multipart 缺失 | #61 弹窗体验 | #89 布尔值回归 | #91 JSON-RPC 方法名错误 | #92 热床调平参数名（BED_LEVEL） | #96 耗材匹配缺失 | #97 bridgePOST 数组参数 | #101 MAP_TABLE 不更新 reprint_info | #102 SET_PRINT_USED_EXTRUDERS 参数格式 | #106 耗材信息被 gcode 覆盖
+#47 print_stats 初始查询缺失 | #48 切片不触发确认 | #49 confirm_print 参数解析 | #51 start_local_print 不支持 HTTP | #52 WebUI 未加载通知丢失 | #53 gcode/script HTTP 不可用 | #54 无安全检测 | #56 print_host 被覆盖 | #57 gcode() 用不存在的 HTTP | #58 用户预设覆盖 print_host | #59 python-multipart 缺失 | #61 弹窗体验 | #89 布尔值回归 | #91 JSON-RPC 方法名错误 | #92 热床调平参数名（BED_LEVEL） | #96 耗材匹配缺失 | #97 bridgePOST 数组参数 | #101 MAP_TABLE 不更新 reprint_info | #102 SET_PRINT_USED_EXTRUDERS 参数格式 | #106 耗材信息被 gcode 覆盖 | #150 弹窗缺格式标识
 
 ### 摄像头（重点）
 #37 webcams/list 返回空 | #39 MJPEG 流代理不工作 | #46 U1 用 snapshot 轮询 | #65 代理破坏二进制 JPEG | #67 Express ETag 缓存 | #85 camera.start_monitor 必须走 WS | #90 摄像头监控需服务端触发 | #93 摄像头参数缺失（domain）
@@ -34,7 +34,7 @@
 #34 Flutter Web DOM 不可读 | #38 SET_LED 缺 WHITE | #40 filament_feed 无类型 | #66 WS 竞态条件 | #78 Fluidd SW 拦截 fetch | #79 WebView 阻止 fetch/XHR | #82 event.stopPropagation | #83 gcode() 不返回值 | #84 EXTRUDER vs INDEX | #95 风扇控制参数范围 | #99 耗材类型品牌前缀 | #100 WebView 外部链接拦截 | #104 颜色匹配精度不足 | #129 loadJS script 标签泄漏 | #134 webui.html XSS 文件名/耗材类型未转义 | #145 文件列表双重转义 XSS | #146 转义函数缺单引号
 
 ### AI Lab（G-code 优化 + 打印助手）
-#125 listGcodeFiles 全量读文件 | #126 add_retract 时机错误 | #127 extractGcodeStats G92 E0 误计 | #128 printQAStream qaStreams 泄漏 | #132 slice_agent.js 1448 行死代码 | #133 server.js 10 个死端点 | #135 ailab.js/gcvt.js XSS | #136 AI 调用重复 + 错误处理不一致 | #137 ailab.js apiKey GET 传递泄露 | #138 printQAStream getReader 不兼容导致空响应 | #140 纯函数提取（测试性）
+#125 listGcodeFiles 全量读文件 | #126 add_retract 时机错误 | #127 extractGcodeStats G92 E0 误计 | #128 printQAStream qaStreams 泄漏 | #132 slice_agent.js 1448 行死代码 | #133 server.js 10 个死端点 | #135 ailab.js/gcvt.js XSS | #136 AI 调用重复 + 错误处理不一致 | #137 ailab.js apiKey GET 传递泄露 | #138 printQAStream getReader 不兼容导致空响应 | #140 纯函数提取（测试性） | #149 ailab/gcvt i18n 双语化
 
 ### 安装与部署
 #32 系统无 Python | #33 Fluidd hosted 模式 | #35 CWD 指向已删目录 | #36 curl 下载失败 | #42 Bridge 依赖原目录 | #43 Program Files 权限 | #44 需手动启动 | #45 VBS 权限 | #60 Python 嵌入式限制 | #68 formidable 构造函数 | #69 bridge/web 未复制 | #74 undici 未声明 | #75 node-fetch 不兼容 undici | #76 undici 不导出 Blob | #77 旧进程未重启 | #80 mDNS 端口错误 | #81 VBS 裸 node 命令 | #121 dialog Linux execFileSync 未导入 | #131 reinstall watchdog 文件锁冲突
@@ -1076,6 +1076,28 @@
 **现象**：网友反馈 G-code 上传失败，BambuStudio 报 `HTTP 500: {"error":"Upload failed: The user aborted a request."}`
 **根因**：v5.37.2 代码审查修复 M2（traps.md #144）时，给上传操作加了 `fetchWithTimeout(..., 120000)`（120 秒固定超时）。大 G-code 文件（50-100MB）在慢 WiFi 下上传可能超过 120 秒，超时触发 `controller.abort()`，node-fetch 抛出 AbortError（message: "The user aborted a request"），catch 后返回 HTTP 500。同样问题影响 AI Lab 上传端点（L1151）和 G-code 下载端点（L1337，60s 超时）
 **解决方案**（v5.37.3）：上传和下载操作改回裸 `fetch`（无超时）。文件大小 × 网速不可控，固定超时不合理；Moonraker 离线时 TCP 会快速失败（RST/FIN），无需超时保护。列表操作（list_printer_gcode）保留 10s 超时（轻量操作）
+
+---
+
+#149 ✅
+**现象**：AI Lab（G-code 优化 + 打印助手）和 G-code 转换面板的所有用户可见文本为硬编码中文，切换 WebUI 语言到英文时这两个面板不跟随切换
+**根因**：`ailab.js` / `gcvt.js` 使用 IIFE `(function initAILab(){...})()` 在加载时一次性注入 innerHTML，文本硬编码中文；`webui.html` 的 `setLang()` 只更新 `[data-i18n]` 元素，不重新渲染这两个面板；IIFE 无法重复调用
+**解决方案**（v5.38.0）：
+1. **翻译函数**：新增 `aiT(zh, en)` / `gcvtT(zh, en)`，读取 `window.curLang`（'zh'/'en'）返回对应语言文本
+2. **IIFE 改为可重调用函数**：`(function initAILab(){...})()` → `function initAILab(){...}` + `initAILab();`，gcvt 同理。重新渲染前清除旧 modals（`['aiConfigModal','aiErrorModal','qaFab','qaPopup'].forEach` remove）避免重复注入
+3. **语言应用函数**：新增 `aiApplyLang()` / `gcvtApplyLang()`，重新调用 init 函数渲染面板；state 变量（`aiOptState` / `gcvtState` 等）在外层声明，重新渲染时保留
+4. **setLang 集成**：`webui.html setLang()` 末尾调用 `if(typeof aiApplyLang==='function')aiApplyLang(); if(typeof gcvtApplyLang==='function')gcvtApplyLang();`
+5. **文本替换**：ailab.js ~60 个文本点、gcvt.js ~30 个文本点，innerHTML 中用 `'+aiT('中文','English')+'` 拼接，动态 JS 中用 `aiT('中文','English')` 直接调用
+
+---
+
+#150 ✅
+**现象**：用户在打印确认弹窗中无法得知 G-code 是 BambuStudio 还是 OrcaSlicer 格式，可能误传 BambuStudio 格式文件到设备触摸面板导致"未识别的gcode类型"错误（traps.md #103）
+**根因**：`webui.html showPrintDialog` 只显示文件名/耗材映射，不检测 G-code 格式；虽有 G-code 转换功能（gcvt 面板）但用户不知何时需要使用
+**解决方案**（v5.38.0）：
+1. **后端端点**：`server.js` 新增 `/api/ai/check_gcode_format.js` JSONP 端点，用 HTTP Range 请求（`Range: bytes=0-32767`）从 Moonraker 下载 G-code 前 32KB，复用 #116 验证的检测逻辑（`; FEATURE:` = bambu，`;TYPE:` = orca），返回 `{ok:true, format:"bambu"|"orca"|"unknown"}`
+2. **弹窗格式标识**：`showPrintDialog` 在 gcode_info 区域添加 `#gcodeFormatInfo` 占位（"检测格式中.../Detecting format..."），末尾异步调用端点：OrcaSlicer 格式显示绿色 ✓ 兼容；BambuStudio 格式显示橙色 ⚠ 警告 + "前往转换 →" 链接（`onclick="closePrintModal(true);switchTab('gcvt')"`）；未知格式显示灰色提示
+3. **Range 请求优势**：只下载前 32KB 而非完整文件（可能 50-100MB），格式标记在文件头部，检测快速且省带宽
 
 ---
 

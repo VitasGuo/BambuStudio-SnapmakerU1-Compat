@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.37.2 (2026-06-29)
+## 当前版本: v5.38.0 (2026-07-02)
 
 ---
 
@@ -15,7 +15,7 @@
 - 原生打印确认对话框（耗材映射 + 打印选项）
 - WebUI 设备控制面板（摄像头/温度/灯光/风扇/速度/打印控制）
 - Fluidd 集成（侧栏一键切换）
-- 中英文切换
+- 中英文切换（WebUI + AI Lab 双语化）
 - About 页面（使用说明 + 版本更新检测）
 - AI 实验室（G-code 优化 + 打印助手，流式输出 + Thinking 模式，Workspace Markdown 系统）
 - G-code 转换（独立侧栏标签页，BambuStudio→OrcaSlicer 兼容格式转换）
@@ -56,6 +56,22 @@
 ---
 
 ## 版本历史
+
+### v5.38.0 (2026-07-02) — AI Lab/G-code 转换双语化 + 打印弹窗格式标识
+两项功能：(1) AI Lab 与 G-code 转换面板中英文双语化，跟随 WebUI 语言切换；(2) 打印确认弹窗显示 G-code 格式（BambuStudio/OrcaSlicer）并引导用户到转换工具（traps.md #149、#150）
+
+**改动 1 — AI Lab / G-code 转换双语化**（traps.md #149）：
+- 新增 `aiT(zh, en)` / `gcvtT(zh, en)` 翻译函数：读取 `window.curLang`（'zh'/'en'）返回对应语言
+- IIFE 改为可重调用函数 `initAILab()` / `initGcvt()`，重新渲染前清除旧 modals 避免重复注入
+- 新增 `aiApplyLang()` / `gcvtApplyLang()`：重新调用 init 函数渲染面板，state 变量在外层声明保留
+- `webui.html setLang()` 末尾调用两个 ApplyLang 函数，语言切换时重新渲染面板
+- ailab.js ~60 个文本点、gcvt.js ~30 个文本点全部双语化（innerHTML 拼接 + 动态 JS 调用）
+
+**改动 2 — 打印弹窗 G-code 格式标识**（traps.md #150）：
+- `server.js` 新增 `/api/ai/check_gcode_format.js` JSONP 端点：HTTP Range 请求下载前 32KB，复用 #116 检测逻辑（`; FEATURE:` = bambu，`;TYPE:` = orca）
+- `webui.html showPrintDialog` 在 gcode_info 区域添加 `#gcodeFormatInfo` 异步占位，格式检测结果：OrcaSlicer 绿色 ✓ 兼容 / BambuStudio 橙色 ⚠ 警告 + "前往转换 →" 跳转链接 / 未知灰色提示
+
+**验证**：`node --check` 语法通过（server.js / ailab.js / gcvt.js）；29 个单元测试全部通过；15 处版本号统一到 v5.38.0
 
 ### v5.37.3 (2026-06-29) — 修复上传超时回归 bug
 网友反馈 `HTTP 500: {"error":"Upload failed: The user aborted a request."}`。根因是 v5.37.2 代码审查修复 M2 时给上传/下载操作加了固定超时（120s/60s），大 G-code 文件在慢网络下超时被 abort。修复：上传和下载操作改回裸 `fetch`（无超时），因为文件大小 × 网速不可控，固定超时不合理；Moonraker 离线时 TCP 会快速失败（traps.md #148）。列表操作保留 10s 超时

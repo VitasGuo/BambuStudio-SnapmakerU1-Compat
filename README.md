@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.37.3
+# Snapmaker U1 BambuStudio 兼容包 v5.38.0
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -213,6 +213,7 @@ A: v5.18.1 已修复此问题，安装脚本不再删除用户自定义预设。
 
 ## 版本历史
 
+- **v5.38.0** (2026-07-02) - AI Lab/G-code 转换双语化 + 打印弹窗格式标识（traps.md #149、#150）：1) `ailab.js` / `gcvt.js` 新增 `aiT(zh,en)` / `gcvtT(zh,en)` 翻译函数，IIFE 改为可重调用函数 + ApplyLang 函数，`setLang()` 末尾调用重新渲染面板，~90 个文本点全部双语化跟随 WebUI 语言切换；2) `server.js` 新增 `check_gcode_format.js` JSONP 端点（HTTP Range 下载前 32KB 检测格式），`showPrintDialog` 异步显示格式标识，BambuStudio 格式显示橙色警告 + "前往转换"跳转链接
 - **v5.37.3** (2026-06-29) - 修复上传超时回归 bug（traps.md #148）：v5.37.2 代码审查修复 M2 给上传/下载加了固定超时（120s/60s），大 G-code 文件在慢网络下超时被 abort，报 `HTTP 500: The user aborted a request`。上传和下载改回裸 `fetch`（无超时），列表操作保留 10s 超时
 - **v5.37.2** (2026-06-29) - 全量代码审查安全修复（traps.md #142-#147）：setup 页面 mDNS XSS（H1，添加 escHtml 转义）；dialog.js fetch timeout 遗漏标准化（M1，AbortController）；server.js 三处 AI Lab 端点裸 fetch 无超时（M2，fetchWithTimeout）；webui.html 文件列表双重转义失效 XSS（M3，data-path + dataset）；ailab.js/gcvt.js 转义函数缺单引号（M4，补齐 &#39;）；extruder_map_table GET query 无大小限制（M5，4096 字节 + Array 校验）；打印机设置弹窗 curHost/curPort 未转义（L1）
 - **v5.37.1** (2026-06-29) - 修复 G-code 转换 EXECUTABLE_BLOCK 范围错误（traps.md #141）：`EXECUTABLE_BLOCK_END` 从启动代码后移到 `PRINT_END` 后，包裹整个打印过程，与 OrcaSlicer 原生格式一致；新增单元测试验证

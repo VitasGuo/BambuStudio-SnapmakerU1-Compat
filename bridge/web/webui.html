@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <title>BambuStudio Bridge</title>
-<link rel="stylesheet" href="ailab.css?v=5.37.3">
+<link rel="stylesheet" href="ailab.css?v=5.38.0">
 <style>
 :root{--bg:#f0f2f5;--panel:#fff;--panel2:#f5f5f5;--border:#e0e0e0;--primary:#2196f3;--primary-light:#64b5f6;--danger:#f44336;--success:#4caf50;--warn:#ff9800;--text:#333;--text2:#666;--text3:#999;--radius:10px}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -721,6 +721,9 @@ var k=el.getAttribute('data-i18n-ph');
 if(I18N[lang]&&I18N[lang][k])el.placeholder=I18N[lang][k];
 });
 $('langBtn').textContent=lang==='zh'?'EN/中':'中/EN';
+// Re-render AI Lab / G-code Convert panels for language switch
+if(typeof aiApplyLang==='function')aiApplyLang();
+if(typeof gcvtApplyLang==='function')gcvtApplyLang();
 }
 function toggleLang(){setLang(curLang==='zh'?'en':'zh');}
 function $(id){return document.getElementById(id)}
@@ -737,7 +740,7 @@ function switchTab(tab){
   $('ailab-content').style.display=tab==='ailab'?'block':'none';
   $('gcvt-content').style.display=tab==='gcvt'?'block':'none';
   if(tab==='debug') loadDebugLogs();
-  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.37.3';checkUpdate();}
+  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.38.0';checkUpdate();}
   if(tab==='ailab') aiLoadConfig();
   if(tab==='gcvt') gcvtInit();
 }
@@ -954,7 +957,10 @@ html+='<div class="modal-meta-item"><svg width="14" height="14" viewBox="0 0 24 
 if(estWeight>0){
 html+='<div class="modal-meta-item"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg><span class="meta-val">'+estWeight.toFixed(1)+'g</span> '+t('estimated_weight')+'</div>';
 }
-html+='</div></div>';
+html+='</div>';
+// G-code format indicator (async filled by check_gcode_format)
+html+='<div id="gcodeFormatInfo" style="margin-top:6px;font-size:12px;color:var(--text3);">'+(curLang==='zh'?'检测格式中...':'Detecting format...')+'</div>';
+html+='</div>';
 html+='<div class="modal-section"><h3>'+t('filament_mapping')+'</h3>';
 for(var i=0;i<4;i++){
 var gType=gFilTypes[i]||'';
@@ -1023,6 +1029,20 @@ html+='</div></div></div>';
 var old=document.getElementById('printModal');
 if(old)old.remove();
 document.body.insertAdjacentHTML('beforeend',html);
+// Async check gcode format (BambuStudio vs OrcaSlicer) — Range download first 32KB
+bridgeGET('/api/ai/check_gcode_format?path='+encodeURIComponent(name),function(d){
+var fmtEl=document.getElementById('gcodeFormatInfo');
+if(!fmtEl)return;
+if(!d||!d.ok){fmtEl.textContent='';return;}
+var fmt=d.format;
+if(fmt==='orca'){
+fmtEl.innerHTML='<span style="color:#4caf50;">&#10003; OrcaSlicer '+(curLang==='zh'?'兼容':'compatible')+'</span>';
+}else if(fmt==='bambu'){
+fmtEl.innerHTML='<span style="color:#ff9800;">&#9888; BambuStudio</span> <span style="color:var(--text3);">'+(curLang==='zh'?'格式 — 设备触摸面板可能无法识别，建议先转换':'format — touchscreen may not recognize, convert recommended')+'</span> <a href="javascript:void(0)" onclick="closePrintModal(true);switchTab(\'gcvt\')" style="color:var(--primary);text-decoration:underline;cursor:pointer;font-weight:600;">'+(curLang==='zh'?'前往转换 →':'Go to Convert →')+'</a>';
+}else{
+fmtEl.innerHTML='<span style="color:var(--text3);">'+(curLang==='zh'?'格式未知':'Unknown format')+'</span>';
+}
+});
 }
 
 function refreshMapStatus(){
@@ -1358,8 +1378,8 @@ function applyPrinterConfig(){
 }
 
 </script>
-<script src="ailab.js?v=5.37.3"></script>
-<script src="gcvt.js?v=5.37.3"></script>
+<script src="ailab.js?v=5.38.0"></script>
+<script src="gcvt.js?v=5.38.0"></script>
 </body>
 </html>
 

@@ -11,8 +11,15 @@ var aiOptUploadedName=null;
 var aiOptOrigLines=[];
 var aiQAHistory=[];
 
-// ─── HTML Injection (runs on load) ───
-(function initAILab(){
+// ─── i18n ───
+function aiT(zh, en){ return (window.curLang === 'en') ? en : zh; }
+function aiApplyLang(){
+  // Re-render panel with new language (modals recreated, state variables preserved)
+  initAILab();
+}
+
+// ─── HTML Injection (runs on load + language switch) ───
+function initAILab(){
   // --- Fill ailab-content with left-right split layout ---
   var ct=document.getElementById('ailab-content');
   if(!ct)return;
@@ -24,31 +31,31 @@ var aiQAHistory=[];
 <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;flex-wrap:wrap;">\
 \
 <!-- Feature title -->\
-<span style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;">G-code 优化</span>\
+<span style="font-size:14px;font-weight:600;color:var(--text);white-space:nowrap;">'+aiT('G-code 优化','G-code Optimize')+'</span>\
 <div style="width:1px;height:20px;background:var(--border);flex-shrink:0;"></div>\
 \
 <!-- Source tabs -->\
 <div style="display:flex;gap:2px;">\
-<button class="ai-opt-tab active" id="aiOptTabLocal" onclick="aiOptSwitchTab(\'local\')">本地文件</button>\
-<button class="ai-opt-tab" id="aiOptTabPrinter" onclick="aiOptSwitchTab(\'printer\')">打印机</button>\
-<button class="ai-opt-tab" id="aiOptTabUpload" onclick="aiOptSwitchTab(\'upload\')">上传</button>\
+<button class="ai-opt-tab active" id="aiOptTabLocal" onclick="aiOptSwitchTab(\'local\')">'+aiT('本地文件','Local')+'</button>\
+<button class="ai-opt-tab" id="aiOptTabPrinter" onclick="aiOptSwitchTab(\'printer\')">'+aiT('打印机','Printer')+'</button>\
+<button class="ai-opt-tab" id="aiOptTabUpload" onclick="aiOptSwitchTab(\'upload\')">'+aiT('上传','Upload')+'</button>\
 </div>\
 \
 <!-- Local file selector -->\
 <div id="aiOptLocalPanel" style="display:flex;align-items:center;margin-left:8px;">\
 <select id="aiOptGcodeSelect" onchange="if(this.value)aiOptLoadOriginal(this.value)" style="height:32px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:13px;background:var(--panel);color:var(--text);min-width:160px;">\
-<option value="">-- 选择 G-code --</option></select>\
+<option value="">'+aiT('-- 选择 G-code --','-- Select G-code --')+'</option></select>\
 </div>\
 \
 <!-- Printer file selector -->\
 <div id="aiOptPrinterPanel" style="display:none;align-items:center;margin-left:8px;">\
 <select id="aiOptPrinterSelect" onchange="if(this.value)aiOptFetchAndPreview(this.value)" style="height:32px;border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:13px;background:var(--panel);color:var(--text);min-width:160px;">\
-<option value="">-- 加载中... --</option></select>\
+<option value="">'+aiT('-- 加载中... --','-- Loading... --')+'</option></select>\
 </div>\
 \
 <!-- Upload panel -->\
 <div id="aiOptUploadPanel" style="display:none;align-items:center;gap:6px;margin-left:8px;">\
-<button onclick="document.getElementById(\'aiOptFileInput\').click()" style="height:32px;padding:0 12px;border:1px dashed var(--border);border-radius:6px;background:var(--panel);color:var(--text2);cursor:pointer;font-size:12px;">选择文件</button>\
+<button onclick="document.getElementById(\'aiOptFileInput\').click()" style="height:32px;padding:0 12px;border:1px dashed var(--border);border-radius:6px;background:var(--panel);color:var(--text2);cursor:pointer;font-size:12px;">'+aiT('选择文件','Select File')+'</button>\
 <input type="file" id="aiOptFileInput" accept=".gcode,.gco" style="display:none" onchange="aiOptUploadFile(this)">\
 <span id="aiOptUploadInfo" style="display:none;font-size:12px;color:var(--success);"></span>\
 </div>\
@@ -56,36 +63,36 @@ var aiQAHistory=[];
 <span class="spacer" style="flex:1;"></span>\
 \
 <!-- Actions -->\
-<button onclick="aiOptimizeGcode()" class="ai-btn ai-btn-primary" id="aiOptBtn" style="padding:5px 14px;font-size:13px;">优化</button>\
+<button onclick="aiOptimizeGcode()" class="ai-btn ai-btn-primary" id="aiOptBtn" style="padding:5px 14px;font-size:13px;">'+aiT('优化','Optimize')+'</button>\
 <button onclick="aiNewProject()" class="ai-btn ai-btn-outline" style="font-size:12px;padding:4px 10px;">\
-<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>新项目</button>\
-<button onclick="aiOpenGcodeFolder()" class="ai-btn ai-btn-outline" style="font-size:12px;padding:4px 10px;" title="打开 G-code 文件夹">\
-<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>文件夹</button>\
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>'+aiT('新项目','New')+'</button>\
+<button onclick="aiOpenGcodeFolder()" class="ai-btn ai-btn-outline" style="font-size:12px;padding:4px 10px;" title="'+aiT('打开 G-code 文件夹','Open G-code folder')+'">\
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>'+aiT('文件夹','Folder')+'</button>\
 <button onclick="showAiConfig()" class="ai-btn ai-btn-outline" style="font-size:12px;padding:4px 10px;">\
-<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>配置</button>\
+<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>'+aiT('配置','Config')+'</button>\
 </div>\
 </div>\
 \
 <!-- Info banner -->\
 <div style="padding:8px 16px;background:rgba(33,150,243,.06);border-bottom:1px solid rgba(33,150,243,.12);flex-shrink:0;font-size:12px;color:var(--text2);line-height:1.6;">\
 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>\
-基于 LLM 分析 G-code，诊断打印质量问题（如速度过快、回抽不足、温度不当等）并生成优化补丁。需要配置 LLM 连接后使用。\
+'+aiT('基于 LLM 分析 G-code，诊断打印质量问题（如速度过快、回抽不足、温度不当等）并生成优化补丁。需要配置 LLM 连接后使用。','LLM-powered G-code analysis: diagnoses print quality issues (e.g. excessive speed, insufficient retraction, improper temperature) and generates optimization patches. Requires LLM configuration.')+'\
 </div>\
 \
 <!-- Optimize progress bar -->\
-<div id="aiOptProgress" style="display:none;padding:6px 16px;background:rgba(33,150,243,.06);border-bottom:1px solid rgba(33,150,243,.15);flex-shrink:0;font-size:13px;color:var(--primary);font-weight:500;animation:aiPulse 1.5s infinite;">AI 诊断优化中...</div>\
+<div id="aiOptProgress" style="display:none;padding:6px 16px;background:rgba(33,150,243,.06);border-bottom:1px solid rgba(33,150,243,.15);flex-shrink:0;font-size:13px;color:var(--primary);font-weight:500;animation:aiPulse 1.5s infinite;">'+aiT('AI 诊断优化中...','AI optimizing...')+'</div>\
 \
 <!-- Optimize result bar -->\
 <div id="aiOptResult" style="display:none;padding:6px 16px;background:rgba(76,175,80,.06);border-bottom:1px solid rgba(76,175,80,.15);flex-shrink:0;">\
 <div style="display:flex;align-items:center;gap:14px;font-size:12px;flex-wrap:wrap;">\
-<span style="color:var(--success);font-weight:600;">优化完成</span>\
-<span style="color:var(--text2);">问题: <b id="aiOptIssues" style="color:var(--primary);">-</b></span>\
-<span style="color:var(--text2);">补丁: <b id="aiOptPatches" style="color:var(--success);">-</b></span>\
+<span style="color:var(--success);font-weight:600;">'+aiT('优化完成','Done')+'</span>\
+<span style="color:var(--text2);">'+aiT('问题:','Issues:')+' <b id="aiOptIssues" style="color:var(--primary);">-</b></span>\
+<span style="color:var(--text2);">'+aiT('补丁:','Patches:')+' <b id="aiOptPatches" style="color:var(--success);">-</b></span>\
 <span id="aiOptDiffInfo" style="color:var(--text3);"></span>\
 <span style="flex:1;min-width:8px;"></span>\
 <span id="aiOptOpsList" style="display:flex;gap:6px;flex-wrap:wrap;"></span>\
-<a id="aiOptDownload" style="display:none;font-size:11px;padding:3px 10px;" class="ai-btn ai-btn-outline" download>下载</a>\
-<button id="aiOptUploadBtn" style="display:none;font-size:11px;padding:3px 10px;" onclick="aiOptUploadToPrinter()" class="ai-btn ai-btn-primary">上传到打印机</button>\
+<a id="aiOptDownload" style="display:none;font-size:11px;padding:3px 10px;" class="ai-btn ai-btn-outline" download>'+aiT('下载','Download')+'</a>\
+<button id="aiOptUploadBtn" style="display:none;font-size:11px;padding:3px 10px;" onclick="aiOptUploadToPrinter()" class="ai-btn ai-btn-primary">'+aiT('上传到打印机','Upload to Printer')+'</button>\
 <span id="aiOptUploadResult" style="display:none;color:var(--success);"></span>\
 </div>\
 <div id="aiOptDiagnosis" style="font-size:12px;color:var(--text2);margin-top:4px;line-height:1.5;display:none;"></div>\
@@ -96,18 +103,24 @@ var aiQAHistory=[];
 <div style="flex:1;display:flex;overflow:hidden;min-height:0;">\
 <!-- Left: Original -->\
 <div style="flex:1;display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--border);">\
-<div style="padding:5px 12px;font-size:11px;font-weight:600;color:var(--text3);background:var(--panel2);border-bottom:1px solid var(--border);flex-shrink:0;">原始 G-code</div>\
+<div style="padding:5px 12px;font-size:11px;font-weight:600;color:var(--text3);background:var(--panel2);border-bottom:1px solid var(--border);flex-shrink:0;">'+aiT('原始 G-code','Original G-code')+'</div>\
 <div id="aiOptDiffOriginal" style="flex:1;overflow:auto;padding:6px 10px;font-size:11px;font-family:Cascadia Code,Consolas,monospace;line-height:1.55;white-space:pre;word-break:break-all;background:var(--bg);">\
-<div style="text-align:center;padding:40px 20px;color:var(--text3);">选择 G-code 文件后在此预览</div></div>\
+<div style="text-align:center;padding:40px 20px;color:var(--text3);">'+aiT('选择 G-code 文件后在此预览','Select a G-code file to preview')+'</div></div>\
 </div>\
 <!-- Right: Optimized -->\
 <div style="flex:1;display:flex;flex-direction:column;min-width:0;">\
-<div style="padding:5px 12px;font-size:11px;font-weight:600;color:var(--text3);background:var(--panel2);border-bottom:1px solid var(--border);flex-shrink:0;">优化后 G-code</div>\
+<div style="padding:5px 12px;font-size:11px;font-weight:600;color:var(--text3);background:var(--panel2);border-bottom:1px solid var(--border);flex-shrink:0;">'+aiT('优化后 G-code','Optimized G-code')+'</div>\
 <div id="aiOptDiffOptimized" style="flex:1;overflow:auto;padding:6px 10px;font-size:11px;font-family:Cascadia Code,Consolas,monospace;line-height:1.55;white-space:pre;word-break:break-all;background:var(--bg);font-style:italic;">\
-<div style="text-align:center;padding:40px 20px;color:var(--text3);">优化后在此显示</div></div>\
+<div style="text-align:center;padding:40px 20px;color:var(--text3);">'+aiT('优化后在此显示','Optimized result shown here')+'</div></div>\
 </div>\
 </div>\
 </div>';
+
+  // --- Remove old modals/widgets if re-rendering (language switch) ---
+  ['aiConfigModal','aiErrorModal','qaFab','qaPopup'].forEach(function(id){
+    var old=document.getElementById(id);
+    if(old)old.remove();
+  });
 
   // --- Inject AI Config Modal ---
   var cfgModal=document.createElement('div');
@@ -116,20 +129,20 @@ var aiQAHistory=[];
   cfgModal.style.display='none';
   cfgModal.innerHTML='\
 <div class="panel">\
-<h3 style="margin-top:0;">AI 配置</h3>\
-<div style="margin-bottom:12px;"><label style="font-weight:600;font-size:13px;">服务商</label>\
+<h3 style="margin-top:0;">'+aiT('AI 配置','AI Config')+'</h3>\
+<div style="margin-bottom:12px;"><label style="font-weight:600;font-size:13px;">'+aiT('服务商','Provider')+'</label>\
 <select id="aiCfgProvider" onchange="aiProviderChanged()" style="width:100%;height:36px;border:1px solid var(--border);border-radius:6px;padding:0 10px;margin-top:4px;font-size:14px;background:var(--panel);color:var(--text);"></select></div>\
-<div style="margin-bottom:12px;"><label style="font-weight:600;font-size:13px;">模型名称</label>\
+<div style="margin-bottom:12px;"><label style="font-weight:600;font-size:13px;">'+aiT('模型名称','Model')+'</label>\
 <input id="aiCfgModel" type="text" style="width:100%;height:36px;border:1px solid var(--border);border-radius:6px;padding:0 10px;margin-top:4px;font-size:14px;background:var(--panel);color:var(--text);" placeholder="google/gemma-4-e2b"></div>\
-<div style="margin-bottom:12px;"><label style="font-weight:600;font-size:13px;">端点 URL (可选)</label>\
+<div style="margin-bottom:12px;"><label style="font-weight:600;font-size:13px;">'+aiT('端点 URL (可选)','Endpoint URL (optional)')+'</label>\
 <input id="aiCfgEndpoint" type="text" style="width:100%;height:36px;border:1px solid var(--border);border-radius:6px;padding:0 10px;margin-top:4px;font-size:14px;background:var(--panel);color:var(--text);" placeholder="http://127.0.0.1:1234/v1"></div>\
 <div style="margin-bottom:12px;" id="aiCfgApiKeyRow"><label style="font-weight:600;font-size:13px;">API Key</label>\
 <input id="aiCfgApiKey" type="password" style="width:100%;height:36px;border:1px solid var(--border);border-radius:6px;padding:0 10px;margin-top:4px;font-size:14px;background:var(--panel);color:var(--text);" placeholder="sk-..."></div>\
 <div style="display:flex;gap:8px;justify-content:space-between;margin-top:16px;">\
-<button onclick="aiTestConnection()" class="ai-btn ai-btn-outline">测试连接</button>\
+<button onclick="aiTestConnection()" class="ai-btn ai-btn-outline">'+aiT('测试连接','Test')+'</button>\
 <div style="display:flex;gap:8px;">\
-<button onclick="hideAiConfig()" class="ai-btn ai-btn-outline">取消</button>\
-<button onclick="aiSaveConfig()" class="ai-btn ai-btn-primary">保存</button></div></div>\
+<button onclick="hideAiConfig()" class="ai-btn ai-btn-outline">'+aiT('取消','Cancel')+'</button>\
+<button onclick="aiSaveConfig()" class="ai-btn ai-btn-primary">'+aiT('保存','Save')+'</button></div></div>\
 <div id="aiConfigStatus" style="margin-top:12px;font-size:12px;"></div></div>';
   document.body.appendChild(cfgModal);
 
@@ -140,12 +153,12 @@ var aiQAHistory=[];
   errModal.style.display='none';
   errModal.innerHTML='\
 <div class="panel" style="max-width:420px;">\
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 id="aiErrorTitle" style="margin:0;color:var(--danger);">错误</h3>\
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h3 id="aiErrorTitle" style="margin:0;color:var(--danger);">'+aiT('错误','Error')+'</h3>\
 <button onclick="hideAiError()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text3);">&times;</button></div>\
 <div id="aiErrorMsg" style="font-size:13px;color:var(--text);line-height:1.6;max-height:200px;overflow-y:auto;white-space:pre-wrap;font-family:Consolas,monospace;margin-bottom:12px;"></div>\
 <div style="display:flex;gap:8px;justify-content:flex-end;">\
-<button onclick="copyAiError()" class="ai-btn ai-btn-outline" style="font-size:12px;">复制错误</button>\
-<button onclick="hideAiError()" class="ai-btn ai-btn-primary" style="font-size:12px;">关闭</button></div></div>';
+<button onclick="copyAiError()" class="ai-btn ai-btn-outline" style="font-size:12px;">'+aiT('复制错误','Copy')+'</button>\
+<button onclick="hideAiError()" class="ai-btn ai-btn-primary" style="font-size:12px;">'+aiT('关闭','Close')+'</button></div></div>';
   document.body.appendChild(errModal);
 
   // --- Inject Floating QA Assistant ---
@@ -162,21 +175,22 @@ var aiQAHistory=[];
   qaPopup.innerHTML='\
 <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);">\
 <div style="font-size:14px;font-weight:600;color:var(--text);display:flex;align-items:center;gap:6px;">\
-<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>打印助手</div>\
+<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>'+aiT('打印助手','Print Assistant')+'</div>\
 <div style="display:flex;gap:6px;">\
-<button onclick="aiClearQA()" style="background:none;border:1px solid var(--border);color:var(--text3);border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;">清空</button>\
+<button onclick="aiClearQA()" style="background:none;border:1px solid var(--border);color:var(--text3);border-radius:4px;padding:2px 8px;cursor:pointer;font-size:11px;">'+aiT('清空','Clear')+'</button>\
 <button onclick="toggleQaPopup()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:16px;">&times;</button></div></div>\
 <div id="qaHistory" class="qa-history">\
-<div class="qa-msg ai"><div class="qa-avatar">AI</div><div class="qa-bubble">你好！我是 3D 打印助手，帮你解答 FDM 打印问题。请问有什么可以帮你的？</div></div></div>\
+<div class="qa-msg ai"><div class="qa-avatar">AI</div><div class="qa-bubble">'+aiT('你好！我是 3D 打印助手，帮你解答 FDM 打印问题。请问有什么可以帮你的？','Hi! I am your 3D print assistant. How can I help you?')+'</div></div></div>\
 <div style="display:flex;gap:8px;padding:10px 16px;border-top:1px solid var(--border);">\
-<input type="text" class="qa-input" id="qaInput" placeholder="输入打印问题..." onkeydown="if(event.key===\'Enter\')aiSendQuestion()" style="flex:1;height:36px;">\
+<input type="text" class="qa-input" id="qaInput" placeholder="'+aiT('输入打印问题...','Ask about printing...')+'" onkeydown="if(event.key===\'Enter\')aiSendQuestion()" style="flex:1;height:36px;">\
 <button class="qa-send" id="qaSendBtn" onclick="aiSendQuestion()" style="width:36px;height:36px;">\
 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg></button></div>';
   document.body.appendChild(qaPopup);
 
   // --- Load config on init ---
   aiLoadConfig();
-})();
+}
+initAILab();
 
 // ─── AI Config ───
 function aiLoadConfig(){
@@ -191,7 +205,7 @@ function aiLoadConfig(){
       for(var k in aiProviders){
         var p=aiProviders[k];
         var o=document.createElement('option');o.value=k;
-        o.textContent=p.name+(p.isLocal?' (本地)':'');
+        o.textContent=p.name+(p.isLocal?' ('+aiT('本地','Local')+')':'');
         if(k===aiCfg.provider)o.selected=true;
         sel.appendChild(o);
       }
@@ -208,7 +222,7 @@ function aiApplyProviderUI(provKey){
   if(ep)ep.value=aiCfg.customBaseUrl||p.baseUrl||'';
   if(model)model.value=aiCfg.model||p.defaultModel||'';
   if(keyRow)keyRow.style.display=p.isLocal?'none':'block';
-  if(keyInput&&aiCfg._hasKey&&!keyInput.value)keyInput.placeholder='已保存 (留空保持不变)';
+  if(keyInput&&aiCfg._hasKey&&!keyInput.value)keyInput.placeholder=aiT('已保存 (留空保持不变)','Saved (leave blank to keep)');
 }
 function showAiConfig(){
   var m=document.getElementById('aiConfigModal');if(m)m.style.display='flex';
@@ -229,7 +243,7 @@ function aiTestConnection(){
   var model=document.getElementById('aiCfgModel');
   var ep=document.getElementById('aiCfgEndpoint');
   var key=document.getElementById('aiCfgApiKey');
-  var s=document.getElementById('aiConfigStatus');if(s){s.textContent='测试中...';s.style.color='var(--text2)';}
+  var s=document.getElementById('aiConfigStatus');if(s){s.textContent=aiT('测试中...','Testing...');s.style.color='var(--text2)';}
   fetch('/api/ai/test_connection',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -242,17 +256,17 @@ function aiTestConnection(){
   }).then(function(r){return r.json();}).then(function(d){
     var s=document.getElementById('aiConfigStatus');if(!s)return;
     if(d&&d.ok){
-      s.textContent='连接成功';s.style.color='var(--success)';
+      s.textContent=aiT('连接成功','Connected');s.style.color='var(--success)';
       // 如果后端自动切换了模型，更新输入框
       if(d.currentModel&&model&&model.value!==d.currentModel){
         model.value=d.currentModel;
-        s.textContent='连接成功（模型已自动更新为 '+d.currentModel+'）';
+        s.textContent=aiT('连接成功（模型已自动更新为 ','Connected (model auto-updated to ')+' '+d.currentModel+')';
       }
     }
-    else{s.textContent='连接失败: '+(d&&d.error||'未知错误');s.style.color='var(--danger)';}
+    else{s.textContent=aiT('连接失败: ','Connection failed: ')+(d&&d.error||aiT('未知错误','Unknown error'));s.style.color='var(--danger)';}
   }).catch(function(e){
     var s=document.getElementById('aiConfigStatus');if(!s)return;
-    s.textContent='连接失败: '+e.message;s.style.color='var(--danger)';
+    s.textContent=aiT('连接失败: ','Connection failed: ')+e.message;s.style.color='var(--danger)';
   });
 }
 function aiSaveConfig(){
@@ -261,7 +275,7 @@ function aiSaveConfig(){
   var newKey=document.getElementById('aiCfgApiKey').value;
   if(newKey)aiCfg.apiKey=newKey; // Only update if user entered a new key
   aiCfg.customBaseUrl=document.getElementById('aiCfgEndpoint').value;
-  var s=document.getElementById('aiConfigStatus');if(s){s.textContent='保存中...';s.style.color='var(--text2)';}
+  var s=document.getElementById('aiConfigStatus');if(s){s.textContent=aiT('保存中...','Saving...');s.style.color='var(--text2)';}
   fetch('/api/ai/save_config',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
@@ -273,18 +287,18 @@ function aiSaveConfig(){
     })
   }).then(function(r){return r.json();}).then(function(d){
     var s=document.getElementById('aiConfigStatus');if(!s)return;
-    if(d&&d.ok){s.textContent='已保存';s.style.color='var(--success)';hideAiConfig();}
-    else{s.textContent='保存失败';s.style.color='var(--danger)';}
+    if(d&&d.ok){s.textContent=aiT('已保存','Saved');s.style.color='var(--success)';hideAiConfig();}
+    else{s.textContent=aiT('保存失败','Save failed');s.style.color='var(--danger)';}
   }).catch(function(e){
     var s=document.getElementById('aiConfigStatus');if(!s)return;
-    s.textContent='保存失败: '+e.message;s.style.color='var(--danger)';
+    s.textContent=aiT('保存失败: ','Save failed: ')+e.message;s.style.color='var(--danger)';
   });
 }
 
 // ─── Error Modal ───
 function showAiError(title,msg){
   var m=document.getElementById('aiErrorModal');if(!m)return;
-  document.getElementById('aiErrorTitle').textContent=title||'错误';
+  document.getElementById('aiErrorTitle').textContent=title||aiT('错误','Error');
   document.getElementById('aiErrorMsg').textContent=msg||'';
   m.style.display='flex';
 }
@@ -293,17 +307,17 @@ function hideAiError(){
 }
 function copyAiError(){
   var t=document.getElementById('aiErrorMsg');if(!t)return;
-  navigator.clipboard.writeText(t.textContent).then(function(){alert('已复制');}).catch(function(){});
+  navigator.clipboard.writeText(t.textContent).then(function(){alert(aiT('已复制','Copied'));}).catch(function(){});
 }
 
 // ─── G-code File List ───
 function aiListGcodeFiles(){
   var sel=document.getElementById('aiOptGcodeSelect');if(!sel)return;
-  sel.innerHTML='<option value="">-- 加载中... --</option>';
+  sel.innerHTML='<option value="">'+aiT('-- 加载中... --','-- Loading... --')+'</option>';
   bridgeGET('/api/ai/list_gcode',function(d){
-    if(!d||!d.ok){sel.innerHTML='<option value="">-- 无文件 --</option>';return;}
+    if(!d||!d.ok){sel.innerHTML='<option value="">'+aiT('-- 无文件 --','-- No files --')+'</option>';return;}
     var files=d.files||[];
-    sel.innerHTML='<option value="">-- 选择 G-code ('+files.length+') --</option>';
+    sel.innerHTML='<option value="">'+aiT('-- 选择 G-code (','-- Select G-code (')+files.length+')</option>';
     for(var i=0;i<files.length;i++){
       var f=files[i];
       var name=f.filename||f.name||f;
@@ -341,14 +355,14 @@ function aiOptSwitchTab(source){
 
 function aiOptLoadPrinterFiles(){
   var sel=document.getElementById('aiOptPrinterSelect');if(!sel)return;
-  sel.innerHTML='<option value="">-- 加载中... --</option>';
+  sel.innerHTML='<option value="">'+aiT('-- 加载中... --','-- Loading... --')+'</option>';
   bridgeGET('/api/ai/list_printer_gcode',function(d){
     if(!d||!d.ok){
-      sel.innerHTML='<option value="">-- 加载失败，点击重试 --</option>';
+      sel.innerHTML='<option value="">'+aiT('-- 加载失败，点击重试 --','-- Load failed, click to retry --')+'</option>';
       return;
     }
     var files=d.files||[];
-    sel.innerHTML='<option value="">-- 选择打印机 G-code ('+files.length+') --</option>';
+    sel.innerHTML='<option value="">'+aiT('-- 选择打印机 G-code (','-- Select printer G-code (')+files.length+')</option>';
     for(var i=0;i<files.length;i++){
       var f=files[i];
       var o=document.createElement('option');o.value=f.path;o.textContent=f.name+' ('+f.size+')';
@@ -363,11 +377,11 @@ function aiOptFetchAndPreview(printerPath){
   var left=document.getElementById('aiOptDiffOriginal');
   if(!left)return;
   var info=document.getElementById('aiOptDiffInfo');
-  var btn=document.getElementById('aiOptBtn');if(btn){btn.disabled=true;btn.textContent='下载中...';}
-  if(info)info.textContent='从打印机下载...';
+  var btn=document.getElementById('aiOptBtn');if(btn){btn.disabled=true;btn.textContent=aiT('下载中...','Downloading...');}
+  if(info)info.textContent=aiT('从打印机下载...','Downloading from printer...');
   // Show progress bar
   left.innerHTML='<div style="text-align:center;padding:40px 20px;">\
-<div style="color:var(--text3);margin-bottom:12px;">从打印机下载中...</div>\
+<div style="color:var(--text3);margin-bottom:12px;">'+aiT('从打印机下载中...','Downloading from printer...')+'</div>\
 <div style="background:var(--border);border-radius:4px;height:8px;max-width:300px;margin:0 auto;overflow:hidden;">\
 <div id="aiOptFetchBar" style="background:var(--primary);height:100%;width:0%;transition:width 0.3s;"></div>\
 </div>\
@@ -393,14 +407,14 @@ function aiOptFetchAndPreview(printerPath){
   bridgeGET('/api/ai/fetch_printer_gcode?path='+encodeURIComponent(printerPath),function(d){
     if(_fetchProgressTimer){clearInterval(_fetchProgressTimer);_fetchProgressTimer=null;}
     if(!d||!d.ok){
-      var errMsg=d&&d.error?d.error:'未知错误';
-      left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--danger);">下载失败: '+aiEscapeHtml(errMsg)+'</div>';
-      if(info)info.textContent='下载失败';
-      if(btn){btn.disabled=false;btn.textContent='优化';}
+      var errMsg=d&&d.error?d.error:aiT('未知错误','Unknown error');
+      left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--danger);">'+aiT('下载失败: ','Download failed: ')+aiEscapeHtml(errMsg)+'</div>';
+      if(info)info.textContent=aiT('下载失败','Download failed');
+      if(btn){btn.disabled=false;btn.textContent=aiT('优化','Optimize');}
       return;
     }
     aiOptLoadOriginal(d.gcode_name);
-    if(btn){btn.disabled=false;btn.textContent='优化';}
+    if(btn){btn.disabled=false;btn.textContent=aiT('优化','Optimize');}
   });
 }
 
@@ -408,8 +422,8 @@ function aiOptUploadFile(input){
   var file=input.files[0];if(!file)return;
   var info=document.getElementById('aiOptUploadInfo');
   var btn=document.getElementById('aiOptBtn');
-  if(info){info.style.display='block';info.textContent='上传中...';info.style.color='var(--text2)';}
-  if(btn){btn.disabled=true;btn.textContent='上传中...';}
+  if(info){info.style.display='block';info.textContent=aiT('上传中...','Uploading...');info.style.color='var(--text2)';}
+  if(btn){btn.disabled=true;btn.textContent=aiT('上传中...','Uploading...');}
   var formData=new FormData();formData.append('gcode',file);
   var xhr=new XMLHttpRequest();
   xhr.open('POST','/api/ai/upload_gcode');
@@ -418,13 +432,13 @@ function aiOptUploadFile(input){
       var d=JSON.parse(xhr.responseText);
       if(d&&d.ok){
         aiOptUploadedName=d.gcode_name;
-        if(info){info.textContent='已上传: '+file.name;info.style.color='var(--success)';}
-        if(btn){btn.disabled=false;btn.textContent='优化';}
+        if(info){info.textContent=aiT('已上传: ','Uploaded: ')+file.name;info.style.color='var(--success)';}
+        if(btn){btn.disabled=false;btn.textContent=aiT('优化','Optimize');}
         aiOptLoadOriginal(d.gcode_name);
-      }else{showAiError('上传失败',d&&d.error||'未知错误');if(btn){btn.disabled=false;btn.textContent='优化';}}
-    }catch(e){showAiError('上传失败',e.message);if(btn){btn.disabled=false;btn.textContent='优化';}}
+      }else{showAiError(aiT('上传失败','Upload failed'),d&&d.error||aiT('未知错误','Unknown error'));if(btn){btn.disabled=false;btn.textContent=aiT('优化','Optimize');}}
+    }catch(e){showAiError(aiT('上传失败','Upload failed'),e.message);if(btn){btn.disabled=false;btn.textContent=aiT('优化','Optimize');}}
   };
-  xhr.onerror=function(){showAiError('上传失败','网络错误');if(btn){btn.disabled=false;btn.textContent='优化';}};
+  xhr.onerror=function(){showAiError(aiT('上传失败','Upload failed'),aiT('网络错误','Network error'));if(btn){btn.disabled=false;btn.textContent=aiT('优化','Optimize');}};
   xhr.send(formData);
   // Reset file input so same file can be re-selected
   input.value='';
@@ -434,7 +448,7 @@ function aiOptUploadFile(input){
 function aiOptimizeGcode(){
   // Check LLM config before optimizing (local providers don't need API key)
   var isLocalProv=aiProviders[aiCfg.provider]&&aiProviders[aiCfg.provider].isLocal;
-  if(!isLocalProv&&!aiCfg._hasKey&&!aiCfg.apiKey){showAiError('提示','请先配置 LLM 连接：点击 AI Lab 设置图标，填写 API Key 后保存。');return;}
+  if(!isLocalProv&&!aiCfg._hasKey&&!aiCfg.apiKey){showAiError(aiT('提示','Notice'),aiT('请先配置 LLM 连接：点击 AI Lab 设置图标，填写 API Key 后保存。','Please configure LLM first: click the AI Lab settings icon, enter API Key and save.'));return;}
   var gcodeName=aiOptState.originalGcodeName;
   if(!gcodeName){
     // Try to get from local select
@@ -442,14 +456,14 @@ function aiOptimizeGcode(){
     if(sel&&sel.value)gcodeName=sel.value;
   }
   if(!gcodeName&&aiOptUploadedName)gcodeName=aiOptUploadedName;
-  if(!gcodeName){showAiError('提示','请先选择 G-code 文件');return;}
+  if(!gcodeName){showAiError(aiT('提示','Notice'),aiT('请先选择 G-code 文件','Please select a G-code file first'));return;}
   aiOptDoOptimize(gcodeName);
 }
 
 function aiOptDoOptimize(gcodeName){
   aiOptState.originalGcodeName=gcodeName;
   var btn=document.getElementById('aiOptBtn');if(!btn)return;
-  btn.disabled=true;btn.textContent='优化中...';
+  btn.disabled=true;btn.textContent=aiT('优化中...','Optimizing...');
   var prog=document.getElementById('aiOptProgress');if(prog)prog.style.display='block';
   var res=document.getElementById('aiOptResult');if(res)res.style.display='none';
 
@@ -457,9 +471,9 @@ function aiOptDoOptimize(gcodeName){
 
   bridgeGET('/api/ai/optimize_gcode'+params,function(r){
     if(prog)prog.style.display='none';
-    btn.disabled=false;btn.textContent='优化';
+    btn.disabled=false;btn.textContent=aiT('优化','Optimize');
     if(!r||!r.ok){
-      showAiError('优化失败',r&&r.error||'未知错误');
+      showAiError(aiT('优化失败','Optimize failed'),r&&r.error||aiT('未知错误','Unknown error'));
       return;
     }
     // Show result
@@ -500,14 +514,14 @@ function aiOptLoadOriginal(gcodeName){
   var right=document.getElementById('aiOptDiffOptimized');if(!right)return;
   var info=document.getElementById('aiOptDiffInfo');
 
-  if(info)info.textContent='加载中...';
-  left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text3);">加载中...</div>';
-  right.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text3);font-style:italic;">等待优化...</div>';
+  if(info)info.textContent=aiT('加载中...','Loading...');
+  left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text3);">'+aiT('加载中...','Loading...')+'</div>';
+  right.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text3);font-style:italic;">'+aiT('等待优化...','Waiting for optimization...')+'</div>';
 
   bridgeGET('/api/ai/read_gcode?gcode_name='+encodeURIComponent(gcodeName)+'&max_lines=2000',function(d){
     if(!d||!d.ok){
-      left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--danger);">加载失败</div>';
-      if(info)info.textContent='加载失败';
+      left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--danger);">'+aiT('加载失败','Load failed')+'</div>';
+      if(info)info.textContent=aiT('加载失败','Load failed');
       return;
     }
     aiOptOrigLines=d.content.split('\n');
@@ -517,7 +531,7 @@ function aiOptLoadOriginal(gcodeName){
       html+='<div class="diff-ctx"><span class="diff-line-num">'+(i+1)+'</span>'+esc+'</div>';
     }
     left.innerHTML=html;
-    if(info)info.textContent='原始: '+d.total_lines+' 行 (显示 '+d.shown_lines+' 行)';
+    if(info)info.textContent=aiT('原始: ','Original: ')+d.total_lines+' '+aiT('行 (显示','lines (showing')+' '+d.shown_lines+' '+aiT('行)','lines')+')';
   });
 }
 
@@ -614,10 +628,10 @@ function aiOptLoadOptimized(){
   var right=document.getElementById('aiOptDiffOptimized');if(!right)return;
   var info=document.getElementById('aiOptDiffInfo');
 
-  if(info)info.textContent='加载优化结果...';
+  if(info)info.textContent=aiT('加载优化结果...','Loading optimized result...');
   bridgeGET('/api/ai/read_gcode?gcode_name='+encodeURIComponent(optName)+'&max_lines=2000',function(d){
     if(!d||!d.ok){
-      right.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--danger);">加载失败</div>';
+      right.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--danger);">'+aiT('加载失败','Load failed')+'</div>';
       return;
     }
     var optLines=d.content.split('\n');
@@ -664,7 +678,7 @@ function aiOptLoadOptimized(){
     }
     left.innerHTML=origHtml;
     right.innerHTML=optHtml;
-    if(info)info.textContent='差异: '+totalChanges+' 处 ('+insertCount+' 新增, '+deleteCount+' 删除, '+changeCount+' 修改) | 原始 '+aiOptOrigLines.length+' → 优化后 '+optLines.length;
+    if(info)info.textContent=aiT('差异: ','Diff: ')+totalChanges+aiT(' 处 (',' changes (')+insertCount+aiT(' 新增, ',' added, ')+deleteCount+aiT(' 删除, ',' deleted, ')+changeCount+aiT(' 修改) | ',' modified) | ')+aiT('原始 ','Original ')+aiOptOrigLines.length+' → '+aiT('优化后 ','Optimized ')+optLines.length;
     aiOptSetupSyncScroll();
   });
 }
@@ -692,18 +706,18 @@ function aiOptSetupSyncScroll(){
 function aiOptUploadToPrinter(){
   if(!aiOptState.optimizedGcodeName)return;
   var btn=document.getElementById('aiOptUploadBtn');if(!btn)return;
-  btn.disabled=true;btn.textContent='上传中...';
+  btn.disabled=true;btn.textContent=aiT('上传中...','Uploading...');
   bridgeGET('/api/ai/upload_to_printer?gcode_name='+encodeURIComponent(aiOptState.optimizedGcodeName),function(d){
-    btn.disabled=false;btn.textContent='上传到打印机';
-    if(!d||!d.ok){showAiError('上传失败',d&&d.error||'未知错误');return;}
+    btn.disabled=false;btn.textContent=aiT('上传到打印机','Upload to Printer');
+    if(!d||!d.ok){showAiError(aiT('上传失败','Upload failed'),d&&d.error||aiT('未知错误','Unknown error'));return;}
     var rs=document.getElementById('aiOptUploadResult');if(!rs)return;
-    rs.style.display='block';rs.textContent='上传成功: '+d.path;
+    rs.style.display='block';rs.textContent=aiT('上传成功: ','Upload success: ')+d.path;
   });
 }
 
 function aiOpenGcodeFolder(){
   bridgeGET('/api/ai/open_gcode_folder',function(d){
-    if(!d||!d.ok){showAiError('打开文件夹失败',d&&d.error||'未知错误');return;}
+    if(!d||!d.ok){showAiError(aiT('打开文件夹失败','Open folder failed'),d&&d.error||aiT('未知错误','Unknown error'));return;}
   });
 }
 
@@ -713,13 +727,13 @@ function aiNewProject(){
   aiOptOrigLines=[];
   var prog=document.getElementById('aiOptProgress');if(prog)prog.style.display='none';
   var res=document.getElementById('aiOptResult');if(res)res.style.display='none';
-  var btn=document.getElementById('aiOptBtn');if(btn){btn.disabled=false;btn.textContent='优化';}
+  var btn=document.getElementById('aiOptBtn');if(btn){btn.disabled=false;btn.textContent=aiT('优化','Optimize');}
   var info=document.getElementById('aiOptUploadInfo');if(info)info.style.display='none';
   var dl=document.getElementById('aiOptDownload');if(dl)dl.style.display='none';
   var upBtn=document.getElementById('aiOptUploadBtn');if(upBtn)upBtn.style.display='none';
   var upRes=document.getElementById('aiOptUploadResult');if(upRes)upRes.style.display='none';
-  var left=document.getElementById('aiOptDiffOriginal');if(left)left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text3);">选择 G-code 文件后在此预览</div>';
-  var right=document.getElementById('aiOptDiffOptimized');if(right)right.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text3);font-style:italic;">优化后在此显示</div>';
+  var left=document.getElementById('aiOptDiffOriginal');if(left)left.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text3);">'+aiT('选择 G-code 文件后在此预览','Select a G-code file to preview')+'</div>';
+  var right=document.getElementById('aiOptDiffOptimized');if(right)right.innerHTML='<div style="text-align:center;padding:40px 20px;color:var(--text3);font-style:italic;">'+aiT('优化后在此显示','Optimized result shown here')+'</div>';
   var diffInfo=document.getElementById('aiOptDiffInfo');if(diffInfo)diffInfo.textContent='';
 }
 
@@ -732,7 +746,7 @@ function toggleQaPopup(){
 function aiClearQA(){
   aiQAHistory=[];
   var hist=document.getElementById('qaHistory');if(!hist)return;
-  hist.innerHTML='<div class="qa-msg ai"><div class="qa-avatar">AI</div><div class="qa-bubble">你好！我是 3D 打印助手，帮你解答 FDM 打印问题。请问有什么可以帮你的？</div></div>';
+  hist.innerHTML='<div class="qa-msg ai"><div class="qa-avatar">AI</div><div class="qa-bubble">'+aiT('你好！我是 3D 打印助手，帮你解答 FDM 打印问题。请问有什么可以帮你的？','Hi! I am your 3D print assistant. How can I help you?')+'</div></div>';
 }
 
 function aiSendQuestion(){
@@ -740,7 +754,7 @@ function aiSendQuestion(){
   // Check LLM config before sending (local providers don't need API key)
   var isLocalProv=aiProviders[aiCfg.provider]&&aiProviders[aiCfg.provider].isLocal;
   if(!isLocalProv&&!aiCfg._hasKey&&!aiCfg.apiKey){
-    var noKeyMsg='请先配置 LLM 连接：点击 AI Lab 设置图标，填写 API Key 后保存。';
+    var noKeyMsg=aiT('请先配置 LLM 连接：点击 AI Lab 设置图标，填写 API Key 后保存。','Please configure LLM first: click the AI Lab settings icon, enter API Key and save.');
     var hist=document.getElementById('qaHistory');if(hist){
       hist.innerHTML+=aiRenderChatMessage('user',input.value.trim());
       hist.innerHTML+=aiRenderChatMessage('ai',noKeyMsg);
@@ -769,9 +783,9 @@ function aiSendQuestion(){
   bridgeGET('/api/ai/qa_stream_start?question='+encodeURIComponent(q)+'&context='+encodeURIComponent(ctx),function(d){
     if(!d||!d.ok){
       var bubble=document.getElementById(bubbleId);
-      if(bubble)bubble.innerHTML=aiRenderInline(d&&d.error||'抱歉，无法连接 AI 服务，请检查配置。');
+      if(bubble)bubble.innerHTML=aiRenderInline(d&&d.error||aiT('抱歉，无法连接 AI 服务，请检查配置。','Sorry, unable to connect to AI service. Please check your configuration.'));
       input.disabled=false;if(btn)btn.disabled=false;input.focus();
-      aiQAHistory.push({role:'ai',content:d&&d.error||'抱歉，无法连接 AI 服务，请检查配置。'});
+      aiQAHistory.push({role:'ai',content:d&&d.error||aiT('抱歉，无法连接 AI 服务，请检查配置。','Sorry, unable to connect to AI service. Please check your configuration.')});
       hist.scrollTop=hist.scrollHeight;
       return;
     }
@@ -791,7 +805,7 @@ function aiSendQuestion(){
       if(isThinkingMode&&thinkingText){
         html+='<div class="qa-thinking-block'+(thinkingShown?' open':'')+'">';
         html+='<div class="qa-thinking-toggle" onclick="this.parentElement.classList.toggle(\'open\')">';
-        html+='<span class="qa-thinking-arrow">&#9654;</span> 思考过程';
+        html+='<span class="qa-thinking-arrow">&#9654;</span> '+aiT('思考过程','Thinking');
         html+='</div>';
         html+='<div class="qa-thinking-body">'+aiRenderInline(thinkingText)+'</div>';
         html+='</div>';
@@ -803,7 +817,7 @@ function aiSendQuestion(){
       // Cursor or thinking indicator
       if(!answerStarted){
         if(isThinkingMode&&!answerText){
-          html+='<span class="qa-thinking-label">思考中...</span>';
+          html+='<span class="qa-thinking-label">'+aiT('思考中...','Thinking...')+'</span>';
         }
         html+='<span class="qa-stream-cursor" style="display:inline-block;width:2px;height:1em;background:var(--accent,#4a9eff);animation:qaBlink 1s infinite;vertical-align:text-bottom;margin-left:2px;"></span>';
       }else{
@@ -819,8 +833,8 @@ function aiSendQuestion(){
           clearTimeout(pollTimer);
           var bubble=document.getElementById(bubbleId);
           if(bubble){
-            var errSuffix=pd&&pd.error?'\n\n[错误: '+pd.error+']':'';
-            bubble.innerHTML=(isThinkingMode&&thinkingText?'<div class="qa-thinking-block open"><div class="qa-thinking-toggle" onclick="this.parentElement.classList.toggle(\'open\')"><span class="qa-thinking-arrow">&#9654;</span> 思考过程</div><div class="qa-thinking-body">'+aiRenderInline(thinkingText)+'</div></div>':'')+aiRenderInline(answerText+errSuffix);
+            var errSuffix=pd&&pd.error?'\n\n['+aiT('错误: ','Error: ')+pd.error+']':'';
+            bubble.innerHTML=(isThinkingMode&&thinkingText?'<div class="qa-thinking-block open"><div class="qa-thinking-toggle" onclick="this.parentElement.classList.toggle(\'open\')"><span class="qa-thinking-arrow">&#9654;</span> '+aiT('思考过程','Thinking')+'</div><div class="qa-thinking-body">'+aiRenderInline(thinkingText)+'</div></div>':'')+aiRenderInline(answerText+errSuffix);
           }
           input.disabled=false;if(btn)btn.disabled=false;input.focus();
           if(answerText)aiQAHistory.push({role:'ai',content:answerText});
@@ -851,19 +865,19 @@ function aiSendQuestion(){
           if(bubble){
             var finalHtml='';
             if(isThinkingMode&&thinkingText){
-              finalHtml+='<div class="qa-thinking-block"><div class="qa-thinking-toggle" onclick="this.parentElement.classList.toggle(\'open\')"><span class="qa-thinking-arrow">&#9654;</span> 思考过程</div><div class="qa-thinking-body">'+aiRenderInline(thinkingText)+'</div></div>';
+              finalHtml+='<div class="qa-thinking-block"><div class="qa-thinking-toggle" onclick="this.parentElement.classList.toggle(\'open\')"><span class="qa-thinking-arrow">&#9654;</span> '+aiT('思考过程','Thinking')+'</div><div class="qa-thinking-body">'+aiRenderInline(thinkingText)+'</div></div>';
             }
             // Show error if present (traps.md #138) — previously error was swallowed
             // and user saw "AI 返回了空响应" instead of the actual error message
             if(pd.error){
-              finalHtml+=aiRenderInline(answerText?(''+answerText+'\n\n[错误: '+pd.error+']'):('[错误: '+pd.error+']'));
+              finalHtml+=aiRenderInline(answerText?(''+answerText+'\n\n['+aiT('错误: ','Error: ')+pd.error+']'):('['+aiT('错误: ','Error: ')+pd.error+']'));
             }else{
-              finalHtml+=aiRenderInline(answerText||'AI 返回了空响应，请重试。');
+              finalHtml+=aiRenderInline(answerText||aiT('AI 返回了空响应，请重试。','AI returned empty response, please retry.'));
             }
             bubble.innerHTML=finalHtml;
           }
           input.disabled=false;if(btn)btn.disabled=false;input.focus();
-          var histContent=answerText||(pd.error?('[错误: '+pd.error+']'):'AI 返回了空响应，请重试。');
+          var histContent=answerText||(pd.error?('['+aiT('错误: ','Error: ')+pd.error+']'):aiT('AI 返回了空响应，请重试。','AI returned empty response, please retry.'));
           aiQAHistory.push({role:'ai',content:histContent});
           hist.scrollTop=hist.scrollHeight;
           return;
@@ -899,7 +913,7 @@ function aiRenderInline(text){
 function aiRenderChatMessage(role,content){
   var isUser=role==='user';
   var cls=isUser?'user':'ai';
-  var label=isUser?'你':'AI';
+  var label=isUser?aiT('你','You'):'AI';
   var html=content
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/```([\s\S]*?)```/g,function(m,code){return '<pre><code>'+code+'</code></pre>';})

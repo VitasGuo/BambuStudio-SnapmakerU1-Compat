@@ -9,7 +9,7 @@ const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.37.3";
+const BRIDGE_VERSION = "5.38.0";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -1310,6 +1310,34 @@ app.get("/api/ai/list_printer_gcode.js", async (req, res) => {
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify({ ok: true, files })});`);
   } catch (e) {
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
+  }
+});
+
+// Check G-code format (BambuStudio vs OrcaSlicer) by reading first 32KB from printer
+app.get("/api/ai/check_gcode_format.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  try {
+    const filePath = req.query.path;
+    if (!filePath) throw new Error("path parameter required");
+    if (!printerConfig.host) throw new Error("No printer configured");
+    const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
+    // Range request: only download first 32KB for format detection
+    const resp = await fetch(`${getBaseUrl()}/server/files/gcodes/${encodedPath}`, {
+      headers: { ...moonrakerHeaders(), Range: "bytes=0-32767" },
+    });
+    if (!resp.ok && resp.status !== 206) throw new Error(`Moonraker download failed: ${resp.status}`);
+    const buf = Buffer.from(await resp.arrayBuffer());
+    const head = buf.toString("utf-8");
+    // Detect format by layer marker (traps.md #116)
+    let format = "unknown";
+    if (head.includes("; FEATURE:")) format = "bambu";
+    else if (head.includes(";TYPE:")) format = "orca";
+    res.type("application/javascript");
+    res.send(`${cb}(${JSON.stringify({ ok: true, format })});`);
+  } catch (e) {
+    log("ERROR", `check_gcode_format error: ${e.message}`);
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify({ ok: false, error: aiErrMsg(e) })});`);
   }
