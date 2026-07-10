@@ -2,25 +2,31 @@ const express = require("express");
 const http = require("http");
 const path = require("path");
 const fs = require("fs");
-const os = require("os");
 const { spawn } = require("child_process");
 const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 const sliceAgent = require("./slice_agent");
+const { getBridgeDataDir } = require("./paths");
+const { normalizeBoolean, normalizeExtruderMapTable, startPrintWithOptions } = require("./print_job");
+const { probeMoonrakerStatus } = require("./bridge_status");
+const { createLocalAccessControl, loadOrCreateSessionToken } = require("./local_access");
+const { createMoonrakerHeaders, createMoonrakerWebSocketOptions } = require("./moonraker_auth");
+const {
+  createMoonrakerProxyHeaders,
+  shouldForwardMoonrakerResponseHeader,
+} = require("./proxy_headers");
 
 const BRIDGE_VERSION = "5.38.0";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
-const APPDATA_DIR = path.join(
-  process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"),
-  "BambuStudio-Bridge"
-);
+const APPDATA_DIR = getBridgeDataDir();
 fs.mkdirSync(APPDATA_DIR, { recursive: true });
 
 const CONFIG_FILE = path.join(APPDATA_DIR, "bridge_config.json");
 const LOG_FILE = path.join(APPDATA_DIR, "bridge.log");
+const SESSION_TOKEN_FILE = path.join(APPDATA_DIR, ".session_token");
 
 const BRIDGE_DIR = path.resolve(__dirname);
 const PROJECT_DIR = path.resolve(__dirname, "..");
@@ -40,8 +46,12 @@ function loadConfig() {
   if (fs.existsSync(CONFIG_FILE)) {
     try {
       const data = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
-      printerConfig = { ...printerConfig, ...data };
-      if (data.aiConfig) aiConfig = { ...aiConfig, ...data.aiConfig };
+      const { aiConfig: savedAiConfig, ...savedPrinterConfig } = data;
+      printerConfig = { ...printerConfig, ...savedPrinterConfig };
+      if (savedAiConfig) aiConfig = { ...aiConfig, ...savedAiConfig };
+      // Existing installations may have created this file with a permissive
+      // umask. It can contain printer and AI API keys, so tighten it on read.
+      try { fs.chmodSync(CONFIG_FILE, 0o600); } catch (_) {}
     } catch (e) {
       log("ERROR", `Failed to load config: ${e.message}`);
     }
@@ -49,7 +59,13 @@ function loadConfig() {
 }
 
 function saveConfig() {
-  fs.writeFileSync(CONFIG_FILE, JSON.stringify({ ...printerConfig, aiConfig }, null, 2), "utf-8");
+  fs.writeFileSync(
+    CONFIG_FILE,
+    JSON.stringify({ ...printerConfig, aiConfig }, null, 2),
+    { encoding: "utf-8", mode: 0o600 }
+  );
+  // mode only applies when a file is created; tighten existing files too.
+  try { fs.chmodSync(CONFIG_FILE, 0o600); } catch (_) {}
 }
 
 function getBaseUrl() {
@@ -57,7 +73,8 @@ function getBaseUrl() {
   return `http://${printerConfig.host}:${printerConfig.port}`;
 }
 
-const logStream = fs.createWriteStream(LOG_FILE, { flags: "a", encoding: "utf-8" });
+const logStream = fs.createWriteStream(LOG_FILE, { flags: "a", encoding: "utf-8", mode: 0o600 });
+try { fs.chmodSync(LOG_FILE, 0o600); } catch (_) {}
 const debugLog = [];
 const DEBUG_LOG_MAX = 2000;
 
@@ -85,9 +102,11 @@ process.on("unhandledRejection", (reason) => {
 });
 
 function moonrakerHeaders() {
-  const h = {};
-  if (printerConfig.apikey) h["X-API-Key"] = printerConfig.apikey;
-  return h;
+  return createMoonrakerHeaders(printerConfig.apikey);
+}
+
+function moonrakerWebSocketOptions() {
+  return createMoonrakerWebSocketOptions(printerConfig.apikey);
 }
 
 /**
@@ -128,6 +147,43 @@ async function sendGcode(script) {
   return callMoonrakerJsonRpc("printer.gcode.script", { script });
 }
 
+async function startConfiguredPrint(filename, options = {}) {
+  return startPrintWithOptions(filename, options, { sendGcode, callMoonrakerJsonRpc });
+}
+
+function requestPrintOptions(source = {}) {
+  return {
+    autoBedLeveling: normalizeBoolean(source.autoBedLeveling ?? source.auto_bed_leveling),
+    flowCalibration: normalizeBoolean(source.flowCalibration ?? source.flow_calibrate),
+    timelapse: normalizeBoolean(source.timelapse ?? source.time_lapse_camera),
+    extruderMapTable: normalizeExtruderMapTable(
+      source.extruderMapTable ?? source.extruder_map_table ?? source.mappings
+    ),
+  };
+}
+
+function updatePrinterConfig(source = {}) {
+  const host = typeof source.host === "string" ? source.host.trim() : "";
+  if (!host || host.length > 253 || host.includes("://") || /[\/\\?#@\s]/.test(host)) {
+    throw new Error("valid host is required");
+  }
+  const port = Number(source.port ?? 80);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("valid port is required");
+  }
+
+  if (Object.prototype.hasOwnProperty.call(source, "apikey")) {
+    if (typeof source.apikey !== "string" || source.apikey.length > 4096) {
+      throw new Error("invalid API key");
+    }
+  }
+
+  printerConfig.host = host;
+  printerConfig.port = port;
+  if (Object.prototype.hasOwnProperty.call(source, "apikey")) printerConfig.apikey = source.apikey;
+  saveConfig();
+}
+
 async function callMoonrakerJsonRpc(method, params = {}) {
   const baseUrl = getBaseUrl();
   if (!baseUrl) throw new Error("No printer configured");
@@ -135,7 +191,7 @@ async function callMoonrakerJsonRpc(method, params = {}) {
   return new Promise((resolve, reject) => {
     const wsUrl = `ws://${printerConfig.host}:${printerConfig.port}/websocket`;
     let settled = false;
-    const moonrakerWs = new WebSocket(wsUrl);
+    const moonrakerWs = new WebSocket(wsUrl, moonrakerWebSocketOptions());
     const timeout = setTimeout(() => {
       if (!settled) { settled = true; moonrakerWs.close(); reject(new Error("Moonraker WebSocket timeout")); }
     }, 10000);
@@ -183,8 +239,15 @@ async function callMoonrakerJsonRpc(method, params = {}) {
 }
 
 const app = express();
+const localAccess = createLocalAccessControl({
+  port: DEFAULT_PORT,
+  token: loadOrCreateSessionToken(SESSION_TOKEN_FILE),
+});
 
 app.set("etag", false);
+// Reject cross-site browser traffic before parsers or upload handlers consume a
+// request body. Native localhost clients remain supported without a cookie.
+app.use(localAccess.httpMiddleware);
 app.use(express.raw({ type: ["application/octet-stream", "application/x-gcode"], limit: "500mb" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -193,6 +256,8 @@ app.use(express.text({ type: "text/plain" }));
 app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   res.setHeader("Pragma", "no-cache");
+  res.setHeader("Cross-Origin-Resource-Policy", "same-origin");
+  res.setHeader("X-Content-Type-Options", "nosniff");
   log("INFO", `>>> ${req.method} ${req.path} from ${req.ip}`);
   next();
 });
@@ -243,18 +308,8 @@ app.get("/fluidd/{*path}", (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  const { host, port, apikey } = req.query;
-  
   // 始终先加载当前配置，保证状态一致性
   loadConfig();
-  
-  // 处理查询参数更新
-  if (host) {
-    printerConfig.host = host;
-    printerConfig.port = parseInt(port) || 80;
-    printerConfig.apikey = apikey || "";
-    saveConfig();
-  }
 
   if (!printerConfig.host) {
     return res.type("html").send(renderSetupPage());
@@ -297,6 +352,15 @@ app.get("/api/bridge/config", (req, res) => {
   });
 });
 
+app.post("/api/bridge/config", (req, res) => {
+  try {
+    updatePrinterConfig(req.body || {});
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ ok: false, error: e.message });
+  }
+});
+
 app.get("/api/bridge/config.js", (req, res) => {
   const cb = req.query.cb || "callback";
   res.type("application/javascript");
@@ -308,22 +372,32 @@ app.get("/api/bridge/config.js", (req, res) => {
   })});`);
 });
 
+app.get("/api/bridge/status", async (req, res) => {
+  const printerStatus = await probeMoonrakerStatus(
+    getBaseUrl(),
+    moonrakerHeaders(),
+    fetchWithTimeout,
+    2500
+  );
+  res.json({
+    version: BRIDGE_VERSION,
+    config: {
+      host: printerConfig.host,
+      port: printerConfig.port,
+      has_apikey: !!printerConfig.apikey,
+      mode: printerConfig.mode,
+    },
+    ...printerStatus,
+  });
+});
+
 app.get("/api/bridge/save_config.js", (req, res) => {
   const cb = req.query.cb || "callback";
   res.type("application/javascript");
-  try {
-    const host = (req.query.host || "").trim();
-    if (!host) throw new Error("host is required");
-    printerConfig.host = host;
-    printerConfig.port = parseInt(req.query.port) || 80;
-    if (req.query.apikey !== undefined && req.query.apikey !== "") {
-      printerConfig.apikey = req.query.apikey;
-    }
-    saveConfig();
-    res.send(`${cb}(${JSON.stringify({ ok: true })});`);
-  } catch (e) {
-    res.send(`${cb}(${JSON.stringify({ ok: false, error: e.message })});`);
-  }
+  res.status(405).send(`${cb}(${JSON.stringify({
+    ok: false,
+    error: "Configuration updates require POST /api/bridge/config",
+  })});`);
 });
 
 app.get("/api/bridge/pending_print", (req, res) => {
@@ -388,7 +462,11 @@ app.get("/api/bridge/debug/export", (req, res) => {
   content += `Version: ${BRIDGE_VERSION}\n`;
   content += `Time: ${new Date().toISOString()}\n`;
   content += `Printer: ${printerConfig.host}:${printerConfig.port}\n`;
-  content += `Config: ${JSON.stringify(printerConfig, null, 2)}\n`;
+  const safePrinterConfig = {
+    ...printerConfig,
+    apikey: printerConfig.apikey ? "<redacted>" : "",
+  };
+  content += `Config: ${JSON.stringify(safePrinterConfig, null, 2)}\n`;
   content += `Log file: ${LOG_FILE}\n`;
   content += `Web dir: ${WEB_DIR}\n`;
   content += `Bridge dir: ${BRIDGE_DIR}\n\n`;
@@ -400,22 +478,14 @@ app.get("/api/bridge/debug/export", (req, res) => {
 app.post("/api/bridge/confirm_print", async (req, res) => {
   if (!pendingPrintFile) return res.status(400).json({ error: "no_pending_print" });
 
-  const options = req.body || {};
   const filename = pendingPrintFile;
-  pendingPrintFile = "";
-
-  let script = `SDCARD_PRINT_FILE_WITH_PARAMETERS FILENAME="${filename}"`;
-  for (const [k, v] of Object.entries(options)) {
-    const val = ["true", "1", "yes"].includes(String(v).toLowerCase()) ? "1" : "0";
-    script += ` ${k.toUpperCase()}=${val}`;
-  }
-
-  log("INFO", `Confirm print: ${script}`);
-
   try {
-    await sendGcode(script);
+    const options = requestPrintOptions(req.body || {});
+    log("INFO", `Confirm print: filename=${filename} options=${JSON.stringify(options)}`);
+    const { result } = await startConfiguredPrint(filename, options);
+    pendingPrintFile = "";
     log("INFO", `Print started: ${filename}`);
-    res.json({ started: true, filename });
+    res.json({ started: true, filename, result });
   } catch (e) {
     log("ERROR", `Confirm print error: ${e.message}`);
     res.status(502).json({ error: e.message });
@@ -440,30 +510,12 @@ app.get("/api/bridge/confirm_print.js", async (req, res) => {
     res.send(`${cb}(${JSON.stringify({ error: "no_pending_print" })});`);
     return;
   }
-  const bedLevel = req.query.auto_bed_leveling === "1" ? 1 : 0;
-  const flowCal = req.query.flow_calibrate === "1" ? 1 : 0;
-  const timelapse = req.query.time_lapse_camera === "1" ? 1 : 0;
-  let mapTable = [];
-  if (req.query.extruder_map_table) {
-    try {
-      if (req.query.extruder_map_table.length > 4096) throw new Error("extruder_map_table too large");
-      mapTable = JSON.parse(req.query.extruder_map_table);
-      if (!Array.isArray(mapTable)) throw new Error("extruder_map_table not an array");
-    } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); mapTable = []; }
-  }
   const filename = pendingPrintFile;
-  pendingPrintFile = "";
-  log("INFO", `Confirm print: filename=${filename} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)}`);
   try {
-    for (const [configExt, mapExt] of mapTable) {
-      await sendGcode(`SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=${configExt} MAP_EXTRUDER=${mapExt}`);
-    }
-    if (mapTable.length > 0) {
-      const usedExtruders = [...new Set(mapTable.map(([_, m]) => m))].sort();
-      await sendGcode(`SET_PRINT_USED_EXTRUDERS EXTRUDERS=${usedExtruders.join(',')}`);
-    }
-    await sendGcode(`SET_PRINT_PREFERENCES BED_LEVEL=${bedLevel} FLOW_CALIBRATE=${flowCal} TIME_LAPSE_CAMERA=${timelapse}`);
-    const result = await callMoonrakerJsonRpc("printer.print.start", { filename: filename });
+    const options = requestPrintOptions(req.query);
+    log("INFO", `Confirm print: filename=${filename} options=${JSON.stringify(options)}`);
+    const { result } = await startConfiguredPrint(filename, options);
+    pendingPrintFile = "";
     log("INFO", `printer.print.start result: ${JSON.stringify(result)}`);
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify({ started: true, filename, result })});`);
@@ -476,37 +528,19 @@ app.get("/api/bridge/confirm_print.js", async (req, res) => {
 
 app.get("/api/bridge/start_print.js", async (req, res) => {
   const cb = req.query.cb || "callback";
-  const path = req.query.path;
-  if (!path) {
+  const filePath = req.query.path;
+  if (!filePath) {
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify({ error: "path_required" })});`);
     return;
   }
-  const bedLevel = req.query.auto_bed_leveling === "1" ? 1 : 0;
-  const flowCal = req.query.flow_calibrate === "1" ? 1 : 0;
-  const timelapse = req.query.time_lapse_camera === "1" ? 1 : 0;
-  let mapTable = [];
-  if (req.query.extruder_map_table) {
-    try {
-      if (req.query.extruder_map_table.length > 4096) throw new Error("extruder_map_table too large");
-      mapTable = JSON.parse(req.query.extruder_map_table);
-      if (!Array.isArray(mapTable)) throw new Error("extruder_map_table not an array");
-    } catch (e) { log("WARN", `extruder_map_table parse error: ${e.message}`); mapTable = []; }
-  }
-  log("INFO", `start_print: path=${path} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)}`);
   try {
-    for (const [configExt, mapExt] of mapTable) {
-      await sendGcode(`SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=${configExt} MAP_EXTRUDER=${mapExt}`);
-    }
-    if (mapTable.length > 0) {
-      const usedExtruders = [...new Set(mapTable.map(([_, m]) => m))].sort();
-      await sendGcode(`SET_PRINT_USED_EXTRUDERS EXTRUDERS=${usedExtruders.join(',')}`);
-    }
-    await sendGcode(`SET_PRINT_PREFERENCES BED_LEVEL=${bedLevel} FLOW_CALIBRATE=${flowCal} TIME_LAPSE_CAMERA=${timelapse}`);
-    const result = await callMoonrakerJsonRpc("printer.print.start", { filename: path });
+    const options = requestPrintOptions(req.query);
+    log("INFO", `start_print: path=${filePath} options=${JSON.stringify(options)}`);
+    const { result } = await startConfiguredPrint(filePath, options);
     log("INFO", `printer.print.start result: ${JSON.stringify(result)}`);
     res.type("application/javascript");
-    res.send(`${cb}(${JSON.stringify({ started: true, path, result })});`);
+    res.send(`${cb}(${JSON.stringify({ started: true, path: filePath, result })});`);
   } catch (e) {
     log("ERROR", `start_print error: ${e.message}`);
     res.type("application/javascript");
@@ -872,32 +906,45 @@ async function handleUploadWithConfirm(req, res) {
       if (printFlag && uploadedPath) {
         pendingPrintFile = uploadedPath;
         log("INFO", `Showing native dialog for: ${uploadedPath}`);
-        notifyWebui("pending_print", { filename: uploadedPath });
+        // macOS uses the native helper as the primary confirmation surface.
+        // WebUI is notified only if that helper fails, avoiding two dialogs.
+        if (process.platform !== "darwin") {
+          notifyWebui("pending_print", { filename: uploadedPath });
+        }
 
         try {
           const dialogResult = await showPrintDialog(uploadedPath, getBaseUrl(), printerConfig.apikey);
-          pendingPrintFile = "";
-
-          if (dialogResult) {
-            let script = `SDCARD_PRINT_FILE_WITH_PARAMETERS FILENAME="${uploadedPath}"`;
-            for (const k of ["auto_bed_leveling", "flow_calibrate", "time_lapse_camera"]) {
-              if (k in dialogResult) {
-                script += ` ${k.toUpperCase()}=${dialogResult[k] ? "1" : "0"}`;
-              }
-            }
-            log("INFO", `Dialog confirmed, sending: ${script}`);
+          if (pendingPrintFile !== uploadedPath) {
+            log("INFO", `Pending print was already handled elsewhere; ignoring native dialog result for ${uploadedPath}`);
+          } else if (dialogResult) {
+            log("INFO", `Dialog confirmed for ${uploadedPath}; applying mappings and print preferences`);
             try {
-              await sendGcode(script);
+              await startConfiguredPrint(uploadedPath, {
+                auto_bed_leveling: dialogResult.auto_bed_leveling,
+                flow_calibrate: dialogResult.flow_calibrate,
+                time_lapse_camera: dialogResult.time_lapse_camera,
+                extruder_map_table: dialogResult.extruder_map_table || dialogResult.mappings,
+              });
+              pendingPrintFile = "";
               log("INFO", `Print started after dialog: ${uploadedPath}`);
             } catch (e) {
               log("ERROR", `Failed to start print after dialog: ${e.message}`);
+              notifyWebui("pending_print", { filename: uploadedPath, start_print_error: e.message });
             }
           } else {
+            pendingPrintFile = "";
             log("INFO", `Dialog cancelled for: ${uploadedPath}`);
           }
         } catch (e) {
-          log("ERROR", `Dialog error: ${e.message}`);
-          pendingPrintFile = "";
+          if (e && e.keepPending && pendingPrintFile === uploadedPath) {
+            log("WARN", `Native dialog unavailable; print remains pending in WebUI: ${e.message}`);
+            notifyWebui("pending_print", { filename: uploadedPath, native_dialog_error: e.message });
+          } else if (e && e.keepPending) {
+            log("INFO", `Native dialog failed after pending print was already handled: ${uploadedPath}`);
+          } else {
+            log("ERROR", `Dialog error: ${e.message}`);
+            if (pendingPrintFile === uploadedPath) pendingPrintFile = "";
+          }
         }
       }
 
@@ -938,12 +985,7 @@ async function proxyToMoonraker(req, res, targetPath) {
   if (qs) url += `?${qs}`;
   log("DEBUG", `proxyToMoonraker: ${req.method} ${url} (req.url=${req.url})`);
 
-  const headers = { ...moonrakerHeaders() };
-  for (const [k, v] of Object.entries(req.headers)) {
-    if (!["host", "content-length", "transfer-encoding", "connection"].includes(k.toLowerCase())) {
-      headers[k] = v;
-    }
-  }
+  const headers = createMoonrakerProxyHeaders(req.headers, moonrakerHeaders());
 
   try {
     const opts = { method: req.method, headers };
@@ -962,9 +1004,8 @@ async function proxyToMoonraker(req, res, targetPath) {
     const body = Buffer.from(await r.arrayBuffer());
     log("DEBUG", `Proxy ${req.method} ${targetPath} → ${r.status} (${contentType}, ${body.length}b)`);
 
-    const skipHeaders = ["transfer-encoding", "connection"];
     for (const [k, v] of r.headers.entries()) {
-      if (!skipHeaders.includes(k.toLowerCase())) {
+      if (shouldForwardMoonrakerResponseHeader(k)) {
         res.setHeader(k, v);
       }
     }
@@ -1394,7 +1435,7 @@ app.get("/api/ai/fetch_printer_gcode.js", async (req, res) => {
 // Open gcode folder in system file explorer
 app.get("/api/ai/open_gcode_folder.js", async (req, res) => {
   const cb = req.query.cb || "callback";
-  const gcodeDir = (sliceAgent.GCODE_DIR && sliceAgent.GCODE_DIR()) || path.join(osAppData, "ai-lab", "gcode");
+  const gcodeDir = (sliceAgent.GCODE_DIR && sliceAgent.GCODE_DIR()) || path.join(APPDATA_DIR, "ai-lab", "gcode");
   // Ensure directory exists
   if (!fs.existsSync(gcodeDir)) fs.mkdirSync(gcodeDir, { recursive: true });
   const err = await openPathExternally(gcodeDir);
@@ -1437,9 +1478,8 @@ app.get("/webcam/{*path}", async (req, res) => {
   try {
     const r = await fetchWithTimeout(url, { headers: moonrakerHeaders() }, 30000);
     const body = Buffer.from(await r.arrayBuffer());
-    const skipHeaders = ["transfer-encoding", "connection"];
     for (const [k, v] of r.headers.entries()) {
-      if (!skipHeaders.includes(k.toLowerCase())) {
+      if (shouldForwardMoonrakerResponseHeader(k)) {
         res.setHeader(k, v);
       }
     }
@@ -1468,7 +1508,7 @@ function renderSetupPage() {
 <div class="divider">or enter manually</div>
 <form id="setup"><label>Printer IP Address</label><div class="ip-row"><input id="host" placeholder="192.168.1.12"></div><label>Moonraker Port</label><input id="port" value="80" type="number"><label>API Key (optional)</label><input id="apikey" placeholder="Leave empty if trusted_clients is configured"><button type="submit">Connect</button></form>
 <p class="hint">Tip: Make sure your printer is powered on and connected to the same network. Add <code>trusted_clients: 192.168.0.0/16</code> to your <code>moonraker.conf</code> [authorization] section to skip API Key.</p></div>
-<script>function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}function scanPrinters(){var btn=document.getElementById('scanBtn');var result=document.getElementById('scanResult');btn.disabled=true;btn.innerHTML='\\u23F3 Scanning...';result.className='scan-result';result.style.display='none';fetch('/api/bridge/scan?timeout=5').then(function(r){return r.json()}).then(function(d){btn.disabled=false;btn.innerHTML='\\uD83D\\uDD0D Scan Network';if(d.error){result.className='scan-result error';result.style.display='block';result.textContent='Scan error: '+d.error;return;}var printers=d.printers||[];if(printers.length===0){result.className='scan-result none';result.style.display='block';result.textContent='No Snapmaker printers found on your network.';return;}if(printers.length===1){var p=printers[0];document.getElementById('host').value=p.ip;result.className='scan-result found';result.style.display='block';result.innerHTML='Found: <b>'+escHtml(p.name)+'</b> at <b>'+escHtml(p.ip)+'</b>. Click Connect below.';}else{var html='Found '+printers.length+' printers (click to select):<br>';printers.forEach(function(p){html+='<div class="printer-item" data-ip="'+escHtml(p.ip)+'"><span class="p-name">'+escHtml(p.name)+'</span> <span class="p-ip">'+escHtml(p.ip)+'</span></div>';});result.className='scan-result found';result.style.display='block';result.innerHTML=html;result.querySelectorAll('.printer-item').forEach(function(el){el.onclick=function(){document.getElementById('host').value=el.dataset.ip;};});}}).catch(function(e){btn.disabled=false;btn.innerHTML='\\uD83D\\uDD0D Scan Network';result.className='scan-result error';result.style.display='block';result.textContent='Scan failed: '+e.message;});}document.getElementById('setup').onsubmit=function(e){e.preventDefault();var h=document.getElementById('host').value;var p=document.getElementById('port').value||'80';var k=document.getElementById('apikey').value;window.location.href='/?host='+encodeURIComponent(h)+'&port='+p+'&apikey='+encodeURIComponent(k);};</script></body></html>`;
+<script>function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}function scanPrinters(){var btn=document.getElementById('scanBtn');var result=document.getElementById('scanResult');btn.disabled=true;btn.innerHTML='\\u23F3 Scanning...';result.className='scan-result';result.style.display='none';fetch('/api/bridge/scan?timeout=5').then(function(r){return r.json()}).then(function(d){btn.disabled=false;btn.innerHTML='\\uD83D\\uDD0D Scan Network';if(d.error){result.className='scan-result error';result.style.display='block';result.textContent='Scan error: '+d.error;return;}var printers=d.printers||[];if(printers.length===0){result.className='scan-result none';result.style.display='block';result.textContent='No Snapmaker printers found on your network.';return;}if(printers.length===1){var p=printers[0];document.getElementById('host').value=p.ip;result.className='scan-result found';result.style.display='block';result.innerHTML='Found: <b>'+escHtml(p.name)+'</b> at <b>'+escHtml(p.ip)+'</b>. Click Connect below.';}else{var html='Found '+printers.length+' printers (click to select):<br>';printers.forEach(function(p){html+='<div class="printer-item" data-ip="'+escHtml(p.ip)+'"><span class="p-name">'+escHtml(p.name)+'</span> <span class="p-ip">'+escHtml(p.ip)+'</span></div>';});result.className='scan-result found';result.style.display='block';result.innerHTML=html;result.querySelectorAll('.printer-item').forEach(function(el){el.onclick=function(){document.getElementById('host').value=el.dataset.ip;};});}}).catch(function(e){btn.disabled=false;btn.innerHTML='\\uD83D\\uDD0D Scan Network';result.className='scan-result error';result.style.display='block';result.textContent='Scan failed: '+e.message;});}document.getElementById('setup').onsubmit=function(e){e.preventDefault();var h=document.getElementById('host').value;var p=document.getElementById('port').value||'80';var k=document.getElementById('apikey').value;var btn=this.querySelector('button[type=submit]');btn.disabled=true;fetch('/api/bridge/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({host:h,port:Number(p),apikey:k})}).then(function(r){return r.json();}).then(function(d){if(!d.ok)throw new Error(d.error||'Save failed');window.location.replace('/');}).catch(function(err){btn.disabled=false;alert('Save failed: '+err.message);});};</script></body></html>`;
 }
 
 function renderFallbackPage() {
@@ -1479,7 +1519,11 @@ function renderFallbackPage() {
 
 const server = http.createServer(app);
 
-const wss = new WebSocketServer({ server, path: "/websocket" });
+const wss = new WebSocketServer({
+  server,
+  path: "/websocket",
+  verifyClient: localAccess.verifyWebSocket,
+});
 
 wss.on("connection", (ws) => {
   bridgeWsClients.add(ws);
@@ -1495,7 +1539,7 @@ wss.on("connection", (ws) => {
   const pendingMsgs = [];
 
   try {
-    moonrakerWs = new WebSocket(moonrakerUrl);
+    moonrakerWs = new WebSocket(moonrakerUrl, moonrakerWebSocketOptions());
   } catch (e) {
     log("ERROR", `WS connect to Moonraker failed: ${e.message}`);
     ws.close(4002, e.message);
