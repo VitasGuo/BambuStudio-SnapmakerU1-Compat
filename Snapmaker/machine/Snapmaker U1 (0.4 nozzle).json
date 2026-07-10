@@ -8,7 +8,7 @@
     "printer_model": "Snapmaker U1",
     "default_print_profile": "0.20 Standard @Snapmaker U1",
     "default_filament_profile": [
-        "Snapmaker PLA @U1"
+        "Snapmaker PLA Basic @U1"
     ],
     "nozzle_diameter": [
         "0.4"

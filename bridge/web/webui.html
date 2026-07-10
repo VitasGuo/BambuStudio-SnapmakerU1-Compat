@@ -497,7 +497,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-u
 <div class="about-section">
 <h3 data-i18n="about_usage">Usage Guide</h3>
 <div style="font-size:13px;color:var(--text2);line-height:1.8">
-<div class="about-step"><span class="about-step-num">1</span><span data-i18n="about_step1">Install the compat pack (run install.bat as admin), then restart BambuStudio and add Snapmaker U1 printer</span></div>
+<div class="about-step"><span class="about-step-num">1</span><span data-i18n="about_step1">Install the compatibility pack with the supplied installer, then restart BambuStudio and add the Snapmaker U1 printer</span></div>
 <div class="about-step"><span class="about-step-num">2</span><span data-i18n="about_step2">Slice your model, click Print → select Print in the dialog → Bridge shows a confirmation dialog</span></div>
 <div class="about-step"><span class="about-step-num">3</span><span data-i18n="about_step3">In the confirmation dialog: review G-code info, adjust filament mapping (auto-matched by type, click dropdown to change), set print options</span></div>
 <div class="about-step"><span class="about-step-num">4</span><span data-i18n="about_step4">Start print → monitor progress and camera on the Device tab</span></div>
@@ -513,7 +513,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-u
 <li data-i18n="about_tip1">Filament colors in the dialog are labels from the slicer, not actual colors. Matching is based on filament type (PLA, PETG, TPU, etc.) only.</li>
 <li data-i18n="about_tip2">Multiple G-code slots can map to the same physical extruder (e.g. 4-color PLA printed with 1 spool).</li>
 <li data-i18n="about_tip3">If the camera doesn't update, try toggling it off and on again.</li>
-<li data-i18n="about_tip4">BambuStudio updates may overwrite configs — just re-run install.bat to restore.</li>
+<li data-i18n="about_tip4">If a BambuStudio update replaces the profiles, open the compatibility installer and install them again.</li>
 <li data-i18n="about_tip5">Bridge auto-detects printers via mDNS. If detection fails, open http://127.0.0.1:13628 to configure manually.</li>
 </ul>
 </div>
@@ -533,7 +533,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:'Segoe UI',system-u
 <div class="about-section">
 <h3 data-i18n="about_license">Open Source License</h3>
 <div style="font-size:13px;color:var(--text2);line-height:1.8">
-<p data-i18n="about_license_text">This project is licensed under AGPL-3.0. It references or incorporates code from the following open-source projects:</p>
+<p data-i18n="about_license_text">This project is licensed under GPL-3.0. It references or incorporates code from the following open-source projects:</p>
 <div style="margin-top:8px">
 <div style="margin-bottom:4px"><a href="javascript:void(0)" onclick="openExternal('https://github.com/SoftFever/OrcaSlicer')" style="color:var(--primary);text-decoration:none">OrcaSlicer</a> — AGPL-3.0</div>
 <div style="margin-bottom:4px"><a href="javascript:void(0)" onclick="openExternal('https://github.com/bambulab/BambuStudio')" style="color:var(--primary);text-decoration:none">BambuStudio</a> — AGPL-3.0</div>
@@ -651,7 +651,7 @@ layers:'layers',online:'Online',reconnecting:'Reconnecting...',ws_error:'WS Erro
 st_working:'Working',st_xyz_cal:'XYZ Calibrating',st_bed_cal:'Heated Bed Calibrating',st_flow_cal:'Flow Calibrating',st_vib_cal:'Vibration Compensation Calibrating',st_updating:'Updating',st_spring:'Manual Adjusting Spring Screw',st_auto_load:'Auto Loading',st_unloading:'Unloading',st_manual_load:'Manual Loading',st_dock_cal:'Docking Coordinate Calibrating',st_homing:'Homing Calibration...',st_offline:'Offline',
 st_homing2:'Homing',st_pei_detect:'PEI Sheet Placement Detection...',st_resuming:'Resuming printing...',st_paused:'Paused',st_resuming2:'Resuming print...',st_auto_reload:'Auto-reloading filament...',st_check_tool:'Checking toolheads...',st_auto_load2:'Auto-loading filament...',st_preextrude:'Pre-extruding...',st_auto_unload:'Auto-unloading filament...',st_bed_detect:'Bed detecting...',st_clean_nozzle:'Cleaning Nozzle',st_cool_nozzle:'Cooling Nozzle...',st_cal_toolhead:'Calibrating Toolhead',st_wiping:'Wiping Nozzle...',st_leveling:'Leveling progress...',st_cal_flow:'Calibrating extrusion flow',st_cal_vib:'Calibrating vibration compensation...',st_reset_pos:'Reset to Initial Position',st_sample_height:'Sampling to Calculate Reference Height',st_adjust_wheels:'Adjust Leveling Wheels',st_recheck:'Re-checking reference points...',st_extruder_dock_cal:'Extruder Docking Calibrating...',st_check_park:'Checking Extruder Park...',st_check_pick:'Checking Extruder Pick...',
 bridge_offline:'Bridge Offline',bridge_offline_msg:'Bridge server is not running. Please restart it or use Fluidd mode.',
-restart_bridge:'Restart Bridge',open_fluidd:'Open Fluidd',restart_failed:'Restart failed. Bridge process may have crashed.',restart_manual:'Bridge process appears to have crashed and cannot be restarted from WebUI.\n\nPlease run the following command in PowerShell:\nwscript "$env:APPDATA\\BambuStudio-Bridge\\start-hidden.vbs"\n\nOr restart BambuStudio.',
+restart_bridge:'Restart Bridge',open_fluidd:'Open Fluidd',restart_failed:'Restart failed. Bridge process may have crashed.',restart_manual:'Bridge appears to have stopped and cannot be restarted from WebUI.\n\nOpen the Snapmaker U1 Bridge app and restart the service, or restart BambuStudio.',
 file_name:'File',progress:'Progress',elapsed:'Elapsed',remaining:'Remaining',
 calibrating:'Calibrating...',printer_busy:'Printer is busy',
 no_pending:'No pending print',print_started:'Print started',print_failed:'Print failed',
@@ -659,13 +659,13 @@ ws_not_connected:'WebSocket not connected. Please wait and try again.',
 gcode_filament:'G-code',machine_filament:'Machine',filament_used:'used',filament_unused:'unused',filament_match:'Matched',filament_mismatch:'Type mismatch!',filament_none:'No filament',physical_slot:'Slot',
 gcode_info:'G-code Info',estimated_time:'Est. Time',estimated_weight:'Est. Weight',filament_mapping:'Filament Mapping',click_to_change:'Click to change',
 about:'About',about_desc:'Description',about_desc_text:'This compatibility pack enables BambuStudio to control Snapmaker U1 printers with a native-level experience, including print confirmation, filament mapping, camera monitoring, device control, AI Lab (G-code optimization + print assistant), and G-code Convert (BambuStudio→OrcaSlicer).',
-about_usage:'Usage Guide',about_step1:'Install the compat pack (run install.bat as admin), then restart BambuStudio and add Snapmaker U1 printer',about_step2:'Slice your model, click Print → select Print in the dialog → Bridge shows a confirmation dialog',about_step3:'In the confirmation dialog: review G-code info, adjust filament mapping (auto-matched by type, click dropdown to change), set print options',about_step4:'Start print → monitor progress and camera on the Device tab',about_step5:'Use Control panel for real-time adjustments: extruder/bed temp, fan speed, LED, print speed (5 presets)',about_step6:'AI Lab: G-code optimization (LLM diagnoses print issues and generates patches) + Print Assistant (streaming Q&A with thinking mode)',about_step7:'G-code Convert: convert BambuStudio G-code to OrcaSlicer-compatible format for direct printing on U1 device panel',
-about_tips:'Tips',about_tip1:'Filament colors in the dialog are labels from the slicer, not actual colors. Matching is based on filament type (PLA, PETG, TPU, etc.) only.',about_tip2:'Multiple G-code slots can map to the same physical extruder (e.g. 4-color PLA printed with 1 spool).',about_tip3:'If the camera doesn\'t update, try toggling it off and on again.',about_tip4:'BambuStudio updates may overwrite configs — just re-run install.bat to restore.',about_tip5:'Bridge auto-detects printers via mDNS. If detection fails, open http://127.0.0.1:13628 to configure manually.',
+about_usage:'Usage Guide',about_step1:'Install the compatibility pack with the supplied installer, then restart BambuStudio and add the Snapmaker U1 printer',about_step2:'Slice your model, click Print → select Print in the dialog → Bridge shows a confirmation dialog',about_step3:'In the confirmation dialog: review G-code info, adjust filament mapping (auto-matched by type, click dropdown to change), set print options',about_step4:'Start print → monitor progress and camera on the Device tab',about_step5:'Use Control panel for real-time adjustments: extruder/bed temp, fan speed, LED, print speed (5 presets)',about_step6:'AI Lab: G-code optimization (LLM diagnoses print issues and generates patches) + Print Assistant (streaming Q&A with thinking mode)',about_step7:'G-code Convert: convert BambuStudio G-code to OrcaSlicer-compatible format for direct printing on U1 device panel',
+about_tips:'Tips',about_tip1:'Filament colors in the dialog are labels from the slicer, not actual colors. Matching is based on filament type (PLA, PETG, TPU, etc.) only.',about_tip2:'Multiple G-code slots can map to the same physical extruder (e.g. 4-color PLA printed with 1 spool).',about_tip3:'If the camera doesn\'t update, try toggling it off and on again.',about_tip4:'If a BambuStudio update replaces the profiles, open the compatibility installer and install them again.',about_tip5:'Bridge auto-detects printers via mDNS. If detection fails, open http://127.0.0.1:13628 to configure manually.',
 about_github:'View on GitHub',about_update_hint:'Check GitHub for the latest version and updates',
 about_repo_url:'Repository URL:',
 update_checking:'Checking for updates...',update_check_fail:'Update check failed',update_available:'New version v{ver} available!',update_manual:'Please visit the repository URL above to download',update_latest:'You are on the latest version',
 about_author:'Author',about_ai:'Development Assistant',about_ai_text:'This project was developed with the assistance of ByteDance\'s Solo, using Zhipu AI\'s GLM-5.1 & 5.2.',
-about_license:'Open Source License',about_license_text:'This project is licensed under AGPL-3.0. It references or incorporates code from the following open-source projects:',
+about_license:'Open Source License',about_license_text:'This project is licensed under GPL-3.0. It references or incorporates code from the following open-source projects:',
 gcode_convert:'Convert'
 },
 zh:{
@@ -690,7 +690,7 @@ layers:'层',online:'已连接',reconnecting:'重连中...',ws_error:'连接错�
 st_working:'工作中',st_xyz_cal:'XYZ 校准中',st_bed_cal:'热床校准中',st_flow_cal:'流量校准中',st_vib_cal:'振动补偿校准中',st_updating:'更新中',st_spring:'手动调节弹簧螺丝',st_auto_load:'自动装料中',st_unloading:'卸料中',st_manual_load:'手动装料中',st_dock_cal:'挤出头对接校准中',st_homing:'回原点校准中...',st_offline:'离线',
 st_homing2:'回原点',st_pei_detect:'PEI 板检测中...',st_resuming:'恢复打印中...',st_paused:'已暂停',st_resuming2:'恢复打印中...',st_auto_reload:'自动重装耗材中...',st_check_tool:'检查喷头中...',st_auto_load2:'自动装料中...',st_preextrude:'预挤出中...',st_auto_unload:'自动卸料中...',st_bed_detect:'热床检测中...',st_clean_nozzle:'清洁喷嘴',st_cool_nozzle:'冷却喷嘴中...',st_cal_toolhead:'校准喷头',st_wiping:'擦拭喷嘴中...',st_leveling:'调平进行中...',st_cal_flow:'校准挤出流量',st_cal_vib:'校准振动补偿中...',st_reset_pos:'复位到初始位置',st_sample_height:'采样计算参考高度',st_adjust_wheels:'调节调平旋钮',st_recheck:'重新检查参考点...',st_extruder_dock_cal:'挤出头对接校准中...',st_check_park:'检查挤出头停靠位...',st_check_pick:'检查挤出头取放位...',
 bridge_offline:'Bridge 离线',bridge_offline_msg:'Bridge 服务器未运行，请重启或使用 Fluidd 模式。',
-restart_bridge:'重启 Bridge',open_fluidd:'打开 Fluidd',restart_failed:'重启失败，Bridge 进程可能已崩溃。',restart_manual:'Bridge 进程可能已崩溃，无法通过 WebUI 重启。\n\n请在 PowerShell 中运行：\nwscript "$env:APPDATA\\BambuStudio-Bridge\\start-hidden.vbs"\n\n或重启 BambuStudio。',
+restart_bridge:'重启 Bridge',open_fluidd:'打开 Fluidd',restart_failed:'重启失败，Bridge 进程可能已崩溃。',restart_manual:'Bridge 可能已停止，无法通过 WebUI 重启。\n\n请打开 Snapmaker U1 Bridge 应用并重启服务，或重启 BambuStudio。',
 file_name:'文件',progress:'进度',elapsed:'已用时间',remaining:'剩余时间',
 calibrating:'校准中...',printer_busy:'打印机工作中',
 no_pending:'无待打印任务',print_started:'打印已开始',print_failed:'打印失败',
@@ -698,13 +698,13 @@ ws_not_connected:'WebSocket 未连接，请稍后重试。',
 gcode_filament:'G-code',machine_filament:'设备',filament_used:'已使用',filament_unused:'未使用',filament_match:'已匹配',filament_mismatch:'类型不匹配！',filament_none:'无耗材',physical_slot:'槽位',
 gcode_info:'G-code 信息',estimated_time:'预估用时',estimated_weight:'预估用料',filament_mapping:'耗材映射',click_to_change:'点击切换',
 about:'关于',about_desc:'简介',about_desc_text:'本兼容包让 BambuStudio 能够原生级控制 Snapmaker U1 打印机，包括打印确认、耗材映射、摄像头监控、设备控制、AI 实验室（G-code 优化 + 打印助手）和 G-code 转换（BambuStudio→OrcaSlicer）。',
-about_usage:'使用说明',about_step1:'安装兼容包（管理员运行 install.bat），重启 BambuStudio 后添加 Snapmaker U1 打印机',about_step2:'切片模型，点击打印 → 在对话框选择 Print → Bridge 弹出确认框',about_step3:'确认框中：查看 G-code 信息，调整耗材映射（按类型自动匹配，点击下拉框可手动更改），设置打印选项',about_step4:'开始打印 → 在 Device 标签页监控进度和摄像头',about_step5:'使用 Control 面板实时调整：挤出头/热床温度、风扇、灯光、打印速度（5档预设）',about_step6:'AI 实验室：G-code 优化（LLM 诊断打印问题并生成补丁）+ 打印助手（流式问答，支持 Thinking 模式）',about_step7:'G-code 转换：将 BambuStudio G-code 转换为 OrcaSlicer 兼容格式，以便在 U1 设备面板直接打印',
-about_tips:'提示',about_tip1:'确认框中的耗材颜色是切片软件设置的标签，并非真实颜色。匹配仅基于耗材类型（PLA、PETG、TPU 等）。',about_tip2:'多个 G-code 槽位可以映射到同一个物理挤出头（例如4色 PLA 用1卷耗材打印）。',about_tip3:'如果摄像头画面不更新，尝试关闭后重新开启。',about_tip4:'BambuStudio 更新可能覆盖配置——重新运行 install.bat 即可恢复。',about_tip5:'Bridge 通过 mDNS 自动检测打印机。如果检测失败，打开 http://127.0.0.1:13628 手动配置。',
+about_usage:'使用说明',about_step1:'使用随附的安装程序安装兼容包，重启 BambuStudio 后添加 Snapmaker U1 打印机',about_step2:'切片模型，点击打印 → 在对话框选择 Print → Bridge 弹出确认框',about_step3:'确认框中：查看 G-code 信息，调整耗材映射（按类型自动匹配，点击下拉框可手动更改），设置打印选项',about_step4:'开始打印 → 在 Device 标签页监控进度和摄像头',about_step5:'使用 Control 面板实时调整：挤出头/热床温度、风扇、灯光、打印速度（5档预设）',about_step6:'AI 实验室：G-code 优化（LLM 诊断打印问题并生成补丁）+ 打印助手（流式问答，支持 Thinking 模式）',about_step7:'G-code 转换：将 BambuStudio G-code 转换为 OrcaSlicer 兼容格式，以便在 U1 设备面板直接打印',
+about_tips:'提示',about_tip1:'确认框中的耗材颜色是切片软件设置的标签，并非真实颜色。匹配仅基于耗材类型（PLA、PETG、TPU 等）。',about_tip2:'多个 G-code 槽位可以映射到同一个物理挤出头（例如4色 PLA 用1卷耗材打印）。',about_tip3:'如果摄像头画面不更新，尝试关闭后重新开启。',about_tip4:'如果 BambuStudio 更新覆盖了预设，请打开兼容包安装程序重新安装。',about_tip5:'Bridge 通过 mDNS 自动检测打印机。如果检测失败，打开 http://127.0.0.1:13628 手动配置。',
 about_github:'在 GitHub 上查看',about_update_hint:'前往 GitHub 获取最新版本和更新',
 about_repo_url:'仓库地址：',
 update_checking:'正在检查更新...',update_check_fail:'更新检查失败',update_available:'发现新版本 v{ver}！',update_manual:'请访问上方仓库地址下载更新',update_latest:'当前已是最新版本',
 about_author:'作者',about_ai:'开发助手',about_ai_text:'本项目使用字节跳动旗下的 Solo，配合智谱的 GLM-5.1&5.2 开发。',
-about_license:'开源协议',about_license_text:'本项目基于 AGPL-3.0 协议开源。参考或使用了以下开源项目的代码：',
+about_license:'开源协议',about_license_text:'本项目基于 GPL-3.0 协议开源。参考或使用了以下开源项目的代码：',
 gcode_convert:'转换'
 }
 };
@@ -1362,10 +1362,15 @@ function applyPrinterConfig(){
   var port=document.getElementById('cfgPort').value||'80';
   var apikeyInput=document.getElementById('cfgApiKey').value.trim();
   // Only send API key if user typed a new value (don't overwrite saved key with empty)
-  var apikeyParam=apikeyInput&&apikeyInput!=='[saved]'?'&apikey='+encodeURIComponent(apikeyInput):'';
+  var requestBody={host:host,port:Number(port)};
+  if(apikeyInput&&apikeyInput!=='[saved]')requestBody.apikey=apikeyInput;
   var hostBtn=document.querySelector('#printerConfigModal .modal-btn-print');
   if(hostBtn){hostBtn.disabled=true;hostBtn.textContent='Connecting...';}
-  bridgeGET('/api/bridge/save_config?host='+encodeURIComponent(host)+'&port='+port+apikeyParam,function(d){
+  fetch('/api/bridge/config',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(requestBody)
+  }).then(function(r){return r.json();}).then(function(d){
     closePrinterConfig();
     if(d&&d.ok){
       $('devIp').textContent=host+':'+port;
@@ -1374,6 +1379,9 @@ function applyPrinterConfig(){
       alert('Save failed: '+(d&&d.error||'no response'));
       if(hostBtn){hostBtn.disabled=false;hostBtn.textContent='Apply & Reconnect';}
     }
+  }).catch(function(e){
+    alert('Save failed: '+e.message);
+    if(hostBtn){hostBtn.disabled=false;hostBtn.textContent='Apply & Reconnect';}
   });
 }
 
@@ -1382,4 +1390,3 @@ function applyPrinterConfig(){
 <script src="gcvt.js?v=5.38.0"></script>
 </body>
 </html>
-

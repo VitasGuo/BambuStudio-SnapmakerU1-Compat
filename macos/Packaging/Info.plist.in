@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>zh_CN</string>
+    <key>CFBundleDisplayName</key>
+    <string>Snapmaker U1 Bridge (__TARGET_ARCH__)</string>
+    <key>CFBundleExecutable</key>
+    <string>SnapmakerU1Bridge</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.snapmaker.u1bridge</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Snapmaker U1 Bridge</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>__APP_VERSION__</string>
+    <key>CFBundleVersion</key>
+    <string>__BUILD_VERSION__</string>
+    <key>LSArchitecturePriority</key>
+    <array>
+        <string>__TARGET_ARCH__</string>
+    </array>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_snapmaker._tcp</string>
+    </array>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>用于发现并连接局域网中的 Snapmaker U1 打印机，以及运行本机 Bambu Studio Bridge。</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    <key>SnapmakerU1NodeVersion</key>
+    <string>22.23.1</string>
+    <key>SnapmakerU1TargetArchitecture</key>
+    <string>__TARGET_ARCH__</string>
+</dict>
+</plist>
