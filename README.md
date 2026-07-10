@@ -10,9 +10,9 @@
 
 ## 前置条件
 
-- **操作系统**：Windows 或 Linux
-- 已安装 **BambuStudio**（[官方下载](https://bambulab.com/en/download/bambu-studio)）
-- 已安装 **Node.js** 18+（[官方下载](https://nodejs.org)）
+- **操作系统**：Windows、Linux，或 macOS 11+
+- 已安装 **BambuStudio**（[官方下载](https://bambulab.com/en/download/bambu-studio)）；macOS 伴随 App 当前仅支持 **2.7.1.62**，不接受未验证的更新版本
+- Windows/Linux 需已安装 **Node.js** 18+（macOS App 已内置 Node.js 22.23.1）
 - Snapmaker U1 打印机与电脑处于**同一局域网**
 
 ---
@@ -29,10 +29,21 @@
 
 > 安装完成后，兼容包原目录可以删除，Bridge 和配置已集成到 BambuStudio 目录和 APPDATA 中。
 
-### 第二步：在 BambuStudio 中添加打印机
+#### macOS（独立伴随 App）
 
-1. **完全关闭** BambuStudio（确保进程已退出），然后重新打开
-2. 点击 **添加打印机** → 选择 **Snapmaker** 品牌 → **Snapmaker U1** → 选择喷嘴直径
+1. 安装官方 **Bambu Studio 2.7.1.62**。
+2. Apple Silicon 下载 `Snapmaker-U1-Bridge-arm64.dmg`；Intel Mac 下载 `Snapmaker-U1-Bridge-x86_64.dmg`。
+3. 将 App 拖入“应用程序”后打开，依次安装 U1 预设、Bridge 和登录启动项。
+4. 在 App 中扫描局域网或手动填写 U1 IP，保存后确认状态为“已就绪”。
+
+macOS 版只写入 `~/Library/Application Support` 和 `~/Library/LaunchAgents`，**不修改、不重签名 `BambuStudio.app`**。
+
+### 第二步：在 BambuStudio 中选择 U1
+
+1. 安装或更新 U1 预设前先**完全关闭** BambuStudio，完成后再重新打开。
+2. 进入“准备”页，在左上角当前打印机名称的**下拉列表**中选择 **Snapmaker U1**；工艺应随之切换为 `@Snapmaker U1`。
+
+> 不要从打印机栏右上角的齿轮“选择打印机”向导中查找 U1。Bambu Studio 2.7.1.62 的该向导只显示 App 内置厂商；macOS 伴随 App 会直接激活 U1，使它出现在当前打印机下拉列表中。
 
 > Bridge 会在首次启动时通过 mDNS 自动检测局域网内的 Snapmaker 打印机，无需手动输入 IP。
 
@@ -50,7 +61,9 @@
 
 ### 卸载
 
-右键 `uninstall.bat` → **以管理员身份运行**。脚本清理配置、Bridge 和缓存，保留用户自定义耗材预设。
+Windows：右键 `uninstall.bat` → **以管理员身份运行**。
+
+macOS：在伴随 App 中选择“完整卸载”。App 会停止 LaunchAgent、恢复安装前的 Snapmaker 预设备份，并删除本项目的运行时、配置和日志；最后可将 App 移入废纸篓。
 
 ---
 
@@ -88,6 +101,9 @@ BambuStudio-SnapmakerU1-Compat/
 ├── reinstall.bat / reinstall.ps1   # 重装脚本
 ├── uninstall.bat / uninstall.ps1   # 卸载脚本
 ├── install-common.psm1             # 安装脚本公共模块（v5.36.0+，14 个共享函数）
+├── macos/                          # SwiftUI/AppKit 伴随 App 与原生打印确认框
+├── scripts/build-macos.sh          # arm64 / x86_64 独立 App 与 DMG 构建
+├── scripts/verify-macos.sh         # 架构、签名、运行时与 DMG 验证
 ├── Snapmaker.json                  # 品牌配置入口
 ├── Snapmaker/                      # 切片配置目录
 │   ├── machine/                    # 打印机配置
@@ -118,6 +134,10 @@ BambuStudio-SnapmakerU1-Compat/
 - Bridge 目录复制到：`C:\Program Files\Bambu Studio\bridge\`
 - 配置文件保存在：`%APPDATA%\BambuStudio-Bridge\`
 - 日志文件：`%APPDATA%\BambuStudio-Bridge\bridge.log`
+- macOS Bridge 运行数据：`~/Library/Application Support/SnapmakerU1Bridge/`
+- macOS U1 预设：`~/Library/Application Support/BambuStudio/system/Snapmaker*`
+- macOS U1 启用项：`~/Library/Application Support/BambuStudio/BambuStudio.conf` 中的 `models`
+- macOS 登录启动项：`~/Library/LaunchAgents/com.snapmaker.u1bridge.plist`
 
 ---
 
@@ -195,7 +215,7 @@ Snapmaker U1 (Moonraker + Klipper)
 ## 常见问题
 
 **Q: 安装后 BambuStudio 中看不到 Snapmaker U1？**
-A: 完全关闭并重启 BambuStudio。检查文件是否正确复制到 `resources/profiles/` 目录。
+A: 完全退出 Bambu Studio，在 macOS 伴随 App 中再次执行“安装/更新 U1 预设”，然后重新打开 Bambu Studio，并从“准备”页左上角的当前打印机下拉列表选择 U1。不要在齿轮的系统机型向导里查找。伴随 App 会同时检查预设文件和 `BambuStudio.conf` 中的 U1 启用项。
 
 **Q: 切片后点击打印直接开始，没有弹出确认对话框？**
 A: 检查 Bridge 是否运行（任务管理器中查找 node 进程）。检查 `print_host` 是否指向 `http://127.0.0.1:13628`。查看日志 `%APPDATA%\BambuStudio-Bridge\bridge.log`。
@@ -272,7 +292,7 @@ A: v5.18.1 已修复此问题，安装脚本不再删除用户自定义预设。
 
 ## 许可证
 
-本项目基于 [GNU Affero General Public License v3.0](LICENSE) 发布。
+本项目根据仓库根目录的 [GNU General Public License v3.0](LICENSE) 发布。
 
 本项目的配置文件来源于以下开源项目：
 - **OrcaSlicer** — AGPL-3.0 — https://github.com/SoftFever/OrcaSlicer

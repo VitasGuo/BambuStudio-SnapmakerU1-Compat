@@ -7,8 +7,8 @@
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
-const os = require("os");
 const { AiClient, AI_PROVIDERS, extractErrorMessage } = require("./aiClient");
+const { getBridgeDataDir, getBambuStudioDataDir } = require("./paths");
 
 // Logging — uses server.js log if injected via setLogFn, otherwise console
 let _logFn = null;
@@ -64,8 +64,8 @@ function setAppDataDir(dir) {
   }
 }
 
-// 默认使用 APPDATA/BambuStudio-Bridge/ai-lab
-setAppDataDir(path.join(process.env.APPDATA || os.homedir(), "BambuStudio-Bridge", "ai-lab"));
+// server.js 会在启动时再次注入；此默认值保证模块独立使用时也走同一数据目录。
+setAppDataDir(path.join(getBridgeDataDir(), "ai-lab"));
 
 // ─── Workspace 系统：从 Markdown 文件加载 Agent 上下文 ───
 
@@ -304,16 +304,42 @@ async function testAiConnection(aiConfig) {
 
 // ─── G-code 文件管理 ───
 
+function isSafeGcodeName(gcodeName) {
+  if (typeof gcodeName !== "string" || !gcodeName || gcodeName.includes("\0")) return false;
+  if (Buffer.byteLength(gcodeName, "utf-8") > 255) return false;
+  if (gcodeName === "." || gcodeName === "..") return false;
+  if (path.extname(gcodeName).toLowerCase() !== ".gcode") return false;
+  // Check both separator conventions so a Windows-style traversal is rejected
+  // even when the Bridge itself is running on macOS/Linux (and vice versa).
+  return path.posix.basename(gcodeName) === gcodeName && path.win32.basename(gcodeName) === gcodeName;
+}
+
+function resolveFileWithinRoot(root, ...relativeParts) {
+  try {
+    const realRoot = fs.realpathSync(root);
+    const candidate = path.join(root, ...relativeParts);
+    const realCandidate = fs.realpathSync(candidate);
+    const relative = path.relative(realRoot, realCandidate);
+    if (!relative || relative.startsWith(`..${path.sep}`) || relative === ".." || path.isAbsolute(relative)) {
+      return null;
+    }
+    return fs.statSync(realCandidate).isFile() ? realCandidate : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function getGcodePath(gcodeName) {
+  if (!isSafeGcodeName(gcodeName)) return null;
   // First check AI Lab gcode dir
-  const filePath = path.join(GCODE_DIR, gcodeName);
-  if (fs.existsSync(filePath)) return filePath;
+  const filePath = resolveFileWithinRoot(GCODE_DIR, gcodeName);
+  if (filePath) return filePath;
   // Then search BambuStudio output dirs
-  const bambuDir = path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "BambuStudio");
+  const bambuDir = getBambuStudioDataDir();
   if (fs.existsSync(bambuDir)) {
     for (const sub of fs.readdirSync(bambuDir)) {
-      const subPath = path.join(bambuDir, sub, gcodeName);
-      try { if (fs.statSync(subPath).isFile()) return subPath; } catch (_) {}
+      const subPath = resolveFileWithinRoot(bambuDir, sub, gcodeName);
+      if (subPath) return subPath;
     }
   }
   return null;
@@ -325,7 +351,7 @@ function listGcodeFiles() {
   // Scan AI Lab gcode dir
   const dirs = [GCODE_DIR];
   // Also scan BambuStudio default output dirs
-  const bambuDir = path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "BambuStudio");
+  const bambuDir = getBambuStudioDataDir();
   if (fs.existsSync(bambuDir)) {
     // BambuStudio stores gcode in subdirs like "default/"
     for (const sub of fs.readdirSync(bambuDir).filter(s => {
@@ -1527,6 +1553,7 @@ module.exports = {
   cleanupQAStream,
   testAiConnection,
   getGcodePath,
+  isSafeGcodeName,
   listGcodeFiles,
   saveGcodeFile,
   patchGcode,
@@ -1536,6 +1563,7 @@ module.exports = {
   convertGcodeContent,
   setRawPathCache,
   setLogFn,
+  resolveFileWithinRoot,
   STL_DIR: () => STL_DIR,
   GCODE_DIR: () => GCODE_DIR,
   WORKSPACE_DIR: () => WORKSPACE_DIR,

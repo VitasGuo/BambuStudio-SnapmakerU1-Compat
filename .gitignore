@@ -8,7 +8,6 @@ bridge/bridge_config.json
 bridge/python/
 bridge-node/node_modules/
 bridge-node/dist/
-bridge-node/package-lock.json
 bridge-node/test_*.js
 bridge-node/test*.js
 bridge-node/diff_check*.js
@@ -16,3 +15,8 @@ bridge-node/voxelflow.exe
 bridge-node/voxelflow
 git_push_*
 compare_pla.py
+
+# macOS application build outputs and downloaded toolchains
+.cache/macos-build/
+macos/.build/
+dist/
