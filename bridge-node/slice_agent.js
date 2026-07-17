@@ -64,8 +64,13 @@ function setAppDataDir(dir) {
   }
 }
 
-// 默认使用 APPDATA/BambuStudio-Bridge/ai-lab
-setAppDataDir(path.join(process.env.APPDATA || os.homedir(), "BambuStudio-Bridge", "ai-lab"));
+// 默认使用 APPDATA/XDG_CONFIG/BambuStudio-Bridge/ai-lab
+setAppDataDir(path.join(
+  process.platform === "win32"
+    ? (process.env.APPDATA || os.homedir())
+    : (process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config")),
+  "BambuStudio-Bridge", "ai-lab"
+));
 
 // ─── Workspace 系统：从 Markdown 文件加载 Agent 上下文 ───
 
@@ -309,11 +314,18 @@ function getGcodePath(gcodeName) {
   const filePath = path.join(GCODE_DIR, gcodeName);
   if (fs.existsSync(filePath)) return filePath;
   // Then search BambuStudio output dirs
-  const bambuDir = path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "BambuStudio");
-  if (fs.existsSync(bambuDir)) {
-    for (const sub of fs.readdirSync(bambuDir)) {
-      const subPath = path.join(bambuDir, sub, gcodeName);
-      try { if (fs.statSync(subPath).isFile()) return subPath; } catch (_) {}
+  const bambuDirs = process.platform === "win32"
+    ? [path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "BambuStudio")]
+    : [
+        path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "BambuStudio"),
+        path.join(os.homedir(), ".var/app/com.bambulab.BambuStudio/config/BambuStudio"), // Flatpak
+      ];
+  for (const bambuDir of bambuDirs) {
+    if (fs.existsSync(bambuDir)) {
+      for (const sub of fs.readdirSync(bambuDir)) {
+        const subPath = path.join(bambuDir, sub, gcodeName);
+        try { if (fs.statSync(subPath).isFile()) return subPath; } catch (_) {}
+      }
     }
   }
   return null;
@@ -325,8 +337,14 @@ function listGcodeFiles() {
   // Scan AI Lab gcode dir
   const dirs = [GCODE_DIR];
   // Also scan BambuStudio default output dirs
-  const bambuDir = path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "BambuStudio");
-  if (fs.existsSync(bambuDir)) {
+  const bambuDirs = process.platform === "win32"
+    ? [path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "BambuStudio")]
+    : [
+        path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "BambuStudio"),
+        path.join(os.homedir(), ".var/app/com.bambulab.BambuStudio/config/BambuStudio"), // Flatpak
+      ];
+  for (const bambuDir of bambuDirs) {
+    if (!fs.existsSync(bambuDir)) continue;
     // BambuStudio stores gcode in subdirs like "default/"
     for (const sub of fs.readdirSync(bambuDir).filter(s => {
       try { return fs.statSync(path.join(bambuDir, s)).isDirectory(); } catch (_) { return false; }

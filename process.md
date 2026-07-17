@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.38.0 (2026-07-02)
+## 当前版本: v5.39.0 (2026-07-17)
 
 ---
 
@@ -56,6 +56,41 @@
 ---
 
 ## 版本历史
+
+### v5.39.0 (2026-07-17) — Linux 平台完整适配
+新增 Linux 安装/卸载/重装脚本，修正 Bridge 核心代码的跨平台路径，实现 Linux 上完整可用。
+
+**改动 1 — Bridge 核心路径跨平台**（traps.md #151）：
+- `server.js` APPDATA_DIR：Windows 用 `%APPDATA%`，Linux 用 `XDG_CONFIG_HOME`（~/.config/）
+- `slice_agent.js` 3 处路径：ai-lab 配置目录 + 2 处 BambuStudio gcode 搜索目录，同样跨平台处理
+- 所有改动保留 Windows 原有行为不变，仅添加 Linux 分支
+
+**改动 2 — Linux 安装脚本 install.sh**（9 步流程，镜像 install.ps1）：
+1. 检测 BambuStudio 安装（AppImage / .deb / 目录安装 / squashfs-root）
+2. 清除 system 缓存
+3. 保留用户自定义预设
+4. 清理 BambuStudio.conf 耗材缓存（node -e JSON 处理 + regex fallback）
+5. 修补用户 machine 配置 print_host
+6. 安装 Snapmaker profiles（可写目录直接复制 / AppImage 复制到用户 system 目录）
+7. 安装 Bridge Server 到 ~/.local/share/BambuStudio-Bridge/bridge/
+8. 验证关键文件
+9. 启动 Bridge + 创建自启动（systemd user service 优先，fallback .desktop autostart + cron 看门狗）
+
+**改动 3 — Linux 卸载/重装脚本**：
+- `uninstall.sh`：7 步清理（停止 Bridge → 禁用自启动 → 移除 profiles → 清理 conf → 恢复 machine 配置 → 删除 Bridge 文件 → 可选删除配置）
+- `reinstall.sh`：3 步（停止 Bridge → 删除旧 Bridge 数据 → 调用 install.sh）
+
+**改动 4 — Linux 启动器和看门狗**：
+- `bridge-node/start-bridge.sh`：通用启动器脚本
+- systemd user service 模板：Restart=always 内置看门狗，自动重启崩溃的 Bridge
+- .desktop autostart：桌面登录时自启动（systemd 不可用时的 fallback）
+- cron 看门狗：每 2 分钟检查端口，崩溃自动拉起（autostart 模式的 fallback）
+
+**改动 5 — 文档更新**：
+- README.md 增加 Linux 安装/卸载说明、BambuStudio 安装方式对比表、XDG 路径说明
+- 22 处版本号统一升级到 v5.39.0
+
+**验证**：`node --check` 语法通过（server.js / slice_agent.js）；29 个单元测试全部通过；Bridge 在 Linux 上启动成功，mDNS 自动检测命中打印机
 
 ### v5.38.0 (2026-07-02) — AI Lab/G-code 转换双语化 + 打印弹窗格式标识
 两项功能：(1) AI Lab 与 G-code 转换面板中英文双语化，跟随 WebUI 语言切换；(2) 打印确认弹窗显示 G-code 格式（BambuStudio/OrcaSlicer）并引导用户到转换工具（traps.md #149、#150）

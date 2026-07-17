@@ -1,5 +1,5 @@
 # install-common.psm1 - Shared functions for install.ps1 / reinstall.ps1 / uninstall.ps1
-# Snapmaker U1 BambuStudio Compatibility Pack v5.38.0
+# Snapmaker U1 BambuStudio Compatibility Pack v5.39.0
 #
 # Convention: functions that originally did `exit 1` now `throw` after printing the
 # user-facing message + Read-Host pause. Callers wrap with `try { ... } catch { exit 1 }`

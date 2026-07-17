@@ -1101,6 +1101,24 @@
 
 ---
 
+#151 ✅
+**现象**：BambuStudio 兼容包在 Linux 上无法正常安装使用：无 Linux 安装脚本、Bridge 配置路径硬编码 Windows 的 `%APPDATA%`（Linux 上生成 `~/AppData/Roaming/` 而非 `~/.config/`）、无开机自启和看门狗机制
+**根因**：
+1. `server.js` L16-L20 `APPDATA_DIR` 硬编码 `process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming")`，Linux 上 APPDATA 不存在，fallback 到 `~/AppData/Roaming/`（非 XDG 标准）
+2. `slice_agent.js` L68/L312/L328 同样硬编码 APPDATA 路径
+3. 只有 `install.ps1`/`install.bat`（PowerShell/CMD），无 `install.sh`
+4. 自启动用 Windows Startup 快捷方式 + VBS 隐藏启动，无 Linux 对应方案
+**解决方案**（v5.39.0）：
+1. **跨平台路径**：`server.js` L16-L22 和 `slice_agent.js` 3 处路径改为 `process.platform === "win32" ? APPDATA : XDG_CONFIG_HOME`，Windows 行为不变，Linux 用 `~/.config/`
+2. **install.sh**：9 步安装流程（镜像 install.ps1），检测 BambuStudio 安装方式（AppImage/.deb/目录/squashfs-root），用 `node -e` 处理 JSON 配置文件（避免 jq 依赖），systemd user service 优先 + .desktop autostart + cron 看门狗 fallback
+3. **uninstall.sh**：7 步清理，恢复用户 machine 配置
+4. **reinstall.sh**：3 步快速重装
+5. **start-bridge.sh**：通用启动器，systemd 和 autostart 共用
+6. **systemd user service**：`Restart=always` 内置看门狗，`systemctl --user enable/start bambustudio-bridge.service`
+7. **AppImage profiles**：AppImage 的 squashfs 只读，profiles 复制到 `~/.config/BambuStudio/system/`（可能被 BambuStudio 覆盖，提示用户可解压 AppImage 永久安装）
+
+---
+
 #142 ✅
 **现象**：server.js `renderSetupPage()` 的 mDNS 扫描结果页面中，`p.name` 和 `p.ip` 未转义直接拼入 `innerHTML`（L1430）。同一局域网的攻击者只需广播一个恶意的 mDNS 服务名（如 `<img src=x onerror="...">`），当用户在 setup 页面点击 "Scan Network" 时，恶意 JS 在 bridge 的 origin（localhost）下执行，可窃取配置或重定向打印机连接
 **根因**：setup 页面的内联 `<script>` 中直接用 `+p.name+` 和 `+p.ip+` 拼接 HTML，未调用任何转义函数。mDNS `service.name` 由 LAN 上的设备广播，完全可控

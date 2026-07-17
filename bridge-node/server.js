@@ -9,12 +9,15 @@ const fetch = require("node-fetch");
 const { showPrintDialog } = require("./dialog");
 const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.38.0";
+const BRIDGE_VERSION = "5.39.0";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
+// Cross-platform config directory (Windows: %APPDATA%, Linux: XDG_CONFIG_HOME)
 const APPDATA_DIR = path.join(
-  process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"),
+  process.platform === "win32"
+    ? (process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"))
+    : (process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config")),
   "BambuStudio-Bridge"
 );
 fs.mkdirSync(APPDATA_DIR, { recursive: true });
@@ -230,19 +233,19 @@ if (fs.existsSync(fluiddDir)) {
     res.status(404).send("Disabled");
     log("INFO", "Fluidd PWA manifest blocked");
   });
-  app.use("/fluidd", express.static(fluiddDir));
+  app.use("/fluidd", express.static(fluiddDir, { dotfiles: 'allow' }));
 }
 
 app.get("/fluidd/{*path}", (req, res) => {
   const indexPath = path.join(fluiddDir, "index.html");
   if (fs.existsSync(indexPath)) {
     log("DEBUG", `Fluidd SPA fallback: /fluidd/${wcPath(req)}`);
-    return res.sendFile(indexPath);
+    return res.sendFile(indexPath, { dotfiles: 'allow' });
   }
   return res.status(404).send("Fluidd not found");
 });
 
-app.get("/", (req, res) => {
+app.get(["/", "/webui.html"], (req, res) => {
   const { host, port, apikey } = req.query;
   
   // 始终先加载当前配置，保证状态一致性
@@ -261,30 +264,30 @@ app.get("/", (req, res) => {
   }
 
   const webuiPath = path.join(WEB_DIR, "webui.html");
-  if (fs.existsSync(webuiPath)) return res.sendFile(webuiPath);
+  if (fs.existsSync(webuiPath)) return res.sendFile(webuiPath, { dotfiles: 'allow' });
   return res.type("html").send(renderFallbackPage());
 });
 
 app.get("/snapmaker.png", (req, res) => {
   const imgPath = path.join(WEB_DIR, "snapmaker.png");
-  if (fs.existsSync(imgPath)) return res.sendFile(imgPath);
+  if (fs.existsSync(imgPath)) return res.sendFile(imgPath, { dotfiles: 'allow' });
   res.status(404).send("Not found");
 });
 
 // AI Lab static assets
 app.get("/ailab.css", (req, res) => {
   const p = path.join(WEB_DIR, "ailab.css");
-  if (fs.existsSync(p)) return res.sendFile(p);
+  if (fs.existsSync(p)) return res.sendFile(p, { dotfiles: 'allow' });
   res.status(404).end();
 });
 app.get("/ailab.js", (req, res) => {
   const p = path.join(WEB_DIR, "ailab.js");
-  if (fs.existsSync(p)) return res.sendFile(p);
+  if (fs.existsSync(p)) return res.sendFile(p, { dotfiles: 'allow' });
   res.status(404).end();
 });
 app.get("/gcvt.js", (req, res) => {
   const p = path.join(WEB_DIR, "gcvt.js");
-  if (fs.existsSync(p)) return res.sendFile(p);
+  if (fs.existsSync(p)) return res.sendFile(p, { dotfiles: 'allow' });
   res.status(404).end();
 });
 

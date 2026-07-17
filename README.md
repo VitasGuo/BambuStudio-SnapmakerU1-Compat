@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.38.0
+# Snapmaker U1 BambuStudio 兼容包 v5.39.0
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -29,6 +29,43 @@
 
 > 安装完成后，兼容包原目录可以删除，Bridge 和配置已集成到 BambuStudio 目录和 APPDATA 中。
 
+#### Linux（自动安装）
+
+```bash
+# 1. 确保已安装 Node.js 18+ 和 BambuStudio
+node --version  # 检查 Node.js
+
+# 2. 赋予执行权限并运行安装脚本
+chmod +x install.sh
+./install.sh
+```
+
+安装脚本自动执行：
+1. 检测 BambuStudio 安装路径（支持 AppImage / .deb / 目录安装）
+2. 清除旧的 system 缓存
+3. 清理 BambuStudio.conf 中的耗材缓存
+4. 修补用户 machine 配置的 `print_host` → `http://127.0.0.1:13628`
+5. 复制 Snapmaker profiles 到 BambuStudio 的 `resources/profiles/`
+6. 安装 Bridge Server 到 `~/.local/share/BambuStudio-Bridge/bridge/`
+7. 安装 npm 依赖
+8. 创建 systemd user service（或 .desktop autostart + cron 看门狗）
+9. 启动 Bridge Server
+
+**BambuStudio 安装方式说明**：
+
+| 安装方式 | profiles 安装位置 | 说明 |
+|----------|-------------------|------|
+| .deb 包 | `/opt/BambuStudio/resources/profiles/` | 直接写入，永久生效 |
+| 目录安装 | `<dir>/resources/profiles/` | 直接写入，永久生效 |
+| AppImage | `~/.config/BambuStudio/system/` | 用户缓存目录，BambuStudio 重启后可能被覆盖 |
+
+> AppImage 用户如需永久安装 profiles，建议先解压 AppImage（`./BambuStudio_*.AppImage --appimage-extract`），再用安装脚本指向 `squashfs-root/` 目录。
+
+**配置/日志路径**（Linux XDG 标准）：
+- Bridge 配置：`~/.config/BambuStudio-Bridge/`
+- Bridge 数据：`~/.local/share/BambuStudio-Bridge/`
+- BambuStudio 配置：`~/.config/BambuStudio/`
+
 ### 第二步：在 BambuStudio 中添加打印机
 
 1. **完全关闭** BambuStudio（确保进程已退出），然后重新打开
@@ -50,7 +87,20 @@
 
 ### 卸载
 
-右键 `uninstall.bat` → **以管理员身份运行**。脚本清理配置、Bridge 和缓存，保留用户自定义耗材预设。
+**Windows**：右键 `uninstall.bat` → **以管理员身份运行**。脚本清理配置、Bridge 和缓存，保留用户自定义耗材预设。
+
+**Linux**：
+```bash
+chmod +x uninstall.sh
+./uninstall.sh
+```
+脚本停止 Bridge、移除自启动、清理 profiles 和配置，保留用户自定义耗材预设。
+
+**重装（Linux）**：
+```bash
+chmod +x reinstall.sh
+./reinstall.sh
+```
 
 ---
 
