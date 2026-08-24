@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.39.0 (2026-07-17)
+## 当前版本: v5.44.0 (2026-08-24)
 
 ---
 
@@ -12,14 +12,15 @@
 ### ✅ 核心功能
 - 切片配置（1 打印机 + 10 工艺预设 + 80 耗材预设）
 - Bridge 代理服务器（HTTP + WebSocket）
-- 原生打印确认对话框（耗材映射 + 打印选项）
+- 原生打印确认对话框（耗材映射 + 打印选项，支持跨通道取消）
 - WebUI 设备控制面板（摄像头/温度/灯光/风扇/速度/打印控制）
 - Fluidd 集成（侧栏一键切换）
 - 中英文切换（WebUI + AI Lab 双语化）
 - About 页面（使用说明 + 版本更新检测）
 - AI 实验室（G-code 优化 + 打印助手，流式输出 + Thinking 模式，Workspace Markdown 系统）
 - G-code 转换（独立侧栏标签页，BambuStudio→OrcaSlicer 兼容格式转换）
-- 单元测试覆盖（node:test 框架，29 个测试覆盖 patchGcodeContent + convertGcodeContent 纯函数）
+- Tailscale 远程打印（v5.44.0+，随处连接 + 数据自主：确认交互跟随请求发起方、bind=tailnet 双监听、MagicDNS URL）
+- 单元测试覆盖（node:test 框架，44 个测试覆盖 patchGcodeContent + convertGcodeContent + isLocalAddress 纯函数）
 
 ### ✅ 打印流程（对齐 OrcaSlicer）
 1. `SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=x MAP_EXTRUDER=y` — 设置映射
@@ -56,6 +57,21 @@
 ---
 
 ## 版本历史
+
+### v5.44.0 (2026-08-24) — Tailscale 远程打印正式版
+
+**愿景**：随处连接自己的打印机，且数据完全自己掌控（WireGuard 端到端加密、无云依赖）。基于稳定分支 `linux-support` (v5.39.0) 拉新分支 `tailscale-remote-print` 全新实现（`tsnet-remote-access` 实验分支不带入，仅留历史参考）。
+
+**改动**：
+1. **确认交互跟随请求发起方**（server.js `handleUploadWithConfirm` + 新模块 `netUtils.js`）：本地请求（loopback）弹本地桌面对话框（行为不变）；远程请求（tailnet/LAN IP）跳过家里桌面弹窗，立即返回上传成功，`pendingPrintFile` 经 WS 推送，外网用户在 Device 标签页/浏览器 WebUI 弹出完全相同的耗材映射确认框，确认走既有分步打印命令
+2. **双通道竞争修复**（dialog.js + server.js）：`dialog.js` 跟踪活动对话框子进程，新增导出 `cancelActiveDialog()`；四个消费 `pendingPrintFile` 的端点（confirm_print POST/JS、cancel_pending POST/JS）消费后自动 kill 残留对话框——被 kill 的进程无 resultFile，promise resolve null（视为取消），消除 WebUI 确认后桌面对话框残留被误点导致重复打印的风险
+3. **bind 三态**（server.js + webui.html 设置弹窗）：`127.0.0.1`（默认）/ `tailnet`（推荐）/ `0.0.0.0`；tailnet 模式双监听 tailnet IP + 127.0.0.1（本地 BambuStudio 零改动，局域网其他设备不可达）；存储语义值 `tailnet` 而非具体 IP（Tailscale 重装换 IP 后重启仍正确解析）；检测不到 Tailscale 回退 loopback + WARN；新端点 `set_remote_access.js`（白名单校验 + needs_restart + enabled 旧参数兼容）
+4. **Tailscale 状态检测**：`tailscale status --json`（Windows 自动找 PATH/Program Files 的 tailscale.exe，3s 超时）取 MagicDNS 名 + 在线状态，网卡扫描 100.64.0.0/10 兜底；`tailscale_status.js` 端点返回完整信息（10s 缓存）；WebUI 设置弹窗显示状态 + 推荐 Remote URL（MagicDNS 优先）+ 一键复制
+5. **测试与验证**：新增 `test/net_utils.test.js`（16 个，总 44 个全过）；本机实测完整闭环——远程上传 64ms 立即返回 + 桌面零弹窗 + pending 正确挂起/消费/取消、本地上传弹对话框 + WebUI 取消后对话框自动关闭（日志确认）、netstat 确认只监听 tailnet IP + loopback（无 0.0.0.0）、set_remote_access 三态校验正确
+
+**用户决策记录**：信任 Tailscale 设备级认证，不加 token 等额外审核；远程请求与本地请求同等对待（交互跟随发起方，不做来源差异化限制）
+
+**遗留**：真实外网端到端（外网设备 BambuStudio Print → Device tab 确认 → 打印开始）需用户实际环境验证
 
 ### v5.39.0 (2026-07-17) — Linux 平台完整适配
 新增 Linux 安装/卸载/重装脚本，修正 Bridge 核心代码的跨平台路径，实现 Linux 上完整可用。

@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.39.0
+# Snapmaker U1 BambuStudio 兼容包 v5.44.0
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -122,7 +122,8 @@ chmod +x reinstall.sh
 | `bridge-node/server.js` | Express HTTP/WebSocket 代理服务器 |
 | `bridge-node/slice_agent.js` | AI Lab 核心：G-code 优化引擎 + G-code 转换引擎 + Workspace 系统 |
 | `bridge-node/aiClient.js` | AI 调用公共模块（AiClient 类 + AI_PROVIDERS + extractErrorMessage，v5.36.0+） |
-| `bridge-node/dialog.js` | 跨平台原生打印确认对话框 |
+| `bridge-node/dialog.js` | 跨平台原生打印确认对话框（v5.44.0+ 支持跨通道取消） |
+| `bridge-node/netUtils.js` | 请求来源判定（isLocalAddress，远程/本地确认交互分流，v5.44.0+） |
 | `bridge-node/package.json` | Node.js 依赖声明 |
 | `bridge-node/workspace/` | AI Agent Workspace（Soul/Knowledge/Skills/Memory Markdown） |
 | `bridge/web/webui.html` | WebUI 设备控制面板 |
@@ -148,6 +149,7 @@ BambuStudio-SnapmakerU1-Compat/
 │   ├── slice_agent.js              # AI Lab 优化引擎
 │   ├── aiClient.js                 # AI 调用公共模块（AiClient 类）
 │   ├── dialog.js                   # 原生对话框
+│   ├── netUtils.js                 # 请求来源判定（远程打印分流，v5.44.0+）
 │   ├── package.json                # 依赖声明
 │   └── workspace/                  # AI Agent Workspace
 │       ├── soul.md                 # Agent 身份与原则
@@ -202,6 +204,40 @@ BambuStudio
 Snapmaker U1 (Moonraker + Klipper)
 ```
 
+### 远程打印（Tailscale，v5.44.0+）
+
+在外网也能安全连接家里的打印机——**随处连接自己的打印机，数据完全自己掌控**（WireGuard 端到端加密，无云依赖，不经第三方服务器）。
+
+```
+外网 BambuStudio ──Tailscale 隧道(加密)──> 家里电脑 Bridge ──局域网──> Snapmaker U1
+
+  外网切片点 Print → 上传立即成功（家里桌面不弹窗）
+  → 外网 Device 标签页 / 浏览器弹耗材映射确认框（与本地完全相同）
+  → 确认 → 开始打印
+```
+
+**配置步骤**：
+
+1. 家里电脑和外部设备都安装 [Tailscale](https://tailscale.com/download) 并登录同一账号（免费版即可）
+2. 家里电脑：WebUI 齿轮设置 → Remote Access → 选 **Tailnet only (recommended)** → Apply → 重启 Bridge
+3. 复制显示的 Remote URL（推荐 MagicDNS 形式，如 `http://vitasguo-pc.tailxxxx.ts.net:13628`）
+4. 外部设备 BambuStudio：添加打印机，print_host 填该 URL（需外部设备也在同一 tailnet）
+5. 切片 → Print：上传立即返回，Device 标签页弹出耗材映射确认框，确认后开始打印
+
+**工作机制**：
+
+- **确认交互跟随请求发起方**：本地请求弹本地桌面对话框（行为不变）；远程请求跳过桌面弹窗，确认框出现在远程侧的 WebUI（Device 标签页内嵌）——家里电脑只做数据桥接
+- **bind=tailnet 双监听**：同时监听 tailnet IP（100.x.x.x）和 127.0.0.1——本地 BambuStudio 无需任何改动，局域网其他设备无法访问
+- **信任模型**：依赖 Tailscale 设备级认证（tailnet 内均为你自己的设备），Bridge 不额外加 token；tailnet 之外不可达
+
+**安全边界**：
+
+| bind 模式 | 监听地址 | 可访问者 |
+|-----------|---------|---------|
+| Local only（默认） | 127.0.0.1 | 仅本机 |
+| Tailnet only（推荐） | 100.x.x.x + 127.0.0.1 | 本机 + 你 tailnet 内的设备 |
+| All interfaces | 0.0.0.0 | 局域网所有设备（不推荐） |
+
 ### 关键设计决策
 
 | 决策 | 原因 |
@@ -211,6 +247,10 @@ Snapmaker U1 (Moonraker + Klipper)
 | CIEDE2000 颜色匹配 | RGB 空间不感知均匀，对齐 OrcaSlicer 原生实现 |
 | `patchGcodeLayout()` 上传时重组 gcode | BambuStudio CONFIG_BLOCK 在开头，Moonraker 只搜索文件末尾 |
 | Snapshot 轮询（非 MJPEG 流） | U1 不运行 mjpegstreamer，通过 `monitor.jpg` 单张 JPEG 实现 |
+| 远程确认交互跟随请求发起方（v5.44.0） | 家里电脑只做数据桥接：远程请求不弹家里桌面，确认框弹在远程侧 WebUI，体验与本地无感统一 |
+| bind=tailnet 双监听（v5.44.0） | 绑定 tailnet 专用地址（局域网不可达）+ loopback（本地 BambuStudio 零改动） |
+| 信任 Tailscale 设备认证，不加 token（v5.44.0） | tailnet 内均为自有设备；避免 BambuStudio 请求 URL 改造成本，保持零配置体验 |
+| `cancelActiveDialog()` 跨通道取消（v5.44.0） | WebUI 确认/取消后自动关闭残留的桌面对话框，消除双通道竞争导致的重复打印风险 |
 
 ### 设备控制功能
 
@@ -263,6 +303,7 @@ A: v5.18.1 已修复此问题，安装脚本不再删除用户自定义预设。
 
 ## 版本历史
 
+- **v5.44.0** (2026-08-24) - Tailscale 远程打印正式版：1) **确认交互跟随请求发起方**——本地请求弹本地桌面对话框（不变），远程请求跳过家里桌面弹窗、立即返回上传成功，确认框弹在远程侧 WebUI（Device 标签页），家里电脑纯数据桥接；2) **双通道竞争修复**——`dialog.js` 新增 `cancelActiveDialog()`，WebUI 确认/取消后自动关闭残留桌面对话框，消除重复打印风险；3) **bind 三态**（`127.0.0.1`/`tailnet`/`0.0.0.0`）——推荐 tailnet 模式双监听 tailnet IP + loopback，局域网不可达且本地 BambuStudio 零改动；4) **Tailscale 状态检测**——`tailscale status --json` 拿 MagicDNS 主机名 + 在线状态（网卡扫描兜底，10s 缓存），WebUI 设置弹窗显示推荐 Remote URL 一键复制；5) 新增 `netUtils.js`（isLocalAddress 纯函数）+ 16 个单元测试（总 44 个）
 - **v5.38.0** (2026-07-02) - AI Lab/G-code 转换双语化 + 打印弹窗格式标识（traps.md #149、#150）：1) `ailab.js` / `gcvt.js` 新增 `aiT(zh,en)` / `gcvtT(zh,en)` 翻译函数，IIFE 改为可重调用函数 + ApplyLang 函数，`setLang()` 末尾调用重新渲染面板，~90 个文本点全部双语化跟随 WebUI 语言切换；2) `server.js` 新增 `check_gcode_format.js` JSONP 端点（HTTP Range 下载前 32KB 检测格式），`showPrintDialog` 异步显示格式标识，BambuStudio 格式显示橙色警告 + "前往转换"跳转链接
 - **v5.37.3** (2026-06-29) - 修复上传超时回归 bug（traps.md #148）：v5.37.2 代码审查修复 M2 给上传/下载加了固定超时（120s/60s），大 G-code 文件在慢网络下超时被 abort，报 `HTTP 500: The user aborted a request`。上传和下载改回裸 `fetch`（无超时），列表操作保留 10s 超时
 - **v5.37.2** (2026-06-29) - 全量代码审查安全修复（traps.md #142-#147）：setup 页面 mDNS XSS（H1，添加 escHtml 转义）；dialog.js fetch timeout 遗漏标准化（M1，AbortController）；server.js 三处 AI Lab 端点裸 fetch 无超时（M2，fetchWithTimeout）；webui.html 文件列表双重转义失效 XSS（M3，data-path + dataset）；ailab.js/gcvt.js 转义函数缺单引号（M4，补齐 &#39;）；extruder_map_table GET query 无大小限制（M5，4096 字节 + Array 校验）；打印机设置弹窗 curHost/curPort 未转义（L1）

@@ -1179,3 +1179,17 @@
 **现象**：patchGcode 和 convertGcode 函数将文件 I/O（读文件 + 写文件）和核心逻辑混在一起，无法直接单元测试。测试需要创建临时文件、设置目录路径，脆弱且慢
 **根因**：v5.20.0 初版实现时函数直接操作文件系统，未分离 I/O 和逻辑
 **解决方案**（v5.37.0）：提取纯函数 `patchGcodeContent(content, patchPlan)` 和 `convertGcodeContent(content)`，只接受字符串内容、返回结果字符串，无文件 I/O 副作用。原 patchGcode/convertGcode 改为读文件 + 调用纯函数 + 写文件的薄包装。纯函数导出到 module.exports 供测试直接调用，28 个单元测试覆盖 5 种 patch 操作 + 格式检测 + 转换逻辑
+
+---
+
+#152 ✅
+**现象**：Bridge 启动日志报 `Failed to load config: Unexpected token '﻿', "﻿{"host":""... is not valid JSON`，配置加载失败回退默认值（printer_host 为空、bind 回 127.0.0.1），即使 bridge_config.json 内容看起来完全合法
+**根因**：Windows PowerShell 5.1 的 `Set-Content -Encoding UTF8` 和旧版记事本"UTF-8"保存会在文件头写入 BOM（`\uFEFF` 三字节 EF BB BF）。`fs.readFileSync(path, "utf-8")` 不会自动剥离 BOM，`JSON.parse` 遇到首字符 `\uFEFF` 直接抛 SyntaxError。server.js loadConfig（v5.39.0 及之前 L44-53）无 BOM 防御
+**解决方案**（v5.44.0）：loadConfig 读取后剥离 BOM：`fs.readFileSync(CONFIG_FILE, "utf-8").replace(/^\uFEFF/, "")` 再 JSON.parse。手工写配置文件时用 `[System.IO.File]::WriteAllText()`（无 BOM）或 PowerShell 7 的 `Set-Content -Encoding utf8NoBOM`
+
+---
+
+#153 ✅
+**现象**：`node --test test/net_utils.test.js test/patch_gcode.test.js test/convert_gcode.test.js` 三文件组合运行时 convert_gcode.test.js 偶发失败（报 `test failed` 无具体断言信息），单文件运行 12/12 全过，两两组合也全过；重跑三文件组合又 44/44 全过
+**根因**：node --test 默认按 CPU 核数并行起子进程跑测试文件，测试间存在偶发资源竞争（convert/patch 测试共享 slice_agent 模块与临时文件操作），非确定性失败
+**解决方案**（v5.44.0）：作为测试运行注意事项记录——组合运行偶发失败时先重跑确认是否偶发；CI 中可加 `--test-concurrency=1` 串行执行规避。测试代码本身无需改动

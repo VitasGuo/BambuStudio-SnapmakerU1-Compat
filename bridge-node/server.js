@@ -6,10 +6,11 @@ const os = require("os");
 const { spawn } = require("child_process");
 const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
-const { showPrintDialog } = require("./dialog");
+const { showPrintDialog, cancelActiveDialog } = require("./dialog");
+const { isLocalAddress } = require("./netUtils");
 const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.39.0";
+const BRIDGE_VERSION = "5.44.0";
 const DEFAULT_PORT = 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
@@ -31,7 +32,7 @@ const WEB_DIR = fs.existsSync(path.join(__dirname, "web", "webui.html"))
   ? path.join(__dirname, "web")
   : path.join(PROJECT_DIR, "bridge", "web");
 
-let printerConfig = { host: "", port: 80, apikey: "", mode: "webui" };
+let printerConfig = { host: "", port: 80, apikey: "", mode: "webui", bind: "127.0.0.1" };
 let aiConfig = { provider: "", model: "", apiKey: "", customBaseUrl: "" };
 let pendingPrintFile = "";
 let camMonitorActive = false;
@@ -42,7 +43,10 @@ const bridgeWsClients = new Set();
 function loadConfig() {
   if (fs.existsSync(CONFIG_FILE)) {
     try {
-      const data = JSON.parse(fs.readFileSync(CONFIG_FILE, "utf-8"));
+      // Strip UTF-8 BOM: Windows PowerShell 5.1 / Notepad "UTF-8" saves add it
+      // and JSON.parse chokes on the leading \uFEFF (traps.md #152)
+      const raw = fs.readFileSync(CONFIG_FILE, "utf-8").replace(/^\uFEFF/, "");
+      const data = JSON.parse(raw);
       printerConfig = { ...printerConfig, ...data };
       if (data.aiConfig) aiConfig = { ...aiConfig, ...data.aiConfig };
     } catch (e) {
@@ -58,6 +62,115 @@ function saveConfig() {
 function getBaseUrl() {
   if (!printerConfig.host) return "";
   return `http://${printerConfig.host}:${printerConfig.port}`;
+}
+
+// ── Tailscale detection (v5.44.0) ──
+// Two layers: `tailscale status --json` (authoritative: MagicDNS name + online
+// state) with a fallback to interface scanning for the 100.64.0.0/10 CGNAT
+// range (covers machines where the CLI is not on PATH).
+
+function detectTailscaleIP() {
+  const ifaces = os.networkInterfaces();
+  for (const name of Object.keys(ifaces)) {
+    for (const iface of ifaces[name] || []) {
+      if (iface.family === "IPv4" && !iface.internal) {
+        const parts = iface.address.split(".").map(Number);
+        if (parts.length === 4 && parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127) {
+          return iface.address;
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function findTailscaleBinary() {
+  if (process.platform === "win32") {
+    const candidates = [
+      "tailscale.exe",
+      path.join(process.env.ProgramFiles || "C:\\Program Files", "Tailscale", "tailscale.exe"),
+    ];
+    for (const c of candidates) {
+      try {
+        if (fs.existsSync(c)) return c;
+      } catch (_) {}
+    }
+    return null;
+  }
+  return "tailscale";
+}
+
+/**
+ * Run `tailscale status --json` and extract the self node info.
+ * Returns { ip, dns_name, online } or null when the CLI is unavailable.
+ */
+function queryTailscaleSelf() {
+  const bin = findTailscaleBinary();
+  if (!bin) return null;
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(bin, ["status", "--json"], { windowsHide: true });
+    } catch (_) {
+      resolve(null);
+      return;
+    }
+    let out = "";
+    let timer = setTimeout(() => {
+      try { child.kill(); } catch (_) {}
+      resolve(null);
+    }, 3000);
+    child.on("error", () => {
+      clearTimeout(timer);
+      resolve(null); // binary not found / not executable
+    });
+    child.stdout.on("data", (d) => { out += d.toString(); });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (code !== 0 || !out.trim()) { resolve(null); return; }
+      try {
+        const j = JSON.parse(out);
+        const self = j.Self || {};
+        let ip = null;
+        for (const a of self.TailscaleIPs || []) {
+          if (a && !a.includes(":")) { ip = a; break; }
+        }
+        resolve({
+          ip,
+          dns_name: (self.DNSName || "").replace(/\.+$/, "") || null,
+          online: self.Online === true,
+        });
+      } catch (_) {
+        resolve(null);
+      }
+    });
+  });
+}
+
+// 10s cache — tailscale_status.js is polled by the WebUI; spawning the CLI on
+// every JSONP request would be wasteful.
+let tailscaleInfoCache = { data: null, ts: 0 };
+const TAILSCALE_CACHE_MS = 10000;
+
+async function getTailscaleInfo() {
+  const now = Date.now();
+  if (tailscaleInfoCache.data && now - tailscaleInfoCache.ts < TAILSCALE_CACHE_MS) {
+    return tailscaleInfoCache.data;
+  }
+  let info = null;
+  try {
+    info = await queryTailscaleSelf();
+  } catch (_) {}
+  if (info) {
+    if (!info.ip) info.ip = detectTailscaleIP();
+  } else {
+    // CLI unavailable → fall back to interface scan
+    const ip = detectTailscaleIP();
+    if (ip) info = { ip, dns_name: null, online: true };
+  }
+  if (info && !info.ip) info = null; // DNS name without an IP is not usable
+  tailscaleInfoCache = { data: info, ts: now };
+  return info;
 }
 
 const logStream = fs.createWriteStream(LOG_FILE, { flags: "a", encoding: "utf-8" });
@@ -297,6 +410,7 @@ app.get("/api/bridge/config", (req, res) => {
     printer_host: printerConfig.host,
     printer_port: printerConfig.port,
     has_apikey: !!printerConfig.apikey,
+    bind: printerConfig.bind || "127.0.0.1",
   });
 });
 
@@ -308,6 +422,51 @@ app.get("/api/bridge/config.js", (req, res) => {
     printer_host: printerConfig.host,
     printer_port: printerConfig.port,
     has_apikey: !!printerConfig.apikey,
+    bind: printerConfig.bind || "127.0.0.1",
+  })});`);
+});
+
+// Toggle remote access by changing the listen bind (v5.44.0).
+// bind: "127.0.0.1" (local only) | "tailnet" (Tailscale interface only,
+// recommended) | "0.0.0.0" (all interfaces). Requires a bridge restart.
+// Legacy `enabled` param is still accepted: 1 → tailnet, 0 → 127.0.0.1.
+app.get("/api/bridge/set_remote_access.js", (req, res) => {
+  const cb = req.query.cb || "callback";
+  res.type("application/javascript");
+  try {
+    let bind = req.query.bind;
+    if (!bind && req.query.enabled !== undefined) {
+      bind = (req.query.enabled === "1" || req.query.enabled === "true") ? "tailnet" : "127.0.0.1";
+    }
+    if (!["127.0.0.1", "tailnet", "0.0.0.0"].includes(bind)) {
+      throw new Error("bind must be 127.0.0.1, tailnet or 0.0.0.0");
+    }
+    const changed = bind !== (printerConfig.bind || "127.0.0.1");
+    printerConfig.bind = bind;
+    saveConfig();
+    log("INFO", `Remote access bind=${bind} — ${changed ? "restart bridge to apply" : "no change"}`);
+    res.send(`${cb}(${JSON.stringify({ ok: true, bind, needs_restart: changed })});`);
+  } catch (e) {
+    res.send(`${cb}(${JSON.stringify({ ok: false, error: e.message })});`);
+  }
+});
+
+// Tailscale status — reports the tailnet IP, MagicDNS name and the URL the
+// remote BambuStudio should use as print_host. 10s cached.
+app.get("/api/bridge/tailscale_status.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  res.type("application/javascript");
+  const info = await getTailscaleInfo();
+  const bind = printerConfig.bind || "127.0.0.1";
+  res.send(`${cb}(${JSON.stringify({
+    installed: !!info,
+    online: info ? info.online : false,
+    ip: info ? info.ip : null,
+    dns_name: info ? info.dns_name : null,
+    remote_url: info ? `http://${info.ip}:${DEFAULT_PORT}` : null,
+    magicdns_url: info && info.dns_name ? `http://${info.dns_name}:${DEFAULT_PORT}` : null,
+    bind,
+    remote_access_ready: !!info && bind !== "127.0.0.1",
   })});`);
 });
 
@@ -406,6 +565,8 @@ app.post("/api/bridge/confirm_print", async (req, res) => {
   const options = req.body || {};
   const filename = pendingPrintFile;
   pendingPrintFile = "";
+  // Consumed via WebUI — close any lingering native desktop dialog
+  cancelActiveDialog();
 
   let script = `SDCARD_PRINT_FILE_WITH_PARAMETERS FILENAME="${filename}"`;
   for (const [k, v] of Object.entries(options)) {
@@ -427,6 +588,7 @@ app.post("/api/bridge/confirm_print", async (req, res) => {
 
 app.post("/api/bridge/cancel_pending", (req, res) => {
   pendingPrintFile = "";
+  cancelActiveDialog();
   res.json({ cancelled: true });
 });
 
@@ -456,6 +618,8 @@ app.get("/api/bridge/confirm_print.js", async (req, res) => {
   }
   const filename = pendingPrintFile;
   pendingPrintFile = "";
+  // Consumed via WebUI — close any lingering native desktop dialog
+  cancelActiveDialog();
   log("INFO", `Confirm print: filename=${filename} bed_level=${bedLevel} flow_cal=${flowCal} timelapse=${timelapse} map_table=${JSON.stringify(mapTable)}`);
   try {
     for (const [configExt, mapExt] of mapTable) {
@@ -520,6 +684,7 @@ app.get("/api/bridge/start_print.js", async (req, res) => {
 app.get("/api/bridge/cancel_pending.js", (req, res) => {
   const cb = req.query.cb || "callback";
   pendingPrintFile = "";
+  cancelActiveDialog();
   res.type("application/javascript");
   res.send(`${cb}(${JSON.stringify({ cancelled: true })});`);
 });
@@ -874,33 +1039,42 @@ async function handleUploadWithConfirm(req, res) {
 
       if (printFlag && uploadedPath) {
         pendingPrintFile = uploadedPath;
-        log("INFO", `Showing native dialog for: ${uploadedPath}`);
         notifyWebui("pending_print", { filename: uploadedPath });
 
-        try {
-          const dialogResult = await showPrintDialog(uploadedPath, getBaseUrl(), printerConfig.apikey);
-          pendingPrintFile = "";
+        if (isLocalAddress(req.socket.remoteAddress)) {
+          // Local request: confirmation pops the native desktop dialog (existing behavior)
+          log("INFO", `Showing native dialog for: ${uploadedPath}`);
+          try {
+            const dialogResult = await showPrintDialog(uploadedPath, getBaseUrl(), printerConfig.apikey);
+            pendingPrintFile = "";
 
-          if (dialogResult) {
-            let script = `SDCARD_PRINT_FILE_WITH_PARAMETERS FILENAME="${uploadedPath}"`;
-            for (const k of ["auto_bed_leveling", "flow_calibrate", "time_lapse_camera"]) {
-              if (k in dialogResult) {
-                script += ` ${k.toUpperCase()}=${dialogResult[k] ? "1" : "0"}`;
+            if (dialogResult) {
+              let script = `SDCARD_PRINT_FILE_WITH_PARAMETERS FILENAME="${uploadedPath}"`;
+              for (const k of ["auto_bed_leveling", "flow_calibrate", "time_lapse_camera"]) {
+                if (k in dialogResult) {
+                  script += ` ${k.toUpperCase()}=${dialogResult[k] ? "1" : "0"}`;
+                }
               }
+              log("INFO", `Dialog confirmed, sending: ${script}`);
+              try {
+                await sendGcode(script);
+                log("INFO", `Print started after dialog: ${uploadedPath}`);
+              } catch (e) {
+                log("ERROR", `Failed to start print after dialog: ${e.message}`);
+              }
+            } else {
+              log("INFO", `Dialog cancelled for: ${uploadedPath}`);
             }
-            log("INFO", `Dialog confirmed, sending: ${script}`);
-            try {
-              await sendGcode(script);
-              log("INFO", `Print started after dialog: ${uploadedPath}`);
-            } catch (e) {
-              log("ERROR", `Failed to start print after dialog: ${e.message}`);
-            }
-          } else {
-            log("INFO", `Dialog cancelled for: ${uploadedPath}`);
+          } catch (e) {
+            log("ERROR", `Dialog error: ${e.message}`);
+            pendingPrintFile = "";
           }
-        } catch (e) {
-          log("ERROR", `Dialog error: ${e.message}`);
-          pendingPrintFile = "";
+        } else {
+          // Remote request: the home machine stays a pure data bridge — no
+          // desktop popup. The pending print is announced to WebUI clients
+          // (the remote BambuStudio Device tab / browser) via WebSocket, and
+          // the requester confirms there with the same filament-mapping flow.
+          log("INFO", `Remote upload from ${req.socket.remoteAddress}: pending print ${uploadedPath}, awaiting remote confirmation via WebUI`);
         }
       }
 
@@ -1484,7 +1658,7 @@ const server = http.createServer(app);
 
 const wss = new WebSocketServer({ server, path: "/websocket" });
 
-wss.on("connection", (ws) => {
+function handleWsConnection(ws) {
   bridgeWsClients.add(ws);
   log("DEBUG", `WS client connected, total=${bridgeWsClients.size}`);
 
@@ -1560,7 +1734,9 @@ wss.on("connection", (ws) => {
     log("ERROR", `WS client error: ${err.message}`);
     bridgeWsClients.delete(ws);
   });
-});
+}
+
+wss.on("connection", handleWsConnection);
 
 loadConfig();
 sliceAgent.setAppDataDir(path.join(APPDATA_DIR, "ai-lab"));
@@ -1605,7 +1781,39 @@ async function autoDetectPrinter() {
   }
 }
 
-server.listen(DEFAULT_PORT, "127.0.0.1", async () => {
-  log("INFO", `Server listening on http://127.0.0.1:${DEFAULT_PORT}`);
+// Resolve the effective listen address from the bind preference (v5.44.0):
+// "127.0.0.1" (default, local only) | "tailnet" (Tailscale interface + a
+// loopback listener so local BambuStudio keeps working) | "0.0.0.0" (all
+// interfaces). Falls back to loopback when "tailnet" is requested but no
+// Tailscale interface is present.
+const bindPref = printerConfig.bind || "127.0.0.1";
+let listenHost = bindPref;
+if (bindPref === "tailnet") {
+  const tsIP = detectTailscaleIP();
+  if (tsIP) {
+    listenHost = tsIP;
+  } else {
+    listenHost = "127.0.0.1";
+    log("WARN", "bind=tailnet but no Tailscale interface found — falling back to 127.0.0.1");
+  }
+}
+
+server.listen(DEFAULT_PORT, listenHost, async () => {
+  log("INFO", `Server listening on http://${listenHost}:${DEFAULT_PORT} (bind=${bindPref})`);
+  if (listenHost !== "127.0.0.1" && listenHost !== "0.0.0.0") {
+    const info = await getTailscaleInfo();
+    if (info) log("INFO", `Tailscale remote URL: http://${info.ip}:${DEFAULT_PORT}` + (info.dns_name ? ` (MagicDNS: http://${info.dns_name}:${DEFAULT_PORT})` : ""));
+  }
   await autoDetectPrinter();
 });
+
+// bind=tailnet: keep serving loopback too, so the local BambuStudio
+// (print_host = http://127.0.0.1:13628) continues to work unchanged.
+if (listenHost !== "127.0.0.1" && listenHost !== "0.0.0.0") {
+  const loopbackServer = http.createServer(app);
+  const wssLoopback = new WebSocketServer({ server: loopbackServer, path: "/websocket" });
+  wssLoopback.on("connection", handleWsConnection);
+  loopbackServer.listen(DEFAULT_PORT, "127.0.0.1", () => {
+    log("INFO", `Loopback listener on http://127.0.0.1:${DEFAULT_PORT} (local access)`);
+  });
+}

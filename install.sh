@@ -1,8 +1,8 @@
 #!/bin/bash
-# Snapmaker U1 BambuStudio Compatibility Pack v5.39.0 - Linux Installer
+# Snapmaker U1 BambuStudio Compatibility Pack v5.44.0 - Linux Installer
 set -e
 
-VERSION="5.39.0"
+VERSION="5.44.0"
 BRIDGE_PORT=13628
 
 # Colors

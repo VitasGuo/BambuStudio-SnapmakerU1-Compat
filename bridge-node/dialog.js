@@ -5,6 +5,24 @@ const os = require("os");
 const path = require("path");
 const fetch = require("node-fetch");
 
+// Track the active dialog child process so it can be killed when the pending
+// print is consumed via another channel (WebUI confirm/cancel) — otherwise the
+// desktop dialog would linger and a later misclick would start a duplicate
+// print (v5.44.0 dual-channel race fix).
+let activeDialogProc = null;
+
+/**
+ * Kill the active native print-confirmation dialog (if any).
+ * The killed process writes no result file, so the awaiting promise resolves
+ * null (treated as cancel) — see showWindowsDialog / showLinuxDialog.
+ */
+function cancelActiveDialog() {
+  if (activeDialogProc) {
+    try { activeDialogProc.kill(); } catch (_) {}
+    activeDialogProc = null;
+  }
+}
+
 function makeResultFile() {
   return path.join(os.tmpdir(), `bambustudio_dialog_${process.pid}_${crypto.randomBytes(4).toString("hex")}.json`);
 }
@@ -244,11 +262,12 @@ async function showWindowsDialog(initData) {
   fs.writeFileSync(psPath, script, "utf-8");
 
   return new Promise((resolve) => {
-    execFile(
+    const child = execFile(
       "powershell.exe",
       ["-ExecutionPolicy", "Bypass", "-NoProfile", "-NonInteractive", "-File", psPath],
       { windowsHide: true, timeout: 300000 },
       (error) => {
+        if (activeDialogProc === child) activeDialogProc = null;
         try { fs.unlinkSync(psPath); } catch (_) {}
 
         if (fs.existsSync(resultFile)) {
@@ -270,6 +289,7 @@ async function showWindowsDialog(initData) {
         resolve(null);
       }
     );
+    activeDialogProc = child;
   });
 }
 
@@ -283,7 +303,8 @@ async function showLinuxDialog(initData) {
   const cmd = buildLinuxDialogScript(initData);
 
   return new Promise((resolve) => {
-    execFile("sh", ["-c", cmd], { timeout: 300000 }, (error, stdout) => {
+    const child = execFile("sh", ["-c", cmd], { timeout: 300000 }, (error, stdout) => {
+      if (activeDialogProc === child) activeDialogProc = null;
       if (error) {
         resolve(null);
         return;
@@ -303,6 +324,7 @@ async function showLinuxDialog(initData) {
         selected_extruders: selectedExtruders.length ? selectedExtruders : [0, 1, 2, 3],
       });
     });
+    activeDialogProc = child;
   });
 }
 
@@ -340,4 +362,4 @@ async function showPrintDialog(filename, baseUrl, apikey) {
   }
 }
 
-module.exports = { showPrintDialog };
+module.exports = { showPrintDialog, cancelActiveDialog };
