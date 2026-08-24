@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.46.0 (2026-08-24)
+## 当前版本: v5.47.0 (2026-08-24)
 
 ---
 
@@ -21,6 +21,7 @@
 - G-code 转换（独立侧栏标签页，BambuStudio→OrcaSlicer 兼容格式转换）
 - Tailscale 远程打印（v5.44.0+，随处连接 + 数据自主：确认交互跟随请求发起方、bind=tailnet 双监听、MagicDNS URL）
 - 级联架构（v5.46.0，两次 Bridge：外网 Bridge A 将家里 Bridge B 视为"打印机"，A 本地处理弹窗/切片/AI Lab，B 纯透传 Moonraker 流量；WebUI 图形化切换 Local printer / Remote Bridge 模式）
+- 级联网络优化（v5.47.0，keep-alive 连接池 + gzip 双层压缩 + 流式转发 + WS ping 保活 + 上传重试）
 - 单元测试覆盖（node:test 框架，52 个测试覆盖 patchGcodeContent + convertGcodeContent + isLocalRequest 纯函数）
 
 ### ✅ 打印流程（对齐 OrcaSlicer）
@@ -41,7 +42,7 @@
 2. **旧 gcode 无层进度**：`layer_change_gcode` 修复只影响新切片的 gcode，旧文件需重新切片。见 traps.md #105
 
 ### 📝 下一步
-1. 用户外网实测 v5.46.0 级联闭环（外网机安装包 → WebUI 切 Remote Bridge 填家里 serve URL → Test → 切片 Print → 外网机弹窗确认 → 打印）
+1. 用户外网实测 v5.47.0 网络优化效果（重点确认设备面板刷新流畅度——keep-alive 是"卡"的主修复项）
 2. 对齐 OrcaSlicer 挤出头取出/放回功能（server.js 中无相关代码，未开始）
 3. 优化 knowledge.md 按技能按需注入（当前全量 1254 行，每次 AI 调用消耗约 4000-6000 tokens）
 4. 扩充单元测试覆盖面（当前覆盖 patchGcode/convertGcode/isLocalRequest 纯函数，可扩展至 CIEDE2000 颜色匹配、extractGcodeStats 等）
@@ -59,6 +60,24 @@
 ---
 
 ## 版本历史
+
+### v5.47.0 (2026-08-24) — 级联链路网络效率优化 + 大文件传输稳定性
+
+**背景**：v5.46.0 外网实测级联可连但"卡"。逆向分析出 5 个网络层瓶颈：①每个代理请求新建 TCP+TLS 连接（跨 Tailscale 每次握手 +100~400ms，设备面板一次刷新几十个请求——卡的主因）②B→A 明文传输（gcode 文本压缩比 ~75% 白白浪费跨网带宽）③下载全内存缓冲 arrayBuffer（大文件 A/B 双份内存、首字节延迟）④WebSocket 无 ping 保活（Tailscale/NAT 空闲断连，面板状态更新卡死直到重连）⑤上传无重试（跨网抖动一次即失败）。
+
+**改动**（server.js）：
+1. **keep-alive 连接池**：`http.Agent`/`https.Agent`（keepAlive 15s，maxSockets 8），`agentFor(url)` 按协议分发；fetchWithTimeout 注入 agent，上传/下载/范围请求等全部 fetch 调用点统一接入——首次握手后连接复用，跨网每请求省 100-400ms
+2. **响应压缩**：express compression 中间件（threshold 1KB），filter 排除 JSONP（`cb=` 参数请求走 `<script>` 标签，老 WebView 不支持 gzip script，零风险豁免）；级联下双层生效——B 压缩转发响应（A 的 node-fetch 自动解压），A 对 BambuStudio/浏览器客户端再压缩；文件列表/gcode 文本跨网流量降 ~70-80%，JPEG/zip 已压内容自动跳过
+3. **流式转发**：proxyToMoonraker + webcam 代理 `arrayBuffer()` 缓冲改 `pipeline(r.body, res)` 流式透传——大文件下载零全量内存、首字节提前；超时语义不变（timer 仅守护到 headers 到达，body 慢不中断）
+4. **WS ping 保活**：handleWsConnection 对 moonrakerWs（A→B 或 B→Moonraker 跨网段）30s 协议 ping，连接关闭/错误时清理 timer；BambuStudio→A 是 localhost 无 NAT 问题不需 ping（其 WebView WebSocket API 也不支持）
+5. **上传自动重试**：`/server/files/upload` 提交遇瞬时网络错误（ECONNRESET/ETIMEDOUT/EPIPE/ECONNREFUSED/EAI_AGAIN）等 2s 重试 1 次；form-data 流只能消费一次，重试时重建 body；Moonraker 上传同文件名覆盖、幂等安全
+
+**大文件传输预案**（已内置 + 运维路径）：
+- 内置：上传无超时（traps.md #148）+ 瞬时错误重试 + 下载流式转发（146MB 实测 17.5s 完整）+ WS 保活防断连
+- 降级：级联链路质量差时，外网浏览器直接访问家里 serve URL（`https://<machine>.ts.net/fluidd`）操作 Fluidd/WebUI——不经级联的备通道
+- 上行带宽是硬约束：家里宽带上行 <5Mbps 时 100MB gcode 上传需 3 分钟以上，属物理极限非软件问题
+
+**验证**：52/52 单元测试；双实例级联实测——`/server/info` 正常、compression 两级生效（`/printer/objects/list` 响应 Content-Encoding: gzip，JSONP `config.js?cb=` 无压缩）、WS printer.info 级联往返 + 35s 跨 ping 周期连接存活、146.31MB gcode 级联流式下载 153,419,004 字节完整（17.46s）；keep-alive 效果依赖跨网 RTT，本机测试无法体现延迟差异，待用户外网实测确认
 
 ### v5.46.0 (2026-08-24) — 级联架构（两次 Bridge）+ WebUI 图形化连接配置
 

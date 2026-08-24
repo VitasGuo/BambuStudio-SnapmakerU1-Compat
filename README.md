@@ -234,6 +234,9 @@ Snapmaker U1 (Moonraker + Klipper)
 
 - **级联透传**：A 将 B 视为 Moonraker 端点（HTTP + WebSocket 全透明转发），打印机 apikey 只存 B 侧，A 无需持有任何打印机凭据；`BRIDGE_CONFIG_DIR`/`BRIDGE_PORT` 环境变量支持本机多实例调试
 - **确认交互在 A 本地**：弹窗/耗材映射在发起请求的外网机本地处理，家里电脑无人值守不受影响
+- **网络效率**（v5.47.0+）：keep-alive 连接池（跨网请求免重复 TLS 握手，面板刷新提速的主修复项）、gzip 双层压缩（文件列表/G-code 文本跨网流量降 ~70-80%，JPEG 等已压内容自动跳过）、大文件流式转发（146MB G-code 实测完整下载，双端零全量内存）
+- **稳定性保障**（v5.47.0+）：WebSocket 30s ping 保活（防 Tailscale/NAT 空闲断连）、上传瞬时网络错误自动重试（Moonraker 上传幂等，重试安全）、上传不限时（按文件大小×网速自然完成）
+- **大文件预案**：家里宽带上行是硬约束（上行 5Mbps 时 100MB G-code 上传约需 3 分钟，属物理极限）；级联链路异常时降级通道——外网浏览器直接访问 `https://<machine>.ts.net/fluidd` 操作 WebUI/Fluidd，不经级联
 - **serve 代理识别**（v5.44.1+）：`tailscale serve` 的代理连接来源是 loopback，但会携带 `X-Forwarded-For`（真实客户端 tailnet IP）——loopback + XFF 判为远程请求（traps.md #155），直接 socket 地址判定会误判
 - **信任模型**：依赖 Tailscale 设备级认证（tailnet 内均为你自己的设备），serve 仅 tailnet 可达（非 Funnel、不经公网），Bridge 不额外加 token
 
@@ -267,6 +270,8 @@ WebUI 齿轮设置 → Remote Access 可选监听模式，直连 `http://100.x.x
 | 安装器远程模式自动探测 + 改写 print_host（v5.45.0，v5.46.0 移除） | 命令行模式选择体验差；v5.46.0 改为 WebUI 图形化 Connection 区块（Local printer / Remote Bridge 单选 + Test 探测），安装器回归纯本地 |
 | 级联架构（两次 Bridge，v5.46.0） | 外网机 Bridge A 把家里 Bridge B 视为"打印机"：弹窗/切片/AI Lab 全在 A 本地处理，B 纯透传；打印机凭据只存 B 侧，外网体验与在家一致 |
 | 代理响应剥离 content-encoding/content-length（v5.46.0） | node-fetch 自动解压 gzip 后 body 已是明文，转发原编码头会让下游客户端 gunzip 失败（级联 A→B 必现，traps.md #161） |
+| keep-alive 连接池 + gzip 压缩 + 流式转发（v5.47.0） | 级联跨 Tailscale 每请求 TLS 握手 +100~400ms 是"卡"主因；文本流量压缩比 ~75%；arrayBuffer 全缓冲使大文件双端内存翻倍 |
+| JSONP 请求豁免压缩（v5.47.0） | JSONP 走 `<script>` 标签，老 WebView 不保证解压 gzip 响应；`cb=` 参数是 JSONP 特征，豁免零风险 |
 
 ### 设备控制功能
 

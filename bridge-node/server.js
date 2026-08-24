@@ -1,19 +1,34 @@
 const express = require("express");
 const http = require("http");
+const https = require("https");
 const path = require("path");
 const fs = require("fs");
 const os = require("os");
 const { spawn } = require("child_process");
+const { pipeline } = require("stream");
 const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
+const compression = require("compression");
 const { showPrintDialog, cancelActiveDialog } = require("./dialog");
 const { isLocalRequest } = require("./netUtils");
 const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.46.0";
+const BRIDGE_VERSION = "5.47.0";
 // BRIDGE_PORT env override (e.g. running a second local Bridge for testing)
 const DEFAULT_PORT = parseInt(process.env.BRIDGE_PORT, 10) || 13628;
 const MOONRAKER_TIMEOUT = 10000;
+
+// ── Keep-alive connection pool (v5.47.0) ──
+// Without this, every proxied request opens a fresh TCP+TLS connection. Over
+// Tailscale (cross-WAN, 30-100ms RTT) each handshake costs 100-400ms, and the
+// BambuStudio device panel fires dozens of requests per refresh — the main
+// source of "laggy" cascade remote printing. Reusing connections removes the
+// handshake from every request after the first.
+const keepAliveAgent = new http.Agent({ keepAlive: true, keepAliveMsecs: 15000, maxSockets: 8 });
+const keepAliveAgentHttps = new https.Agent({ keepAlive: true, keepAliveMsecs: 15000, maxSockets: 8 });
+function agentFor(url) {
+  return String(url).startsWith("https") ? keepAliveAgentHttps : keepAliveAgent;
+}
 
 // Cross-platform config directory (Windows: %APPDATA%, Linux: XDG_CONFIG_HOME).
 // BRIDGE_CONFIG_DIR env override allows a second instance (cascade testing,
@@ -237,7 +252,7 @@ function moonrakerHeaders() {
 function fetchWithTimeout(url, options = {}, timeoutMs = MOONRAKER_TIMEOUT) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  return fetch(url, { ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
+  return fetch(url, { agent: agentFor(url), ...options, signal: controller.signal }).finally(() => clearTimeout(timer));
 }
 
 async function moonrakerFetch(urlPath, options = {}) {
@@ -323,6 +338,19 @@ async function callMoonrakerJsonRpc(method, params = {}) {
 const app = express();
 
 app.set("etag", false);
+// v5.47.0: gzip responses ≥1KB for clients that send accept-encoding (the
+// upstream Bridge's node-fetch always does). Cuts cross-Tailscale transfer
+// of file listings / G-code text by ~70-80%. Already-compressed payloads
+// (JPEG snapshots, zips) are skipped by the content-type filter. JSONP
+// requests (cb= param, loaded via <script> tag) are excluded — some legacy
+// WebViews don't gunzip script responses.
+app.use(compression({
+  threshold: 1024,
+  filter: (req, res) => {
+    if (req.query && req.query.cb !== undefined) return false;
+    return compression.filter(req, res);
+  },
+}));
 app.use(express.raw({ type: ["application/octet-stream", "application/x-gcode"], limit: "500mb" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -1085,18 +1113,32 @@ async function handleUploadWithConfirm(req, res) {
       }
     }
     const FD = require("form-data");
-    const formData = new FD();
-    formData.append("file", fileContent, { filename: file.originalFilename });
-
-    const uploadHeaders = { ...moonrakerHeaders(), ...formData.getHeaders() };
     // No timeout for uploads: file size × network speed is uncontrollable.
     // Moonraker offline → TCP fails fast; Moonraker slow → must wait for large files.
     // Fixed timeout caused regression on large G-code (traps.md #148).
-    const uploadResp = await fetch(`${getBaseUrl()}/server/files/upload`, {
-      method: "POST",
-      headers: uploadHeaders,
-      body: formData,
-    });
+    // v5.47.0: retry once on transient network errors (cross-Tailscale
+    // cascade makes ECONNRESET/ETIMEDOUT plausible); a form-data stream can
+    // only be consumed once, so the body is rebuilt per attempt. Moonraker
+    // upload is idempotent (same filename overwrites), so a retry is safe.
+    const uploadUrl = `${getBaseUrl()}/server/files/upload`;
+    const buildUpload = () => {
+      const formData = new FD();
+      formData.append("file", fileContent, { filename: file.originalFilename });
+      return { formData, headers: { ...moonrakerHeaders(), ...formData.getHeaders() } };
+    };
+    let uploadResp;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const { formData, headers } = buildUpload();
+        uploadResp = await fetch(uploadUrl, { method: "POST", headers, body: formData, agent: agentFor(uploadUrl) });
+        break;
+      } catch (e) {
+        const retriable = ["ECONNRESET", "ETIMEDOUT", "EPIPE", "ECONNREFUSED", "EAI_AGAIN"].includes(e.code) || e.type === "system";
+        if (attempt >= 1 || !retriable) throw e;
+        log("WARN", `Upload attempt 1 failed (${e.code || e.message}), retrying once in 2s...`);
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
 
     const respData = await uploadResp.json();
     log("INFO", `Moonraker upload: status=${uploadResp.status}`);
@@ -1207,8 +1249,7 @@ async function proxyToMoonraker(req, res, targetPath) {
     }
     const r = await fetchWithTimeout(url, opts);
     const contentType = r.headers.get("content-type") || "";
-    const body = Buffer.from(await r.arrayBuffer());
-    log("DEBUG", `Proxy ${req.method} ${targetPath} → ${r.status} (${contentType}, ${body.length}b)`);
+    log("DEBUG", `Proxy ${req.method} ${targetPath} → ${r.status} (${contentType}, streaming)`);
 
     // node-fetch auto-decompresses gzip/deflate, so the body we forward is
     // already decoded — forwarding upstream content-encoding/content-length
@@ -1223,7 +1264,20 @@ async function proxyToMoonraker(req, res, targetPath) {
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.setHeader("Pragma", "no-cache");
 
-    return res.status(r.status).send(body);
+    // v5.47.0: stream the body instead of buffering (r.arrayBuffer() loaded
+    // whole files into memory on both cascade hops — large G-code downloads
+    // doubled RAM and delayed the first byte). fetchWithTimeout's timer only
+    // guards until headers arrive, so slow bodies are never aborted midway.
+    res.status(r.status);
+    if (req.method === "HEAD" || !r.body) {
+      return res.end();
+    }
+    pipeline(r.body, res, (err) => {
+      if (err) {
+        log("ERROR", `Proxy stream error ${req.method} ${targetPath}: ${err.message}`);
+        res.destroy();
+      }
+    });
   } catch (e) {
     log("ERROR", `Proxy error: ${e.message}`);
     return res.status(502).json({ error: e.message });
@@ -1400,10 +1454,12 @@ app.get("/api/ai/upload_to_printer.js", async (req, res) => {
     const formData = new FD();
     formData.append("file", fileContent, { filename: gcodeName });
     // No timeout for uploads: file size × network speed is uncontrollable (traps.md #148).
-    const uploadResp = await fetch(`${getBaseUrl()}/server/files/upload`, {
+    const uploadUrl2 = `${getBaseUrl()}/server/files/upload`;
+    const uploadResp = await fetch(uploadUrl2, {
       method: "POST",
       headers: { ...moonrakerHeaders(), ...formData.getHeaders() },
       body: formData,
+      agent: agentFor(uploadUrl2),
     });
     const respData = await uploadResp.json();
     if (uploadResp.status === 200 || uploadResp.status === 201) {
@@ -1576,8 +1632,10 @@ app.get("/api/ai/check_gcode_format.js", async (req, res) => {
     if (!hasUpstreamTarget()) throw new Error("No printer configured");
     const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
     // Range request: only download first 32KB for format detection
-    const resp = await fetch(`${getBaseUrl()}/server/files/gcodes/${encodedPath}`, {
+    const rangeUrl = `${getBaseUrl()}/server/files/gcodes/${encodedPath}`;
+    const resp = await fetch(rangeUrl, {
       headers: { ...moonrakerHeaders(), Range: "bytes=0-32767" },
+      agent: agentFor(rangeUrl),
     });
     if (!resp.ok && resp.status !== 206) throw new Error(`Moonraker download failed: ${resp.status}`);
     const buf = Buffer.from(await resp.arrayBuffer());
@@ -1614,8 +1672,10 @@ app.get("/api/ai/fetch_printer_gcode.js", async (req, res) => {
     // Download from Moonraker — encode path segments for URLs with spaces/CJK
     const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
     // No timeout for downloads: G-code files can be large, download time is uncontrollable.
-    const resp = await fetch(`${getBaseUrl()}/server/files/gcodes/${encodedPath}`, {
+    const dlUrl = `${getBaseUrl()}/server/files/gcodes/${encodedPath}`;
+    const resp = await fetch(dlUrl, {
       headers: moonrakerHeaders(),
+      agent: agentFor(dlUrl),
     });
     if (!resp.ok) throw new Error(`Moonraker download failed: ${resp.status} ${await resp.text().catch(()=>"")}`);
 
@@ -1688,7 +1748,6 @@ app.get("/webcam/{*path}", async (req, res) => {
   const url = `${getBaseUrl()}/webcam/${p}${qs}`;
   try {
     const r = await fetchWithTimeout(url, { headers: moonrakerHeaders() }, 30000);
-    const body = Buffer.from(await r.arrayBuffer());
     // node-fetch auto-decompresses gzip/deflate, so the body we forward is
     // already decoded — forwarding upstream content-encoding/content-length
     // makes clients try to gunzip plain text (zlib "incorrect header check",
@@ -1701,8 +1760,16 @@ app.get("/webcam/{*path}", async (req, res) => {
     }
     res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
     res.setHeader("Pragma", "no-cache");
-    log("DEBUG", `Webcam proxy: /webcam/${p} → ${r.status} (${body.length}b)`);
-    return res.status(r.status).send(body);
+    log("DEBUG", `Webcam proxy: /webcam/${p} → ${r.status} (streaming)`);
+    res.status(r.status);
+    if (!r.body) return res.end();
+    pipeline(r.body, res, (err) => {
+      if (err) {
+        log("ERROR", `Webcam stream error /webcam/${p}: ${err.message}`);
+        res.destroy();
+      }
+    });
+    return;
   } catch (e) {
     log("ERROR", `Webcam proxy error: ${e.message}`);
     return res.status(502).json({ error: e.message });
@@ -1759,6 +1826,21 @@ function handleWsConnection(ws) {
     ws.close(4002, e.message);
     return;
   }
+
+  // v5.47.0: keepalive ping — idle WebSocket/TCP paths through Tailscale or
+  // NAT middleboxes get dropped after minutes of silence; the next device-
+  // panel update then stalls until the client reconnects. A 30s protocol
+  // ping keeps the hop (Bridge A→B or B→Moonraker) permanently warm.
+  // BambuStudio's own WebView WebSocket cannot send pings, but its hop to
+  // this Bridge is localhost, which has no NAT problem.
+  const wsPingTimer = setInterval(() => {
+    if (moonrakerWs.readyState === WebSocket.OPEN) {
+      try { moonrakerWs.ping(); } catch (_) { /* socket dying; close handler cleans up */ }
+    }
+  }, 30000);
+  const stopPing = () => clearInterval(wsPingTimer);
+  moonrakerWs.on("close", stopPing);
+  moonrakerWs.on("error", stopPing);
 
   ws.on("message", (data) => {
     try {
