@@ -76,6 +76,8 @@
 
 **外网机使用流程**：安装兼容包（纯本地）→ WebUI 齿轮 → Connection → Remote Bridge → 填家里 `https://<machine>.ts.net` → Test 通过 → BambuStudio 正常使用（弹窗/切片/AI Lab 均在本机处理）
 
+**家用机部署状态**（2026-08-24）：v5.46.0 已部署 `%LOCALAPPDATA%\BambuStudio-Bridge\app`（deploy-home.ps1，Bridge 经 VBS 重启正常监听 13628，直连打印机模式）；分支 `tailscale-remote-print` 已推送 GitHub（VitasGuo/BambuStudio-SnapmakerU1-Compat）；安装包下载 `https://vitasguo-pc.tailc66d5e.ts.net/fluidd/BambuStudio-SnapmakerU1-v5.46.0.zip`（serve 链路 HTTP 200 已验证），旧 v5.45.0 包已移除
+
 ### v5.45.0 (2026-08-24) — 安装器远程模式：开箱即用
 
 **背景**：v5.44.1 远程链路已通（浏览器访问 serve URL 连接成功），但外网设备安装兼容包后 BambuStudio 仍默认进入"扫描局域网配置设备 IP"的初始界面，用户需手工改 machine JSON 的 print_host 才能连上家里 Bridge——差"最后一口气"。目标：安装即用，零手动配置。
