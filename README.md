@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.44.0
+# Snapmaker U1 BambuStudio 兼容包 v5.44.1
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
 
@@ -138,7 +138,10 @@ BambuStudio-SnapmakerU1-Compat/
 ├── install.bat / install.ps1       # 安装脚本
 ├── reinstall.bat / reinstall.ps1   # 重装脚本
 ├── uninstall.bat / uninstall.ps1   # 卸载脚本
-├── install-common.psm1             # 安装脚本公共模块（v5.36.0+，14 个共享函数）
+├── install-common.psm1             # 安装脚本公共模块（v5.36.0+，含 BambuStudio/Beta 双通道配置遍历）
+├── install.sh / reinstall.sh / uninstall.sh  # Linux 脚本（v5.39.0+）
+├── make-zip.ps1                    # 发布打包脚本
+├── deploy-home.ps1                 # 家用机 Bridge 一键部署脚本（v5.45.0+）
 ├── Snapmaker.json                  # 品牌配置入口
 ├── Snapmaker/                      # 切片配置目录
 │   ├── machine/                    # 打印机配置
@@ -204,39 +207,47 @@ BambuStudio
 Snapmaker U1 (Moonraker + Klipper)
 ```
 
-### 远程打印（Tailscale，v5.44.0+）
+### 远程打印（Tailscale 级联架构，v5.46.0+）
 
 在外网也能安全连接家里的打印机——**随处连接自己的打印机，数据完全自己掌控**（WireGuard 端到端加密，无云依赖，不经第三方服务器）。
 
-```
-外网 BambuStudio ──Tailscale 隧道(加密)──> 家里电脑 Bridge ──局域网──> Snapmaker U1
+采用**级联架构（两次 Bridge）**：外网机也运行本地 Bridge（A），A 把家里 Bridge（B）当作"打印机"——确认弹窗、切片、AI Lab 全在外网机本地处理，家里电脑只做纯数据透传，外网体验与在家完全一致。
 
-  外网切片点 Print → 上传立即成功（家里桌面不弹窗）
-  → 外网 Device 标签页 / 浏览器弹耗材映射确认框（与本地完全相同）
-  → 确认 → 开始打印
+```
+外网 BambuStudio ──> 外网机 Bridge A ──Tailscale 隧道(加密)──> 家里电脑 Bridge B ──局域网──> Snapmaker U1
+
+  外网切片点 Print → A 本地弹确认框（家里桌面不弹窗）
+  → 外网机确认 → A 经 B 透传 → 开始打印
 ```
 
-**配置步骤**：
+**配置步骤（推荐：Tailscale Serve，零防火墙配置）**：
 
 1. 家里电脑和外部设备都安装 [Tailscale](https://tailscale.com/download) 并登录同一账号（免费版即可）
-2. 家里电脑：WebUI 齿轮设置 → Remote Access → 选 **Tailnet only (recommended)** → Apply → 重启 Bridge
-3. 复制显示的 Remote URL（推荐 MagicDNS 形式，如 `http://vitasguo-pc.tailxxxx.ts.net:13628`）
-4. 外部设备 BambuStudio：添加打印机，print_host 填该 URL（需外部设备也在同一 tailnet）
-5. 切片 → Print：上传立即返回，Device 标签页弹出耗材映射确认框，确认后开始打印
+2. 家里电脑执行一次（无需管理员，重启/重连后自动生效，tailnet 需启用 HTTPS）：
+   `tailscale serve --bg http://127.0.0.1:13628`
+   —— 由 tailscaled 服务在本机 loopback 代理流量并自动签发 HTTPS 证书，Windows 防火墙无需放行 node.exe（traps.md #154）
+3. 外部设备安装本兼容包 v5.46.0+（纯本地安装，无任何模式选择）
+4. 外部设备打开 WebUI（http://127.0.0.1:13628 齿轮设置）→ Connection → 选 **Remote Bridge** → 填家里 serve 地址（如 `https://vitasguo-pc.tailxxxx.ts.net`，443 端口无需写端口号）→ 点 **Test** 显示 reachable → 保存
+5. 切片 → Print：上传立即返回，外网机弹出耗材映射确认框（与在家完全相同），确认后开始打印
 
 **工作机制**：
 
-- **确认交互跟随请求发起方**：本地请求弹本地桌面对话框（行为不变）；远程请求跳过桌面弹窗，确认框出现在远程侧的 WebUI（Device 标签页内嵌）——家里电脑只做数据桥接
-- **bind=tailnet 双监听**：同时监听 tailnet IP（100.x.x.x）和 127.0.0.1——本地 BambuStudio 无需任何改动，局域网其他设备无法访问
-- **信任模型**：依赖 Tailscale 设备级认证（tailnet 内均为你自己的设备），Bridge 不额外加 token；tailnet 之外不可达
+- **级联透传**：A 将 B 视为 Moonraker 端点（HTTP + WebSocket 全透明转发），打印机 apikey 只存 B 侧，A 无需持有任何打印机凭据；`BRIDGE_CONFIG_DIR`/`BRIDGE_PORT` 环境变量支持本机多实例调试
+- **确认交互在 A 本地**：弹窗/耗材映射在发起请求的外网机本地处理，家里电脑无人值守不受影响
+- **serve 代理识别**（v5.44.1+）：`tailscale serve` 的代理连接来源是 loopback，但会携带 `X-Forwarded-For`（真实客户端 tailnet IP）——loopback + XFF 判为远程请求（traps.md #155），直接 socket 地址判定会误判
+- **信任模型**：依赖 Tailscale 设备级认证（tailnet 内均为你自己的设备），serve 仅 tailnet 可达（非 Funnel、不经公网），Bridge 不额外加 token
 
-**安全边界**：
+**高级：直连模式（bind 三态，需管理员放行防火墙）**
+
+WebUI 齿轮设置 → Remote Access 可选监听模式，直连 `http://100.x.x.x:13628`：
 
 | bind 模式 | 监听地址 | 可访问者 |
 |-----------|---------|---------|
 | Local only（默认） | 127.0.0.1 | 仅本机 |
-| Tailnet only（推荐） | 100.x.x.x + 127.0.0.1 | 本机 + 你 tailnet 内的设备 |
+| Tailnet only | 100.x.x.x + 127.0.0.1 双监听 | 本机 + 你 tailnet 内的设备 |
 | All interfaces | 0.0.0.0 | 局域网所有设备（不推荐） |
+
+注意：直连模式要求 Windows 防火墙放行 node.exe 入站。若此前在防火墙弹窗点过"取消"，会残留自动生成的 Block 规则（优先级高于 Allow，必须管理员删除，traps.md #154）；serve 模式无此要求，推荐使用。
 
 ### 关键设计决策
 
@@ -251,6 +262,11 @@ Snapmaker U1 (Moonraker + Klipper)
 | bind=tailnet 双监听（v5.44.0） | 绑定 tailnet 专用地址（局域网不可达）+ loopback（本地 BambuStudio 零改动） |
 | 信任 Tailscale 设备认证，不加 token（v5.44.0） | tailnet 内均为自有设备；避免 BambuStudio 请求 URL 改造成本，保持零配置体验 |
 | `cancelActiveDialog()` 跨通道取消（v5.44.0） | WebUI 确认/取消后自动关闭残留的桌面对话框，消除双通道竞争导致的重复打印风险 |
+| 远程入口用 `tailscale serve`（v5.44.1） | tailscaled 在 loopback 代理 + 自动 HTTPS 证书，绕过 Windows 防火墙 node.exe Block 规则（traps.md #154），零配置零提权 |
+| loopback + `X-Forwarded-For` 判为远程（v5.44.1） | serve 代理请求 socket 来源是 127.0.0.1，只有识别 XFF 才能让确认交互跟随真实发起方（traps.md #155） |
+| 安装器远程模式自动探测 + 改写 print_host（v5.45.0，v5.46.0 移除） | 命令行模式选择体验差；v5.46.0 改为 WebUI 图形化 Connection 区块（Local printer / Remote Bridge 单选 + Test 探测），安装器回归纯本地 |
+| 级联架构（两次 Bridge，v5.46.0） | 外网机 Bridge A 把家里 Bridge B 视为"打印机"：弹窗/切片/AI Lab 全在 A 本地处理，B 纯透传；打印机凭据只存 B 侧，外网体验与在家一致 |
+| 代理响应剥离 content-encoding/content-length（v5.46.0） | node-fetch 自动解压 gzip 后 body 已是明文，转发原编码头会让下游客户端 gunzip 失败（级联 A→B 必现，traps.md #161） |
 
 ### 设备控制功能
 
@@ -303,6 +319,7 @@ A: v5.18.1 已修复此问题，安装脚本不再删除用户自定义预设。
 
 ## 版本历史
 
+- **v5.44.1** (2026-08-24) - Tailscale Serve 远程打印适配：部署时发现 Windows 防火墙存在 node.exe 入站 Block 规则（防火墙弹窗点"取消"自动生成，优先级高于 Allow，traps.md #154），直连模式外网不可达且无管理员权限无法删除。改用 `tailscale serve`（tailscaled 在 loopback 代理 + 自动 HTTPS 证书，零防火墙配置）：1) `netUtils.js` 新增 `isLocalRequest(req)`——loopback 且无 `X-Forwarded-For` 才判本地，loopback + XFF = 经 serve 代理的远程请求（traps.md #155），修复 serve 场景下远程上传误弹家里桌面对话框；2) README 远程打印章节重写：serve 为推荐路径，bind 直连降级为高级模式；3) 单元测试新增 8 个 isLocalRequest 用例（总 52 个）
 - **v5.44.0** (2026-08-24) - Tailscale 远程打印正式版：1) **确认交互跟随请求发起方**——本地请求弹本地桌面对话框（不变），远程请求跳过家里桌面弹窗、立即返回上传成功，确认框弹在远程侧 WebUI（Device 标签页），家里电脑纯数据桥接；2) **双通道竞争修复**——`dialog.js` 新增 `cancelActiveDialog()`，WebUI 确认/取消后自动关闭残留桌面对话框，消除重复打印风险；3) **bind 三态**（`127.0.0.1`/`tailnet`/`0.0.0.0`）——推荐 tailnet 模式双监听 tailnet IP + loopback，局域网不可达且本地 BambuStudio 零改动；4) **Tailscale 状态检测**——`tailscale status --json` 拿 MagicDNS 主机名 + 在线状态（网卡扫描兜底，10s 缓存），WebUI 设置弹窗显示推荐 Remote URL 一键复制；5) 新增 `netUtils.js`（isLocalAddress 纯函数）+ 16 个单元测试（总 44 个）
 - **v5.38.0** (2026-07-02) - AI Lab/G-code 转换双语化 + 打印弹窗格式标识（traps.md #149、#150）：1) `ailab.js` / `gcvt.js` 新增 `aiT(zh,en)` / `gcvtT(zh,en)` 翻译函数，IIFE 改为可重调用函数 + ApplyLang 函数，`setLang()` 末尾调用重新渲染面板，~90 个文本点全部双语化跟随 WebUI 语言切换；2) `server.js` 新增 `check_gcode_format.js` JSONP 端点（HTTP Range 下载前 32KB 检测格式），`showPrintDialog` 异步显示格式标识，BambuStudio 格式显示橙色警告 + "前往转换"跳转链接
 - **v5.37.3** (2026-06-29) - 修复上传超时回归 bug（traps.md #148）：v5.37.2 代码审查修复 M2 给上传/下载加了固定超时（120s/60s），大 G-code 文件在慢网络下超时被 abort，报 `HTTP 500: The user aborted a request`。上传和下载改回裸 `fetch`（无超时），列表操作保留 10s 超时

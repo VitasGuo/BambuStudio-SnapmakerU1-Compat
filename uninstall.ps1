@@ -1,11 +1,11 @@
 Import-Module "$PSScriptRoot\install-common.psm1"
 Set-ConsoleUtf8
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.44.0 Uninstaller"
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.46.0 Uninstaller"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.44.0 Uninstall" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.46.0 Uninstall" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -127,14 +127,11 @@ Write-Host "  [OK] System cache cleared" -ForegroundColor Green
 Write-Host "  Note: User custom presets are preserved" -ForegroundColor DarkGray
 
 Write-Host "  [6/7] Cleaning BambuStudio.conf..." -ForegroundColor White
-$confPath = "$env:APPDATA\BambuStudioBeta\BambuStudio.conf"
-if (Test-Path $confPath) {
-    $result = Clean-SnapmakerEntriesFromConf
-    if ($result -eq "Cleaned") {
-        Write-Host "  [OK] Cleaned Snapmaker cache entries (backup: .bak)" -ForegroundColor Green
-    } elseif ($result -eq "NoChange") {
-        Write-Host "  [--] No Snapmaker cache entries found" -ForegroundColor DarkGray
-    }
+$result = Clean-SnapmakerEntriesFromConf
+if ($result -eq "Cleaned") {
+    Write-Host "  [OK] Cleaned Snapmaker cache entries (backup: .bak)" -ForegroundColor Green
+} elseif ($result -eq "NoChange") {
+    Write-Host "  [--] No Snapmaker cache entries found" -ForegroundColor DarkGray
 } else {
     Write-Host "  [--] BambuStudio.conf not found" -ForegroundColor DarkGray
 }

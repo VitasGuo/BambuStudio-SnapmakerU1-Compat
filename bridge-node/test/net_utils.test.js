@@ -1,10 +1,14 @@
 /**
- * Unit tests for netUtils.isLocalAddress (pure function).
+ * Unit tests for netUtils isLocalAddress / isLocalRequest (pure functions).
  * Run with: node --test test/net_utils.test.js
  */
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
-const { isLocalAddress } = require("../netUtils");
+const { isLocalAddress, isLocalRequest } = require("../netUtils");
+
+function mockReq(addr, headers) {
+  return { socket: { remoteAddress: addr }, headers: headers || {} };
+}
 
 describe("isLocalAddress — loopback variants", () => {
   it("accepts IPv4 loopback", () => {
@@ -71,5 +75,41 @@ describe("isLocalAddress — invalid input", () => {
 
   it("rejects non-string input", () => {
     assert.equal(isLocalAddress(12345), false);
+  });
+});
+
+describe("isLocalRequest — reverse-proxy awareness (tailscale serve)", () => {
+  it("direct loopback request without proxy header is local", () => {
+    assert.equal(isLocalRequest(mockReq("127.0.0.1")), true);
+  });
+
+  it("loopback with X-Forwarded-For is remote (tailscale serve proxy)", () => {
+    assert.equal(isLocalRequest(mockReq("127.0.0.1", { "x-forwarded-for": "100.101.102.103" })), false);
+  });
+
+  it("IPv6 loopback with X-Forwarded-For is remote", () => {
+    assert.equal(isLocalRequest(mockReq("::1", { "x-forwarded-for": "100.64.0.1" })), false);
+  });
+
+  it("IPv4-mapped loopback with X-Forwarded-For is remote", () => {
+    assert.equal(isLocalRequest(mockReq("::ffff:127.0.0.1", { "x-forwarded-for": "100.96.74.91" })), false);
+  });
+
+  it("multi-hop X-Forwarded-For chain still counts as remote", () => {
+    assert.equal(isLocalRequest(mockReq("127.0.0.1", { "x-forwarded-for": "100.1.1.1, 100.2.2.2" })), false);
+  });
+
+  it("tailnet address without headers is remote", () => {
+    assert.equal(isLocalRequest(mockReq("100.96.74.91")), false);
+  });
+
+  it("LAN address without headers is remote", () => {
+    assert.equal(isLocalRequest(mockReq("192.168.1.50")), false);
+  });
+
+  it("missing socket or request object is safely non-local", () => {
+    assert.equal(isLocalRequest({ headers: {} }), false);
+    assert.equal(isLocalRequest(null), false);
+    assert.equal(isLocalRequest(undefined), false);
   });
 });

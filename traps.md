@@ -1193,3 +1193,73 @@
 **现象**：`node --test test/net_utils.test.js test/patch_gcode.test.js test/convert_gcode.test.js` 三文件组合运行时 convert_gcode.test.js 偶发失败（报 `test failed` 无具体断言信息），单文件运行 12/12 全过，两两组合也全过；重跑三文件组合又 44/44 全过
 **根因**：node --test 默认按 CPU 核数并行起子进程跑测试文件，测试间存在偶发资源竞争（convert/patch 测试共享 slice_agent 模块与临时文件操作），非确定性失败
 **解决方案**（v5.44.0）：作为测试运行注意事项记录——组合运行偶发失败时先重跑确认是否偶发；CI 中可加 `--test-concurrency=1` 串行执行规避。测试代码本身无需改动
+
+---
+
+#154 ✅
+**现象**：外网设备经 Tailscale 直连家里 Bridge（bind=tailnet，`http://100.x.x.x:13628`）连接超时，但家里本机 curl 同地址正常、Bridge 日志无任何请求记录；本机模拟远程（curl 自己的 tailnet IP）走的也是内部环回路径，测不出该问题
+**根因**：Windows 首次弹"允许 node.js 通信"窗口时点了"取消"，防火墙自动生成两条入站 Block 规则（`TCP/UDP Query User{...}C:\program files\nodejs\node.exe`，Private+Public 全端口全地址）；且 Windows 防火墙 Block 规则优先级高于 Allow——即使再新建放行规则也无效，必须删除 Block 规则（需管理员）。本机自连不经过防火墙入站过滤，所以本地测试永远发现不了
+**解决方案**（v5.44.1）：首选 `tailscale serve --bg http://127.0.0.1:13628`——tailscaled 服务在本机 loopback 代理流量，完全绕过防火墙，无需提权；若要直连模式，管理员 PowerShell 执行：`Get-NetFirewallRule -Direction Inbound | Where-Object { $_.DisplayName -like "*node*" -and $_.Action -eq "Block" } | Remove-NetFirewallRule; New-NetFirewallRule -DisplayName "BambuStudio Bridge (Tailscale)" -Direction Inbound -Protocol TCP -LocalPort 13628 -RemoteAddress 100.64.0.0/10 -Action Allow`
+
+---
+
+#155 ✅
+**现象**：v5.44.0 经 `tailscale serve`（`https://<机器名>.ts.net` → `127.0.0.1:13628`）远程打印时，外网用户点 Print 后家里桌面又弹出原生确认对话框、远程请求挂起——远程请求被误判为本地
+**根因**：serve 由 tailscaled 在本机 loopback 发起代理连接，Bridge 看到的 `req.socket.remoteAddress` 是 `127.0.0.1`；v5.44.0 的 isLocalAddress 仅看 socket 地址 → 误判本地。tailscaled 代理会携带 `X-Forwarded-For`（真实客户端 tailnet IP），但 v5.44.0 未识别该头
+**解决方案**（v5.44.1）：netUtils.js 新增 `isLocalRequest(req)`——loopback 且无 X-Forwarded-For 才判本地；loopback + XFF = 经本地反向代理的远程请求，走远程确认流程（WebUI 确认，桌面零弹窗）。信任边界安全：非 loopback 来源不受 XFF 影响（本来就判远程），外部无法通过伪造 XFF 获得本地待遇
+
+---
+
+#156 ✅
+**现象**：`tailscale serve --bg --set-path=/download <本地目录>` 报错 `401 Unauthorized: must be a Windows local admin to serve a path or Unix socket`，serve 静态目录配置失败（同账号 proxy 模式 `--set-path=/ http://127.0.0.1:13628` 却正常）
+**根因**：Tailscale Windows 客户端安全模型——serve 静态文件系统目标（file/directory target）要求本地管理员权限（tailscaled 以 SYSTEM 运行需验证用户可访问任意路径），而 proxy 到 TCP 端口不涉及文件系统访问控制、无需提权。用户不在家无法 UAC
+**解决方案**（v5.44.1 部署）：下载服务改由 Bridge 自身静态路由承载——利用既有 `/fluidd` express.static 路由（指向 web/dist），zip 放入部署目录 `web\dist\` 即可通过 `https://<machine>.ts.net/fluidd/<name>.zip` 下载，零代码改动
+
+---
+
+#157 ✅
+**现象**：非管理员会话注册/修改计划任务全部失败——`Register-ScheduledTask`（S4U 或默认 principal）报 `Access is denied (0x80070005)`；`schtasks /create` 和 `/change` 同样拒绝（/change 还要求交互输入用户密码）
+**根因**：该 Windows 环境普通账户对任务计划程序无写权限，且用户不在家无法 UAC 提权确认
+**解决方案**（v5.44.1 部署）：不重注册。残留的旧 watchdog 任务（指向 `C:\Program Files\Bambu Studio\bridge\watchdog.ps1`）依然可用——watchdog.ps1 逻辑优先通过 VBS 拉起 Bridge，而 VBS 已重指 `%LOCALAPPDATA%\BambuStudio-Bridge\app\server.js`，自愈链路完整（仅 VBS 被删除时才会 fallback 启动旧版）。将来有管理员权限时用 install-common.psm1 的 `Register-BridgeWatchdog -BridgeDir <新路径>` 重注册即可
+
+---
+
+#158 ✅
+**现象**：远程模式安装后用户 machine 配置的 print_host 始终未被改写（仍指 127.0.0.1:13628 或为空），外网 BambuStudio 装完仍进入"扫描局域网配置设备 IP"的初始界面。本地模式因默认值恰好相同而一直无感，bug 自 v5.36.0 引入 `Patch-UserMachineConfigs` 起潜伏，v5.45.0 远程模式才暴露
+**根因**：install-common.psm1 `Patch-UserMachineConfigs` 用 `$_.DirectoryName -match '\\machine\\'` 过滤文件——正则要求 `machine` 后必须还有路径分隔符，而 machine profile 文件直接位于 `...\user\<profile>\machine\` 目录本身（无子目录），DirectoryName 以 `\machine` 结尾且无尾随分隔符，正则永不匹配，patch 循环遍历 0 个文件静默通过
+**解决方案**（v5.45.0）：正则改为 `'\\machine\\?$'`（machine 目录结尾允许有/无尾随分隔符，`$` 锚定结尾）。PowerShell `-match` 为 .NET 正则，`\\` 匹配一个反斜杠
+
+---
+
+#159 ✅
+**现象**：正式版 BambuStudio（配置目录 `%APPDATA%\BambuStudio`）安装兼容包后，machine 配置 patch / 缓存清理全部不生效，Beta 版（`%APPDATA%\BambuStudioBeta`）一切正常
+**根因**：install-common.psm1 各配置操作（Clear-BambuSystemCache / Clean-SnapmakerEntriesFromConf / Patch-UserMachineConfigs）及 install.ps1/reinstall.ps1 的用户预设检测硬编码单一目录名——项目开发期一直用 Beta 版测试，正式版通道被完全遗漏
+**解决方案**（v5.45.0）：新增 `Get-BambuConfigDirs` 统一入口：遍历 `BambuStudio` + `BambuStudioBeta` 两个候选目录，返回所有存在者；上述全部消费点改为 foreach 双通道遍历，两个版本通道行为一致
+
+---
+
+#160 ✅
+**现象**：Linux 上 `bash install.sh` 报一串语法错误（如 `syntax error near unexpected token $'\r'`），脚本完全无法执行
+**根因**：仓库中 .sh 文件以 CRLF（Windows 换行）保存，bash 把每行行尾的 `\r` 当作命令字符；v5.39.0 的 install.sh/reinstall.sh/uninstall.sh 在 Windows 环境生成，未保持 LF
+**解决方案**（v5.45.0）：三个 .sh 全部转为 LF 保存；.gitattributes 补 `*.sh text eol=lf` 防回归（编辑 .sh 时注意编辑器不要转回 CRLF）
+
+---
+
+#161 ✅
+**现象**：级联模式下 Bridge A 请求 Bridge B 的 `/server/info` 报 `Invalid response body while trying to fetch http://127.0.0.1:13629/server/info: incorrect header check`；`curl --compressed` 直连 B 也返回空
+**根因**：proxyToMoonraker 用 node-fetch v2 请求 Moonraker（默认 compress:true，自动解压 gzip），`r.arrayBuffer()` 拿到的已是解压后明文；但转发响应时复制了上游全部响应头（含 `content-encoding: gzip` 与 `content-length`），对外发出"声称 gzip 实为明文"的不一致响应。任何遵守 content-encoding 的客户端（node-fetch / curl --compressed / 浏览器 fetch）都会尝试 gunzip 明文 → zlib "incorrect header check"。非级联模式下 BambuStudio 的 HTTP 客户端恰好不发送 accept-encoding 或忽略该头而潜伏；级联 A→B 用 node-fetch 自动带 `accept-encoding: gzip` 必现
+**解决方案**（v5.46.0）：server.js 两处代理（proxyToMoonraker + webcam）的 skipHeaders 数组增加 `"content-encoding"`、`"content-length"`——body 已解压，原编码头必须剥离
+
+---
+
+#162 ✅
+**现象**：用 BRIDGE_PORT 起第二个 Bridge 实例做级联测试（A:13630 → B:13629 → 打印机），A/B 运行时互相覆盖连接目标——A 保存 upstream 配置后 B 一旦重启就也变成级联模式
+**根因**：APPDATA_DIR 固定为 `%APPDATA%\BambuStudio-Bridge`，BRIDGE_PORT 只覆盖端口；loadConfig/saveConfig 与 bridge.log 全部落同一目录，双实例共享状态
+**解决方案**（v5.46.0）：server.js 支持 `BRIDGE_CONFIG_DIR` 环境变量覆盖配置目录（与 BRIDGE_PORT 配对使用）。级联测试：B 用 `$env:BRIDGE_CONFIG_DIR="$env:TEMP\bridge-test-b"`，A 用 `...\bridge-test-a`，各自隔离 bridge_config.json + bridge.log
+
+---
+
+#163 ✅
+**现象**：v5.45.0 验证记录"52 个单元测试全过"，但 v5.46.0 开发中 `npm test` 只跑出 29 个——test/ 下 3 个测试文件只执行了 2 个
+**根因**：package.json 的 test script（`node --test test/patch_gcode.test.js test/convert_gcode.test.js`）在历次编辑中丢失了 test/net_utils.test.js（v5.44.0 新增该文件时未同步进 script，或后续编辑覆盖），测试覆盖静默缩水 23 个用例且不报错
+**解决方案**（v5.46.0）：test script 补全为 `node --test test/patch_gcode.test.js test/convert_gcode.test.js test/net_utils.test.js`，恢复 52/52；更稳妥做法可改 `node --test test/` 目录形式，新增测试文件自动纳入

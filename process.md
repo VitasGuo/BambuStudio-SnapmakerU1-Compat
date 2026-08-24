@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.44.0 (2026-08-24)
+## 当前版本: v5.46.0 (2026-08-24)
 
 ---
 
@@ -20,7 +20,8 @@
 - AI 实验室（G-code 优化 + 打印助手，流式输出 + Thinking 模式，Workspace Markdown 系统）
 - G-code 转换（独立侧栏标签页，BambuStudio→OrcaSlicer 兼容格式转换）
 - Tailscale 远程打印（v5.44.0+，随处连接 + 数据自主：确认交互跟随请求发起方、bind=tailnet 双监听、MagicDNS URL）
-- 单元测试覆盖（node:test 框架，44 个测试覆盖 patchGcodeContent + convertGcodeContent + isLocalAddress 纯函数）
+- 级联架构（v5.46.0，两次 Bridge：外网 Bridge A 将家里 Bridge B 视为"打印机"，A 本地处理弹窗/切片/AI Lab，B 纯透传 Moonraker 流量；WebUI 图形化切换 Local printer / Remote Bridge 模式）
+- 单元测试覆盖（node:test 框架，52 个测试覆盖 patchGcodeContent + convertGcodeContent + isLocalRequest 纯函数）
 
 ### ✅ 打印流程（对齐 OrcaSlicer）
 1. `SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=x MAP_EXTRUDER=y` — 设置映射
@@ -40,9 +41,10 @@
 2. **旧 gcode 无层进度**：`layer_change_gcode` 修复只影响新切片的 gcode，旧文件需重新切片。见 traps.md #105
 
 ### 📝 下一步
-1. 对齐 OrcaSlicer 挤出头取出/放回功能（server.js 中无相关代码，未开始）
-2. 优化 knowledge.md 按技能按需注入（当前全量 1254 行，每次 AI 调用消耗约 4000-6000 tokens）
-3. 扩充单元测试覆盖面（当前覆盖 patchGcode/convertGcode 纯函数，可扩展至 CIEDE2000 颜色匹配、extractGcodeStats 等）
+1. 用户外网实测 v5.46.0 级联闭环（外网机安装包 → WebUI 切 Remote Bridge 填家里 serve URL → Test → 切片 Print → 外网机弹窗确认 → 打印）
+2. 对齐 OrcaSlicer 挤出头取出/放回功能（server.js 中无相关代码，未开始）
+3. 优化 knowledge.md 按技能按需注入（当前全量 1254 行，每次 AI 调用消耗约 4000-6000 tokens）
+4. 扩充单元测试覆盖面（当前覆盖 patchGcode/convertGcode/isLocalRequest 纯函数，可扩展至 CIEDE2000 颜色匹配、extractGcodeStats 等）
 
 ### 🔍 代码审查待改进项（v5.37.2 审查后剩余）
 | # | 问题 | 重要性 | 必要性 | 说明 |
@@ -57,6 +59,51 @@
 ---
 
 ## 版本历史
+
+### v5.46.0 (2026-08-24) — 级联架构（两次 Bridge）+ WebUI 图形化连接配置
+
+**背景**：v5.45.0 的"远程模式"是外网 BambuStudio 直连家里 Bridge（一次 Bridge）——外网机没有本地 Bridge，弹窗/切片/AI Lab 全落在家里机器上，且安装器命令行模式选择体验差（用户偏好 GUI）。重构为**级联架构**：外网机也装 Bridge（A），A 将家里 Bridge（B）视为"打印机"——A 本地处理确认弹窗/切片/AI Lab，B 纯透传 Moonraker 流量，外网体验与在家完全一致，数据全链路自主。
+
+**改动**：
+1. **级联核心**（server.js）：`printerConfig.upstream` 新增配置项——设置后 `getBaseUrl()`/`getWsUrl()` 指向远程 Bridge URL（https 自动转 wss），所有 HTTP 代理 + WebSocket 桥接对上游 Bridge 透明复用；`hasUpstreamTarget()` 统一判定（upstream 或 host 任一存在即已配置）；B 侧无需任何改动（apikey 由 B 注入，A 无需持有打印机凭据）
+2. **WebUI 图形化连接配置**（webui.html 齿轮弹窗 Connection 区块）：Local printer / Remote Bridge 单选切换，远程模式提供 Home Bridge URL 输入 + Test 按钮；`/api/bridge/test_upstream.js` 探测远端 `/server/info` 返回 Moonraker 版本号；`/api/bridge/save_config.js` 扩展 `target=upstream` 参数；配置页区分显示本地打印机 IP / 远程 Bridge URL
+3. **安装器回归纯本地**：install.ps1/reinstall.ps1/install.sh/reinstall.sh 移除 v5.45.0 命令行模式选择及远程模式函数（Select-RemoteBridgeHost/Set-SystemProfileHost/Disable-LocalBridge 等），保留 Get-BambuConfigDirs 双通道；安装即本地 Bridge，远程切换全部交给 WebUI
+4. **多实例测试支持**（traps.md #162）：`BRIDGE_CONFIG_DIR` 环境变量覆盖配置目录（与 `BRIDGE_PORT` 配对），级联测试双实例状态隔离
+5. **gzip 转发头修复**（traps.md #161）：代理响应剥离 `content-encoding`/`content-length`（node-fetch 已自动解压，保留原头导致级联 A→B zlib "incorrect header check"——非级联模式下潜伏已久的 bug）
+6. **测试脚本修复**（traps.md #163）：package.json test script 补回 net_utils.test.js，52/52 恢复
+
+**验证**：52 个单元测试全过；双实例端到级联端到端实测（A:13630 → B:13629 → 打印机 192.168.1.12）：HTTP `/server/info` 级联响应与 B 直连完全一致（Moonraker 1.5.2）、`/printer/info` 打印机 lava ready、test_upstream 探测 reachable、WebSocket JSON-RPC printer.info 全链路往返成功；node --check / bash -n / PowerShell AST 语法校验全过
+
+**外网机使用流程**：安装兼容包（纯本地）→ WebUI 齿轮 → Connection → Remote Bridge → 填家里 `https://<machine>.ts.net` → Test 通过 → BambuStudio 正常使用（弹窗/切片/AI Lab 均在本机处理）
+
+### v5.45.0 (2026-08-24) — 安装器远程模式：开箱即用
+
+**背景**：v5.44.1 远程链路已通（浏览器访问 serve URL 连接成功），但外网设备安装兼容包后 BambuStudio 仍默认进入"扫描局域网配置设备 IP"的初始界面，用户需手工改 machine JSON 的 print_host 才能连上家里 Bridge——差"最后一口气"。目标：安装即用，零手动配置。
+
+**改动**：
+1. **连接模式选择**（install.ps1 / reinstall.ps1 / install.sh / reinstall.sh）：安装开始新增 `[1] Local`（本机跑 Bridge，默认）/ `[2] Remote`（本机直连家里 Bridge，经 Tailscale）
+2. **远程模式全自动化**（install-common.psm1 新函数）：`Get-TailscalePeers`（tailscale status --json 提取在线设备 MagicDNS URL）→ `Test-RemoteBridge`（curl 探测 /api/bridge/config.js，5s 超时）→ `Select-RemoteBridgeHost`（列出在线设备并逐一探测，标记 `[Bridge OK]` 并默认选中第一个可达者；支持手动输 URL / 中止 / 强制继续）→ `Set-SystemProfileHost` 改 system profile + `Patch-UserMachineConfigs` 改用户 profile 的 print_host / print_host_webui → `Disable-LocalBridge` 停用本地 Bridge（杀进程 + 去自启 + 去 watchdog，保留文件）
+3. **BambuStudio 正式版/Beta 双通道配置目录**（traps.md #159）：新增 `Get-BambuConfigDirs` 遍历 `%APPDATA%\BambuStudio` + `BambuStudioBeta`，所有配置操作（缓存清理 / conf 清理 / machine patch / 预设检测）双通道生效
+4. **machine 正则修复**（traps.md #158）：`'\\machine\\'` → `'\\machine\\?$'`——用户 machine profile 文件直接位于 `machine\` 目录下无尾随分隔符，原正则永不匹配，print_host patch 一直是空操作（本地模式因默认值相同而无感潜伏至 v5.45.0）
+5. **Linux 脚本 CRLF 修复**（traps.md #160）：install.sh / reinstall.sh / uninstall.sh 转 LF，bash 可正常执行；install.sh 对等实现远程模式（tailscale 设备探测 / Bridge 标记 / 手动 URL）；.gitattributes 补 `*.sh text eol=lf` 防回归
+6. **清理与打包**：删除 bridge\python legacy 目录、测试临时文件；make-zip.ps1 重写打包清单，产出干净 36.53 MB 包
+7. **家用机一键部署脚本**：新增 deploy-home.ps1（同步 bridge-node + webui.html + zip → `%LOCALAPPDATA%\BambuStudio-Bridge\app`、换包删旧、VBS 重启、端口 + /fluidd 下载验证）
+
+**验证**：52 个单元测试全过；PowerShell AST 解析校验 PS1/PSM1 无语法错误；真实 tailscale status --json + serve 探测全分支验证；家用机实测 serve 链路 webui.html HTTPS 200 / zip 36.53MB HEAD 200
+
+**家用机部署状态**（2026-08-24）：v5.45.0 已部署 `%LOCALAPPDATA%\BambuStudio-Bridge\app`（deploy-home.ps1 执行，Bridge 经 VBS 重启正常监听 13628）；安装包下载 `https://vitasguo-pc.tailc66d5e.ts.net/fluidd/BambuStudio-SnapmakerU1-v5.45.0.zip`。旧 v5.44.1 包已从 web\dist 移除
+
+### v5.44.1 (2026-08-24) — Tailscale Serve 远程打印适配
+
+**背景**：v5.44.0 家用机部署时发现 Windows 防火墙存在 node.exe 入站 Block 规则（此前防火墙弹窗点"取消"自动生成，Block 优先级高于 Allow，traps.md #154），bind=tailnet 直连模式外网不可达；且无管理员权限（用户不在家无法点 UAC）无法删除规则。改用 `tailscale serve --bg http://127.0.0.1:13628`（tailscaled 在 loopback 代理 + 自动 HTTPS 证书，零防火墙配置、无需提权、重启自动生效）。
+
+**改动**：
+1. netUtils.js 新增 `isLocalRequest(req)`（server.js handleUploadWithConfirm 改用）：loopback 且无 `X-Forwarded-For` 才判本地；loopback + XFF = 经 tailscale serve 代理的远程请求（traps.md #155）——修复 serve 场景下远程上传被误判本地、又去弹家里桌面对话框的问题
+2. 远程日志显示 XFF 真实客户端 IP（区分直连/代理来源）
+3. README 远程打印章节重写：serve 为推荐路径（零防火墙配置），bind 直连降级为高级模式（需管理员删除 Block 规则并放行）
+4. 单元测试新增 8 个 isLocalRequest 用例（总 52 个全过）
+
+**家用机部署状态**（用户不在家远程部署，2026-08-24 落地并全链路实测）：v5.44.1 部署于 `%LOCALAPPDATA%\BambuStudio-Bridge\app`（bridge-node 完整目录 + web + workspace + node_modules；无提权权限，Program Files 写入需 UAC），VBS 启动器（%APPDATA%\BambuStudio-Bridge\start-hidden.vbs）重指该目录——开机自启 .lnk → VBS → 新部署；残留旧 watchdog 计划任务经 VBS 拉起新版（traps.md #157），自愈链路完整。`tailscale serve --bg` 已配置：`https://vitasguo-pc.tailc66d5e.ts.net/` → 127.0.0.1:13628（serve 静态目录需 admin 被拒，traps.md #156）。**v5.44.1 安装包下载服务**：zip 放部署目录 `web\dist\`，经 `/fluidd` 静态路由提供下载。serve 端到端实测全过：HTTPS webui 200 / 远程上传 0.6s 即时返回 + 桌面零弹窗 + XFF 正确识别（日志 `Remote upload from <tailnet IP>`）/ 38MB zip 完整下载 / pending 挂起-取消闭环
 
 ### v5.44.0 (2026-08-24) — Tailscale 远程打印正式版
 

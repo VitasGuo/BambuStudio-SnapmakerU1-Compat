@@ -6,11 +6,11 @@ if ($args -contains "-y" -or $args -contains "--yes" -or $args -contains "-AutoC
     $AutoConfirm = $true
 }
 
-$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.44.0 Reinstaller"
+$Host.UI.RawUI.WindowTitle = "Snapmaker U1 - BambuStudio Compatibility Pack v5.46.0 Reinstaller"
 
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Cyan
-Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.44.0 - Reinstall" -ForegroundColor Cyan
+Write-Host "    Snapmaker U1 BambuStudio Compatibility Pack v5.46.0 - Reinstall" -ForegroundColor Cyan
 Write-Host "  ======================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -92,22 +92,20 @@ if ($cacheExisted) {
 }
 
 Write-Host "  [4/10] Preserving user custom presets..." -ForegroundColor White
-$userBaseDir = "$env:APPDATA\BambuStudioBeta\user"
-if (Test-Path $userBaseDir) {
+$userDirFound = $false
+foreach ($cfgDir in (Get-BambuConfigDirs)) { if (Test-Path "$cfgDir\user") { $userDirFound = $true } }
+if ($userDirFound) {
     Write-Host "  User presets directory found (preserved)" -ForegroundColor Green
 } else {
     Write-Host "  No user presets directory (OK)" -ForegroundColor DarkGray
 }
 
 Write-Host "  [5/10] Refreshing BambuStudio.conf cache..." -ForegroundColor White
-$confPath = "$env:APPDATA\BambuStudioBeta\BambuStudio.conf"
-if (Test-Path $confPath) {
-    $result = Clean-SnapmakerEntriesFromConf -ShowRemovedCount
-    if ($result -eq "Cleaned") {
-        Write-Host "  Refreshed filament cache in BambuStudio.conf (backup: .bak)" -ForegroundColor Green
-    } elseif ($result -eq "NoChange") {
-        Write-Host "  No Snapmaker cache to refresh (OK)" -ForegroundColor DarkGray
-    }
+$result = Clean-SnapmakerEntriesFromConf -ShowRemovedCount
+if ($result -eq "Cleaned") {
+    Write-Host "  Refreshed filament cache in BambuStudio.conf (backup: .bak)" -ForegroundColor Green
+} elseif ($result -eq "NoChange") {
+    Write-Host "  No Snapmaker cache to refresh (OK)" -ForegroundColor DarkGray
 } else {
     Write-Host "  BambuStudio.conf not found (OK for first install)" -ForegroundColor DarkGray
 }
@@ -219,6 +217,9 @@ Write-Host "    3. Slice and click Print -> native dialog will appear" -Foregrou
 Write-Host ""
 Write-Host "  Bridge auto-detects your printer via mDNS (no manual IP needed)." -ForegroundColor DarkGray
 Write-Host "  If auto-detection fails, open http://127.0.0.1:13628 in browser to configure." -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "  Using BambuStudio AWAY from home? Open http://127.0.0.1:13628 ->" -ForegroundColor DarkGray
+Write-Host "  gear icon -> Connection, and point it at your home Bridge (Tailscale)." -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "  Bridge Server runs automatically on login." -ForegroundColor DarkGray
 Write-Host "  Config stored in: %APPDATA%\BambuStudio-Bridge\" -ForegroundColor DarkGray

@@ -1,5 +1,5 @@
 # install-common.psm1 - Shared functions for install.ps1 / reinstall.ps1 / uninstall.ps1
-# Snapmaker U1 BambuStudio Compatibility Pack v5.44.0
+# Snapmaker U1 BambuStudio Compatibility Pack v5.46.0
 #
 # Convention: functions that originally did `exit 1` now `throw` after printing the
 # user-facing message + Read-Host pause. Callers wrap with `try { ... } catch { exit 1 }`
@@ -73,34 +73,74 @@ function Find-BambuStudioDir {
 }
 
 # ==============================================================================
+# 3b. Get-BambuConfigDirs - BambuStudio per-user config directories.
+#     Release channel uses %APPDATA%\BambuStudio, beta uses BambuStudioBeta
+#     (v5.46.0: release channel was previously missed entirely). Returns the
+#     EXISTING dirs (both when present); empty array on a clean first install.
+# ==============================================================================
+function Get-BambuConfigDirs {
+    $dirs = @()
+    foreach ($name in @("BambuStudio", "BambuStudioBeta")) {
+        $d = "$env:APPDATA\$name"
+        if (Test-Path $d) { $dirs += $d }
+    }
+    return $dirs
+}
+
+# ==============================================================================
 # 4. Clear-BambuSystemCache - remove system Snapmaker cache dir + vendor json
-#    Returns $true if the cache directory existed (and was removed).
+#     Returns $true if the cache directory existed (and was removed).
 # ==============================================================================
 function Clear-BambuSystemCache {
-    $cacheDir = "$env:APPDATA\BambuStudioBeta\system\Snapmaker"
-    $cacheVendor = "$env:APPDATA\BambuStudioBeta\system\Snapmaker.json"
     $existed = $false
-    if (Test-Path $cacheDir) {
-        Remove-Item $cacheDir -Recurse -Force
-        $existed = $true
-    }
-    if (Test-Path $cacheVendor) {
-        Remove-Item $cacheVendor -Force
+    foreach ($dir in (Get-BambuConfigDirs)) {
+        $cacheDir = "$dir\system\Snapmaker"
+        $cacheVendor = "$dir\system\Snapmaker.json"
+        if (Test-Path $cacheDir) {
+            Remove-Item $cacheDir -Recurse -Force
+            $existed = $true
+        }
+        if (Test-Path $cacheVendor) {
+            Remove-Item $cacheVendor -Force
+        }
     }
     return $existed
 }
 
 # ==============================================================================
-# 5. Clean-SnapmakerEntriesFromConf - clean Snapmaker/U1 entries from BambuStudio.conf
-#    Unified: always attempts regex fallback on JSON parse failure (install had it,
-#    reinstall/uninstall did not - unified for robustness).
+# 5. Clean-SnapmakerEntriesFromConf - clean Snapmaker/U1 entries from
+#    BambuStudio.conf in EVERY existing config dir (v5.46.0: release channel
+#    BambuStudio + beta BambuStudioBeta).
 #    -ShowRemovedCount : print the "Removed N cached filament entries" diagnostic line.
-#    Returns "Cleaned" | "NoChange" | "Failed". Caller prints the outcome message.
-#    Assumes the conf file exists (caller checks Test-Path first).
+#    Returns "Cleaned" | "NoChange" | "NoConf". Caller prints the outcome message.
 # ==============================================================================
 function Clean-SnapmakerEntriesFromConf {
     param([switch]$ShowRemovedCount)
-    $confPath = "$env:APPDATA\BambuStudioBeta\BambuStudio.conf"
+    $anyCleaned = $false
+    $anyConf = $false
+    foreach ($dir in (Get-BambuConfigDirs)) {
+        $confPath = "$dir\BambuStudio.conf"
+        if (-not (Test-Path $confPath)) { continue }
+        $anyConf = $true
+        if ((Clean-SnapmakerConfFile -ConfPath $confPath -ShowRemovedCount:$ShowRemovedCount) -eq "Cleaned") {
+            $anyCleaned = $true
+        }
+    }
+    if ($anyCleaned) { return "Cleaned" }
+    if ($anyConf) { return "NoChange" }
+    return "NoConf"
+}
+
+# 5b. Clean-SnapmakerConfFile - single-file worker for Clean-SnapmakerEntriesFromConf.
+#     Unified: always attempts regex fallback on JSON parse failure (install had it,
+#     reinstall/uninstall did not - unified for robustness).
+#     Returns "Cleaned" | "NoChange" | "Failed".
+function Clean-SnapmakerConfFile {
+    param(
+        [Parameter(Mandatory)][string]$ConfPath,
+        [switch]$ShowRemovedCount
+    )
+    $confPath = $ConfPath
     try {
         $confRaw = [System.IO.File]::ReadAllText($confPath, [System.Text.UTF8Encoding]::new($false))
         $conf = $confRaw | ConvertFrom-Json
@@ -496,13 +536,22 @@ function Copy-ProfilesToBambuDir {
 # ==============================================================================
 # 14. Patch-UserMachineConfigs - patch print_host/host_type/print_host_webui in
 #     user machine configs to point at the Bridge. Returns patched file count.
+#     -PrintHost/-PrintHostWebUi: local mode defaults (127.0.0.1); remote mode
+#     callers pass the tailnet serve URL (v5.46.0).
 # ==============================================================================
 function Patch-UserMachineConfigs {
-    $userDir = "$env:APPDATA\BambuStudioBeta\user"
+    param(
+        [string]$PrintHost = 'http://127.0.0.1:13628',
+        [string]$PrintHostWebUi = 'http://127.0.0.1:13628'
+    )
     $patchedCount = 0
-    if (Test-Path $userDir) {
+    foreach ($cfgDir in (Get-BambuConfigDirs)) {
+        $userDir = "$cfgDir\user"
+        if (-not (Test-Path $userDir)) { continue }
+        # Files sit DIRECTLY in ...\user\<profile>\machine\ — the old pattern
+        # '\\machine\\' demanded a trailing separator and never matched (v5.46.0 fix).
         $machineFiles = Get-ChildItem $userDir -Filter "*.json" -Recurse | Where-Object {
-            $_.DirectoryName -match '\\machine\\' -and $_.Name -match 'Snapmaker'
+            $_.DirectoryName -match '\\machine\\?$' -and $_.Name -match 'Snapmaker'
         }
         foreach ($mf in $machineFiles) {
             try {
@@ -511,15 +560,15 @@ function Patch-UserMachineConfigs {
                     $json = $raw | ConvertFrom-Json
                     $changed = $false
                     if ($json.PSObject.Properties.Match('print_host')) {
-                        if ($json.print_host -ne 'http://127.0.0.1:13628') {
+                        if ($json.print_host -ne $PrintHost) {
                             $oldHost = $json.print_host
-                            $json.print_host = 'http://127.0.0.1:13628'
-                            Write-Host "    print_host: $oldHost -> http://127.0.0.1:13628" -ForegroundColor DarkGray
+                            $json.print_host = $PrintHost
+                            Write-Host "    print_host: $oldHost -> $PrintHost" -ForegroundColor DarkGray
                             $changed = $true
                         }
                     } else {
-                        $json | Add-Member -NotePropertyName 'print_host' -NotePropertyValue 'http://127.0.0.1:13628' -Force
-                        Write-Host "    print_host: (added) http://127.0.0.1:13628" -ForegroundColor DarkGray
+                        $json | Add-Member -NotePropertyName 'print_host' -NotePropertyValue $PrintHost -Force
+                        Write-Host "    print_host: (added) $PrintHost" -ForegroundColor DarkGray
                         $changed = $true
                     }
                     if ($json.PSObject.Properties.Match('host_type')) {
@@ -534,8 +583,8 @@ function Patch-UserMachineConfigs {
                         $changed = $true
                     }
                     if ($json.PSObject.Properties.Match('print_host_webui')) {
-                        if ($json.print_host_webui -ne 'http://127.0.0.1:13628') {
-                            $json.print_host_webui = 'http://127.0.0.1:13628'
+                        if ($json.print_host_webui -ne $PrintHostWebUi) {
+                            $json.print_host_webui = $PrintHostWebUi
                             $changed = $true
                         }
                     }

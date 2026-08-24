@@ -1,8 +1,8 @@
 #!/bin/bash
-# Snapmaker U1 BambuStudio Compatibility Pack v5.44.0 - Linux Uninstaller
+# Snapmaker U1 BambuStudio Compatibility Pack v5.46.0 - Linux Uninstaller
 set -e
 
-VERSION="5.44.0"
+VERSION="5.46.0"
 BRIDGE_PORT=13628
 
 # Colors

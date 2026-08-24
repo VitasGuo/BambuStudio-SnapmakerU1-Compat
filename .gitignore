@@ -2,6 +2,7 @@
 Thumbs.db
 *.log
 *.pyc
+*.zip
 .trae/
 bridge/web/dist/
 bridge/bridge_config.json

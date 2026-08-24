@@ -21,4 +21,20 @@ function isLocalAddress(addr) {
   return LOCAL_ADDRESSES.has(addr.trim().toLowerCase());
 }
 
-module.exports = { isLocalAddress };
+/**
+ * Classify an HTTP request as local (from this machine, direct) or remote
+ * (v5.44.1). A loopback connection carrying X-Forwarded-For arrived through a
+ * local reverse proxy (e.g. `tailscale serve`) on behalf of a remote client —
+ * it must be treated as remote so print confirmation follows the actual
+ * requester, not the proxy (traps.md #155).
+ *
+ * @param {object} req - Express request (uses socket.remoteAddress + headers)
+ * @returns {boolean} true only for direct loopback requests without a proxy header
+ */
+function isLocalRequest(req) {
+  if (!req || !isLocalAddress(req.socket && req.socket.remoteAddress)) return false;
+  const xff = req.headers && req.headers["x-forwarded-for"];
+  return !xff;
+}
+
+module.exports = { isLocalAddress, isLocalRequest };

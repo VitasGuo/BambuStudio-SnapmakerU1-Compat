@@ -7,15 +7,18 @@ const { spawn } = require("child_process");
 const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
 const { showPrintDialog, cancelActiveDialog } = require("./dialog");
-const { isLocalAddress } = require("./netUtils");
+const { isLocalRequest } = require("./netUtils");
 const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.44.0";
-const DEFAULT_PORT = 13628;
+const BRIDGE_VERSION = "5.46.0";
+// BRIDGE_PORT env override (e.g. running a second local Bridge for testing)
+const DEFAULT_PORT = parseInt(process.env.BRIDGE_PORT, 10) || 13628;
 const MOONRAKER_TIMEOUT = 10000;
 
-// Cross-platform config directory (Windows: %APPDATA%, Linux: XDG_CONFIG_HOME)
-const APPDATA_DIR = path.join(
+// Cross-platform config directory (Windows: %APPDATA%, Linux: XDG_CONFIG_HOME).
+// BRIDGE_CONFIG_DIR env override allows a second instance (cascade testing,
+// pairs with BRIDGE_PORT) to keep its own bridge_config.json + bridge.log.
+const APPDATA_DIR = process.env.BRIDGE_CONFIG_DIR || path.join(
   process.platform === "win32"
     ? (process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"))
     : (process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config")),
@@ -32,7 +35,7 @@ const WEB_DIR = fs.existsSync(path.join(__dirname, "web", "webui.html"))
   ? path.join(__dirname, "web")
   : path.join(PROJECT_DIR, "bridge", "web");
 
-let printerConfig = { host: "", port: 80, apikey: "", mode: "webui", bind: "127.0.0.1" };
+let printerConfig = { host: "", port: 80, apikey: "", mode: "webui", bind: "127.0.0.1", upstream: "" };
 let aiConfig = { provider: "", model: "", apiKey: "", customBaseUrl: "" };
 let pendingPrintFile = "";
 let camMonitorActive = false;
@@ -59,9 +62,28 @@ function saveConfig() {
   fs.writeFileSync(CONFIG_FILE, JSON.stringify({ ...printerConfig, aiConfig }, null, 2), "utf-8");
 }
 
+// ── Upstream target (v5.46.0 cascade mode) ──
+// printerConfig.upstream, when set, is the base URL of another Bridge
+// (e.g. "https://home-pc.tailxxxx.ts.net") that this Bridge treats exactly
+// like a local Moonraker: all HTTP + WS traffic goes there instead. Empty
+// string = direct printer connection (host/port), the default.
+
 function getBaseUrl() {
-  if (!printerConfig.host) return "";
+  if (printerConfig.upstream) {
+    return printerConfig.upstream.replace(/\/+$/, ""); // tolerate trailing slash
+  }
+  if (!hasUpstreamTarget()) return "";
   return `http://${printerConfig.host}:${printerConfig.port}`;
+}
+
+function getWsUrl() {
+  const base = getBaseUrl();
+  if (!base) return "";
+  return `${base.replace(/^http/, "ws")}/websocket`; // http→ws, https→wss
+}
+
+function hasUpstreamTarget() {
+  return !!(printerConfig.upstream || printerConfig.host);
 }
 
 // ── Tailscale detection (v5.44.0) ──
@@ -249,7 +271,7 @@ async function callMoonrakerJsonRpc(method, params = {}) {
   if (!baseUrl) throw new Error("No printer configured");
 
   return new Promise((resolve, reject) => {
-    const wsUrl = `ws://${printerConfig.host}:${printerConfig.port}/websocket`;
+    const wsUrl = getWsUrl();
     let settled = false;
     const moonrakerWs = new WebSocket(wsUrl);
     const timeout = setTimeout(() => {
@@ -359,20 +381,24 @@ app.get("/fluidd/{*path}", (req, res) => {
 });
 
 app.get(["/", "/webui.html"], (req, res) => {
-  const { host, port, apikey } = req.query;
-  
+  const { host, port, apikey, upstream } = req.query;
+
   // 始终先加载当前配置，保证状态一致性
   loadConfig();
-  
-  // 处理查询参数更新
-  if (host) {
+
+  // 处理查询参数更新（upstream: 级联模式连另一台 Bridge；host: 直连打印机）
+  if (upstream !== undefined && String(upstream).trim()) {
+    printerConfig.upstream = String(upstream).trim().replace(/\/+$/, "");
+    saveConfig();
+  } else if (host) {
     printerConfig.host = host;
     printerConfig.port = parseInt(port) || 80;
     printerConfig.apikey = apikey || "";
+    printerConfig.upstream = "";
     saveConfig();
   }
 
-  if (!printerConfig.host) {
+  if (!hasUpstreamTarget()) {
     return res.type("html").send(renderSetupPage());
   }
 
@@ -411,6 +437,7 @@ app.get("/api/bridge/config", (req, res) => {
     printer_port: printerConfig.port,
     has_apikey: !!printerConfig.apikey,
     bind: printerConfig.bind || "127.0.0.1",
+    upstream: printerConfig.upstream || "",
   });
 });
 
@@ -423,6 +450,7 @@ app.get("/api/bridge/config.js", (req, res) => {
     printer_port: printerConfig.port,
     has_apikey: !!printerConfig.apikey,
     bind: printerConfig.bind || "127.0.0.1",
+    upstream: printerConfig.upstream || "",
   })});`);
 });
 
@@ -470,21 +498,61 @@ app.get("/api/bridge/tailscale_status.js", async (req, res) => {
   })});`);
 });
 
+// Save connection config. Two targets (v5.46.0):
+//   target=upstream&url=https://...  → cascade: this Bridge forwards to a
+//                                     remote Bridge (two-bridge architecture)
+//   target=printer&host=..&port=..   → direct printer (default, legacy
+//                                     no-target calls behave the same)
 app.get("/api/bridge/save_config.js", (req, res) => {
   const cb = req.query.cb || "callback";
   res.type("application/javascript");
   try {
+    const target = req.query.target || (req.query.url ? "upstream" : "printer");
+    if (target === "upstream") {
+      const url = (req.query.url || "").trim().replace(/\/+$/, "");
+      if (!url) throw new Error("url is required");
+      if (!/^https?:\/\//i.test(url)) throw new Error("url must start with http:// or https://");
+      printerConfig.upstream = url;
+      saveConfig();
+      log("INFO", `Connection target: upstream bridge ${url}`);
+      res.send(`${cb}(${JSON.stringify({ ok: true, upstream: url })});`);
+      return;
+    }
     const host = (req.query.host || "").trim();
     if (!host) throw new Error("host is required");
     printerConfig.host = host;
     printerConfig.port = parseInt(req.query.port) || 80;
+    printerConfig.upstream = "";
     if (req.query.apikey !== undefined && req.query.apikey !== "") {
       printerConfig.apikey = req.query.apikey;
     }
     saveConfig();
+    log("INFO", `Connection target: printer ${host}:${printerConfig.port}`);
     res.send(`${cb}(${JSON.stringify({ ok: true })});`);
   } catch (e) {
     res.send(`${cb}(${JSON.stringify({ ok: false, error: e.message })});`);
+  }
+});
+
+// Probe a remote Bridge before saving it: fetches /server/info through the
+// URL (the upstream Bridge proxies /server/* to its Moonraker), 5s timeout.
+app.get("/api/bridge/test_upstream.js", async (req, res) => {
+  const cb = req.query.cb || "callback";
+  res.type("application/javascript");
+  const send = (obj) => res.send(`${cb}(${JSON.stringify(obj)});`);
+  const url = (req.query.url || "").trim().replace(/\/+$/, "");
+  if (!url) return send({ ok: false, error: "url is required" });
+  if (!/^https?:\/\//i.test(url)) return send({ ok: false, error: "url must start with http:// or https://" });
+  try {
+    const r = await fetchWithTimeout(`${url}/server/info`, {}, 5000);
+    if (!r.ok) return send({ ok: false, error: `HTTP ${r.status}` });
+    const j = await r.json().catch(() => ({}));
+    const ver = j.result && j.result.moonraker_version ? ` (Moonraker ${j.result.moonraker_version})` : "";
+    log("INFO", `test_upstream OK: ${url}${ver}`);
+    return send({ ok: true, detail: `reachable${ver}` });
+  } catch (e) {
+    log("WARN", `test_upstream failed: ${url} — ${e.message}`);
+    return send({ ok: false, error: e.message });
   }
 });
 
@@ -495,7 +563,7 @@ app.get("/api/bridge/pending_print", (req, res) => {
 app.get("/api/bridge/proxy.js", async (req, res) => {
   const targetPath = req.query.path || "";
   const cb = req.query.cb || "callback";
-  if (!printerConfig.host) {
+  if (!hasUpstreamTarget()) {
     res.type("application/javascript");
     res.send(`${cb}(null);`);
     return;
@@ -515,7 +583,7 @@ app.get("/api/bridge/proxy.js", async (req, res) => {
 });
 
 app.get("/api/bridge/init-data.js", async (req, res) => {
-  if (!printerConfig.host) {
+  if (!hasUpstreamTarget()) {
     res.type("application/javascript");
     res.send("console.error('[Bridge] No printer configured');");
     return;
@@ -549,7 +617,7 @@ app.get("/api/bridge/debug/export", (req, res) => {
   let content = `=== BambuStudio Bridge Debug Export ===\n`;
   content += `Version: ${BRIDGE_VERSION}\n`;
   content += `Time: ${new Date().toISOString()}\n`;
-  content += `Printer: ${printerConfig.host}:${printerConfig.port}\n`;
+  content += `Connection: ${printerConfig.upstream ? `upstream bridge ${printerConfig.upstream}` : `printer ${printerConfig.host}:${printerConfig.port}`}\n`;
   content += `Config: ${JSON.stringify(printerConfig, null, 2)}\n`;
   content += `Log file: ${LOG_FILE}\n`;
   content += `Web dir: ${WEB_DIR}\n`;
@@ -799,7 +867,7 @@ let camLastSize = 0;
 let camStaleCount = 0;
 
 app.get("/api/bridge/cam_snapshot", async (req, res) => {
-  if (!printerConfig.host) return res.status(400).json({ error: "no_printer_configured" });
+  if (!hasUpstreamTarget()) return res.status(400).json({ error: "no_printer_configured" });
   await ensureCamMonitor();
   const baseUrl = getBaseUrl();
   const url = `${baseUrl}/server/files/camera/monitor.jpg?_t=${Date.now()}`;
@@ -840,7 +908,7 @@ app.get("/api/bridge/cam_snapshot", async (req, res) => {
 
 app.get("/api/bridge/cam_start_monitor.js", async (req, res) => {
   const cb = req.query.cb || "callback";
-  if (!printerConfig.host) {
+  if (!hasUpstreamTarget()) {
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify({ error: "no_printer_configured" })});`);
     return;
@@ -850,7 +918,7 @@ app.get("/api/bridge/cam_start_monitor.js", async (req, res) => {
     camMonitorLastCall = Date.now();
     let camUrl = null;
     if (result && result.url) {
-      camUrl = `http://${printerConfig.host}:${printerConfig.port}/server${result.url}`;
+      camUrl = `${getBaseUrl()}/server${result.url}`;
       log("INFO", `camera.start_monitor got URL: ${camUrl}`);
     } else {
       log("INFO", `camera.start_monitor response: ${JSON.stringify(result)}`);
@@ -866,7 +934,7 @@ app.get("/api/bridge/cam_start_monitor.js", async (req, res) => {
 
 app.get("/api/bridge/cam_stop_monitor.js", async (req, res) => {
   const cb = req.query.cb || "callback";
-  if (!printerConfig.host) {
+  if (!hasUpstreamTarget()) {
     res.type("application/javascript");
     res.send(`${cb}(${JSON.stringify({ error: "no_printer_configured" })});`);
     return;
@@ -977,7 +1045,7 @@ function patchGcodeLayout(content) {
 }
 
 async function handleUploadWithConfirm(req, res) {
-  if (!printerConfig.host) return res.status(400).json({ error: "no_printer_configured" });
+  if (!hasUpstreamTarget()) return res.status(400).json({ error: "no_printer_configured" });
 
   const contentType = req.headers["content-type"] || "";
   log("INFO", `Upload request: content_type=${contentType}`);
@@ -1041,7 +1109,7 @@ async function handleUploadWithConfirm(req, res) {
         pendingPrintFile = uploadedPath;
         notifyWebui("pending_print", { filename: uploadedPath });
 
-        if (isLocalAddress(req.socket.remoteAddress)) {
+        if (isLocalRequest(req)) {
           // Local request: confirmation pops the native desktop dialog (existing behavior)
           log("INFO", `Showing native dialog for: ${uploadedPath}`);
           try {
@@ -1074,7 +1142,10 @@ async function handleUploadWithConfirm(req, res) {
           // desktop popup. The pending print is announced to WebUI clients
           // (the remote BambuStudio Device tab / browser) via WebSocket, and
           // the requester confirms there with the same filament-mapping flow.
-          log("INFO", `Remote upload from ${req.socket.remoteAddress}: pending print ${uploadedPath}, awaiting remote confirmation via WebUI`);
+          // Requests proxied by `tailscale serve` arrive from loopback with
+          // X-Forwarded-For set to the real client (v5.44.1, traps.md #155).
+          const xffClient = String(req.headers["x-forwarded-for"] || "").split(",")[0].trim();
+          log("INFO", `Remote upload from ${xffClient || req.socket.remoteAddress}: pending print ${uploadedPath}, awaiting remote confirmation via WebUI`);
         }
       }
 
@@ -1107,7 +1178,7 @@ async function handleUploadWithConfirm(req, res) {
 }
 
 async function proxyToMoonraker(req, res, targetPath) {
-  if (!printerConfig.host) return res.status(400).json({ error: "no_printer_configured" });
+  if (!hasUpstreamTarget()) return res.status(400).json({ error: "no_printer_configured" });
 
   const baseUrl = getBaseUrl();
   let url = `${baseUrl}${targetPath}`;
@@ -1139,7 +1210,11 @@ async function proxyToMoonraker(req, res, targetPath) {
     const body = Buffer.from(await r.arrayBuffer());
     log("DEBUG", `Proxy ${req.method} ${targetPath} → ${r.status} (${contentType}, ${body.length}b)`);
 
-    const skipHeaders = ["transfer-encoding", "connection"];
+    // node-fetch auto-decompresses gzip/deflate, so the body we forward is
+    // already decoded — forwarding upstream content-encoding/content-length
+    // makes clients try to gunzip plain text (zlib "incorrect header check",
+    // breaks cascade: Bridge A fetching from Bridge B). Strip both.
+    const skipHeaders = ["transfer-encoding", "connection", "content-encoding", "content-length"];
     for (const [k, v] of r.headers.entries()) {
       if (!skipHeaders.includes(k.toLowerCase())) {
         res.setHeader(k, v);
@@ -1316,7 +1391,7 @@ app.get("/api/ai/read_gcode.js", (req, res) => {
 app.get("/api/ai/upload_to_printer.js", async (req, res) => {
   const cb = req.query.cb || "callback";
   try {
-    if (!printerConfig.host) throw new Error("No printer configured");
+    if (!hasUpstreamTarget()) throw new Error("No printer configured");
     const gcodeName = req.query.gcode_name;
     const gcodePath = sliceAgent.getGcodePath(gcodeName);
     if (!gcodePath) throw new Error("G-code not found: " + gcodeName);
@@ -1469,7 +1544,7 @@ app.post("/api/ai/upload_gcode", async (req, res) => {
 app.get("/api/ai/list_printer_gcode.js", async (req, res) => {
   const cb = req.query.cb || "callback";
   try {
-    if (!printerConfig.host) {
+    if (!hasUpstreamTarget()) {
       res.type("application/javascript");
       res.send(`${cb}(${JSON.stringify({ ok: false, error: "No printer configured" })});`);
       return;
@@ -1498,7 +1573,7 @@ app.get("/api/ai/check_gcode_format.js", async (req, res) => {
   try {
     const filePath = req.query.path;
     if (!filePath) throw new Error("path parameter required");
-    if (!printerConfig.host) throw new Error("No printer configured");
+    if (!hasUpstreamTarget()) throw new Error("No printer configured");
     const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
     // Range request: only download first 32KB for format detection
     const resp = await fetch(`${getBaseUrl()}/server/files/gcodes/${encodedPath}`, {
@@ -1535,7 +1610,7 @@ app.get("/api/ai/fetch_printer_gcode.js", async (req, res) => {
   try {
     const filePath = req.query.path;
     if (!filePath) throw new Error("path parameter required");
-    if (!printerConfig.host) throw new Error("No printer configured");
+    if (!hasUpstreamTarget()) throw new Error("No printer configured");
     // Download from Moonraker — encode path segments for URLs with spaces/CJK
     const encodedPath = filePath.split("/").map(encodeURIComponent).join("/");
     // No timeout for downloads: G-code files can be large, download time is uncontrollable.
@@ -1607,14 +1682,18 @@ app.all("/printer/{*path}", (req, res) => proxyToMoonraker(req, res, `/printer/$
 app.all("/machine/{*path}", (req, res) => proxyToMoonraker(req, res, `/machine/${wcPath(req)}`));
 
 app.get("/webcam/{*path}", async (req, res) => {
-  if (!printerConfig.host) return res.status(400).json({ error: "no_printer_configured" });
+  if (!hasUpstreamTarget()) return res.status(400).json({ error: "no_printer_configured" });
   const p = wcPath(req);
   const qs = req.url.includes("?") ? `?${req.url.split("?")[1]}` : "";
   const url = `${getBaseUrl()}/webcam/${p}${qs}`;
   try {
     const r = await fetchWithTimeout(url, { headers: moonrakerHeaders() }, 30000);
     const body = Buffer.from(await r.arrayBuffer());
-    const skipHeaders = ["transfer-encoding", "connection"];
+    // node-fetch auto-decompresses gzip/deflate, so the body we forward is
+    // already decoded — forwarding upstream content-encoding/content-length
+    // makes clients try to gunzip plain text (zlib "incorrect header check",
+    // breaks cascade: Bridge A fetching from Bridge B). Strip both.
+    const skipHeaders = ["transfer-encoding", "connection", "content-encoding", "content-length"];
     for (const [k, v] of r.headers.entries()) {
       if (!skipHeaders.includes(k.toLowerCase())) {
         res.setHeader(k, v);
@@ -1632,7 +1711,7 @@ app.get("/webcam/{*path}", async (req, res) => {
 
 app.all("/{*path}", async (req, res) => {
   const p = wcPath(req);
-  if (!printerConfig.host) return res.status(503).json({ error: "no_printer_configured" });
+  if (!hasUpstreamTarget()) return res.status(503).json({ error: "no_printer_configured" });
   log("DEBUG", `Catch-all proxy: ${req.method} /${p}`);
   return proxyToMoonraker(req, res, `/${p}`);
 });
@@ -1640,18 +1719,20 @@ app.all("/{*path}", async (req, res) => {
 function renderSetupPage() {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>BambuStudio Bridge</title>
 <style>*{box-sizing:border-box}body{font-family:system-ui,-apple-system,sans-serif;background:#1a1a2e;color:#e0e0e0;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}.card{background:#16213e;border-radius:16px;padding:40px;max-width:520px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.3)}h1{color:#0f8bff;margin:0 0 8px;font-size:24px}.subtitle{color:#ff9800;margin:0 0 20px;font-size:14px}.scan-section{text-align:center;margin-bottom:24px}.scan-btn{padding:14px 32px;border:none;border-radius:12px;background:#0f8bff;color:#fff;font-size:16px;font-weight:600;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:8px}.scan-btn:hover{background:#0a6fd6;transform:scale(1.02)}.scan-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}.scan-result{margin-top:16px;font-size:13px;padding:10px 12px;border-radius:8px;display:none}.scan-result.found{display:block;background:#0a2e1a;border:1px solid #1a5c3a;color:#4caf50}.scan-result.none{display:block;background:#2e1a0a;border:1px solid #5c3a1a;color:#ff9800}.scan-result.error{display:block;background:#2e0a0a;border:1px solid #5c1a1a;color:#f44336}.printer-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:6px;cursor:pointer;transition:all .15s;margin-top:6px}.printer-item:hover{background:rgba(15,139,255,.1)}.printer-item .p-ip{font-weight:600;color:#0f8bff}.printer-item .p-name{color:#888;font-size:12px}.divider{display:flex;align-items:center;gap:12px;margin:20px 0;color:#555;font-size:13px}.divider::before,.divider::after{content:'';flex:1;height:1px;background:#333}label{display:block;margin-bottom:4px;font-size:13px;color:#aaa}input{width:100%;padding:10px 12px;border:1px solid #333;border-radius:8px;background:#0d1117;color:#e0e0e0;font-size:14px;box-sizing:border-box;margin-bottom:12px}input:focus{outline:none;border-color:#0f8bff}.ip-row{display:flex;gap:8px;margin-bottom:12px}.ip-row input{flex:1;margin-bottom:0}button[type=submit]{width:100%;padding:12px;border:none;border-radius:8px;background:#0f8bff;color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:all .2s}button[type=submit]:hover{background:#0a6fd6}.hint{color:#555;font-size:12px;margin-top:16px;line-height:1.5}.hint code{background:#0d1117;padding:2px 6px;border-radius:4px;color:#888}</style></head><body>
-<div class="card"><h1>&#x1F50C; BambuStudio Bridge</h1><p class="subtitle">Auto-detection did not find a printer on your network.</p>
+<div class="card"><h1>&#x1F50C; BambuStudio Bridge</h1><p class="subtitle">No printer on this network — connect directly, or through a Bridge at home.</p>
 <div class="scan-section"><button class="scan-btn" id="scanBtn" onclick="scanPrinters()">&#x1F50D; Scan Network</button><div class="scan-result" id="scanResult"></div></div>
 <div class="divider">or enter manually</div>
 <form id="setup"><label>Printer IP Address</label><div class="ip-row"><input id="host" placeholder="192.168.1.12"></div><label>Moonraker Port</label><input id="port" value="80" type="number"><label>API Key (optional)</label><input id="apikey" placeholder="Leave empty if trusted_clients is configured"><button type="submit">Connect</button></form>
-<p class="hint">Tip: Make sure your printer is powered on and connected to the same network. Add <code>trusted_clients: 192.168.0.0/16</code> to your <code>moonraker.conf</code> [authorization] section to skip API Key.</p></div>
-<script>function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}function scanPrinters(){var btn=document.getElementById('scanBtn');var result=document.getElementById('scanResult');btn.disabled=true;btn.innerHTML='\\u23F3 Scanning...';result.className='scan-result';result.style.display='none';fetch('/api/bridge/scan?timeout=5').then(function(r){return r.json()}).then(function(d){btn.disabled=false;btn.innerHTML='\\uD83D\\uDD0D Scan Network';if(d.error){result.className='scan-result error';result.style.display='block';result.textContent='Scan error: '+d.error;return;}var printers=d.printers||[];if(printers.length===0){result.className='scan-result none';result.style.display='block';result.textContent='No Snapmaker printers found on your network.';return;}if(printers.length===1){var p=printers[0];document.getElementById('host').value=p.ip;result.className='scan-result found';result.style.display='block';result.innerHTML='Found: <b>'+escHtml(p.name)+'</b> at <b>'+escHtml(p.ip)+'</b>. Click Connect below.';}else{var html='Found '+printers.length+' printers (click to select):<br>';printers.forEach(function(p){html+='<div class="printer-item" data-ip="'+escHtml(p.ip)+'"><span class="p-name">'+escHtml(p.name)+'</span> <span class="p-ip">'+escHtml(p.ip)+'</span></div>';});result.className='scan-result found';result.style.display='block';result.innerHTML=html;result.querySelectorAll('.printer-item').forEach(function(el){el.onclick=function(){document.getElementById('host').value=el.dataset.ip;};});}}).catch(function(e){btn.disabled=false;btn.innerHTML='\\uD83D\\uDD0D Scan Network';result.className='scan-result error';result.style.display='block';result.textContent='Scan failed: '+e.message;});}document.getElementById('setup').onsubmit=function(e){e.preventDefault();var h=document.getElementById('host').value;var p=document.getElementById('port').value||'80';var k=document.getElementById('apikey').value;window.location.href='/?host='+encodeURIComponent(h)+'&port='+p+'&apikey='+encodeURIComponent(k);};</script></body></html>`;
+<div class="divider">or connect to a remote Bridge</div>
+<form id="setupRemote"><label>Remote Bridge URL <span style="color:#555">(away from home, via Tailscale)</span></label><input id="upstream" placeholder="https://home-pc.tailxxxx.ts.net"><button type="submit">Connect</button></form>
+<p class="hint">Tip: Make sure your printer is powered on and connected to the same network. Add <code>trusted_clients: 192.168.0.0/16</code> to your <code>moonraker.conf</code> [authorization] section to skip API Key.<br>Remote Bridge: on your <b>home</b> PC run <code>tailscale serve --bg http://127.0.0.1:13628</code>, then paste its URL here — this PC talks to your printer through it.</p></div>
+<script>function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}function scanPrinters(){var btn=document.getElementById('scanBtn');var result=document.getElementById('scanResult');btn.disabled=true;btn.innerHTML='\\u23F3 Scanning...';result.className='scan-result';result.style.display='none';fetch('/api/bridge/scan?timeout=5').then(function(r){return r.json()}).then(function(d){btn.disabled=false;btn.innerHTML='\\uD83D\\uDD0D Scan Network';if(d.error){result.className='scan-result error';result.style.display='block';result.textContent='Scan error: '+d.error;return;}var printers=d.printers||[];if(printers.length===0){result.className='scan-result none';result.style.display='block';result.textContent='No Snapmaker printers found on your network.';return;}if(printers.length===1){var p=printers[0];document.getElementById('host').value=p.ip;result.className='scan-result found';result.style.display='block';result.innerHTML='Found: <b>'+escHtml(p.name)+'</b> at <b>'+escHtml(p.ip)+'</b>. Click Connect below.';}else{var html='Found '+printers.length+' printers (click to select):<br>';printers.forEach(function(p){html+='<div class="printer-item" data-ip="'+escHtml(p.ip)+'"><span class="p-name">'+escHtml(p.name)+'</span> <span class="p-ip">'+escHtml(p.ip)+'</span></div>';});result.className='scan-result found';result.style.display='block';result.innerHTML=html;result.querySelectorAll('.printer-item').forEach(function(el){el.onclick=function(){document.getElementById('host').value=el.dataset.ip;};});}}).catch(function(e){btn.disabled=false;btn.innerHTML='\\uD83D\\uDD0D Scan Network';result.className='scan-result error';result.style.display='block';result.textContent='Scan failed: '+e.message;});}document.getElementById('setup').onsubmit=function(e){e.preventDefault();var h=document.getElementById('host').value;var p=document.getElementById('port').value||'80';var k=document.getElementById('apikey').value;window.location.href='/?host='+encodeURIComponent(h)+'&port='+p+'&apikey='+encodeURIComponent(k);};document.getElementById('setupRemote').onsubmit=function(e){e.preventDefault();var u=document.getElementById('upstream').value.trim().replace(/\\/+$/,'');if(!u){document.getElementById('upstream').style.borderColor='#f44336';return;}if(!/^https?:\\/\\//.test(u)){u='https://'+u;}window.location.href='/?upstream='+encodeURIComponent(u);};</script></body></html>`;
 }
 
 function renderFallbackPage() {
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>BambuStudio Bridge</title>
 <style>body{font-family:system-ui,sans-serif;background:#1a1a2e;color:#e0e0e0;display:flex;justify-content:center;align-items:center;min-height:100vh;margin:0}.card{background:#16213e;border-radius:16px;padding:40px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.3)}h1{color:#0f8bff;margin:0 0 8px;font-size:24px}.info{color:#888;margin:0 0 16px;font-size:14px}a{color:#0f8bff}</style></head><body>
-<div class="card"><h1>&#x1F50C; BambuStudio Bridge</h1><p class="info">Connected to <b>${printerConfig.host}:${printerConfig.port}</b></p><p class="info">Fluidd frontend not found. Access printer directly:<br><a href="http://${printerConfig.host}:${printerConfig.port}">http://${printerConfig.host}:${printerConfig.port}</a></p></div></body></html>`;
+<div class="card"><h1>&#x1F50C; BambuStudio Bridge</h1><p class="info">Connected to <b>${getBaseUrl()}</b></p><p class="info">Fluidd frontend not found. Access printer directly:<br><a href="${getBaseUrl()}">${getBaseUrl()}</a></p></div></body></html>`;
 }
 
 const server = http.createServer(app);
@@ -1662,12 +1743,12 @@ function handleWsConnection(ws) {
   bridgeWsClients.add(ws);
   log("DEBUG", `WS client connected, total=${bridgeWsClients.size}`);
 
-  if (!printerConfig.host) {
+  if (!hasUpstreamTarget()) {
     ws.close(4001, "no_printer_configured");
     return;
   }
 
-  const moonrakerUrl = `ws://${printerConfig.host}:${printerConfig.port}/websocket`;
+  const moonrakerUrl = getWsUrl();
   let moonrakerWs;
   const pendingMsgs = [];
 
@@ -1743,11 +1824,12 @@ sliceAgent.setAppDataDir(path.join(APPDATA_DIR, "ai-lab"));
 sliceAgent.setRawPathCache(new Map());
 sliceAgent.setLogFn(log);
 log("INFO", `BambuStudio Bridge v${BRIDGE_VERSION} starting on port ${DEFAULT_PORT}`);
+if (printerConfig.upstream) log("INFO", `Cascade mode: forwarding to upstream bridge ${printerConfig.upstream}`);
 log("INFO", `Web dir: ${WEB_DIR}`);
 log("INFO", `Config: ${CONFIG_FILE}`);
 
 async function autoDetectPrinter() {
-  if (printerConfig.host) return;
+  if (hasUpstreamTarget()) return;
   log("INFO", "No printer configured, starting auto-detection...");
   try {
     const { Bonjour } = require("bonjour-service");

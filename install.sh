@@ -1,8 +1,8 @@
 #!/bin/bash
-# Snapmaker U1 BambuStudio Compatibility Pack v5.44.0 - Linux Installer
+# Snapmaker U1 BambuStudio Compatibility Pack v5.46.0 - Linux Installer
 set -e
 
-VERSION="5.44.0"
+VERSION="5.46.0"
 BRIDGE_PORT=13628
 
 # Colors
@@ -222,6 +222,7 @@ if [[ "$confirm" != "Y" && "$confirm" != "y" ]]; then
     yellow "  Cancelled."
     exit 0
 fi
+
 echo ""
 
 # ─── Steps 2-6: BambuStudio profiles (skip in Bridge-only mode) ───
@@ -322,25 +323,28 @@ fi
 
 # ─── [5/9] Patch user machine configs ───
 white "  [5/9] Patching user machine configs (print_host -> Bridge)..."
+PATCH_HOST="http://127.0.0.1:${BRIDGE_PORT}"
+PATCH_WEBUI="http://127.0.0.1:${BRIDGE_PORT}"
 PATCHED_COUNT=0
 if [ -d "$BAMBU_CONFIG_DIR/user" ]; then
     while IFS= read -r -d '' mf; do
         # Only process machine configs with Snapmaker in name
         if [[ "$mf" == */machine/* ]] && [[ "$(basename "$mf")" == *Snapmaker* ]]; then
-            node -e "
+            PATCH_HOST="$PATCH_HOST" PATCH_WEBUI="$PATCH_WEBUI" node -e "
 const fs = require('fs');
 const p = '$mf';
+const HOST = process.env.PATCH_HOST, WEBUI = process.env.PATCH_WEBUI;
 try {
     const raw = fs.readFileSync(p, 'utf-8');
     if (!raw.includes('Snapmaker')) process.exit(0);
     const json = JSON.parse(raw);
     let changed = false;
-    if (json.print_host && json.print_host !== 'http://127.0.0.1:${BRIDGE_PORT}') {
-        console.log('    print_host: ' + json.print_host + ' -> http://127.0.0.1:${BRIDGE_PORT}');
-        json.print_host = 'http://127.0.0.1:${BRIDGE_PORT}';
+    if (json.print_host && json.print_host !== HOST) {
+        console.log('    print_host: ' + json.print_host + ' -> ' + HOST);
+        json.print_host = HOST;
         changed = true;
     } else if (!json.print_host) {
-        json.print_host = 'http://127.0.0.1:${BRIDGE_PORT}';
+        json.print_host = HOST;
         changed = true;
     }
     if (json.host_type && json.host_type !== 'octoprint') {
@@ -350,8 +354,8 @@ try {
         json.host_type = 'octoprint';
         changed = true;
     }
-    if (json.print_host_webui && json.print_host_webui !== 'http://127.0.0.1:${BRIDGE_PORT}') {
-        json.print_host_webui = 'http://127.0.0.1:${BRIDGE_PORT}';
+    if (json.print_host_webui && json.print_host_webui !== WEBUI) {
+        json.print_host_webui = WEBUI;
         changed = true;
     }
     if (changed) {
@@ -514,7 +518,7 @@ else
     dark "  Profiles: skipped (Bridge-only mode)"
 fi
 
-BRIDGE_OK="no"; [ -f "$BRIDGE_INSTALL_DIR/server.js" ] && BRIDGE_OK="yes"
+BRIDGE_OK="no"; [ -n "$BRIDGE_INSTALL_DIR" ] && [ -f "$BRIDGE_INSTALL_DIR/server.js" ] && BRIDGE_OK="yes"
 
 if [ "$BRIDGE_OK" = "yes" ]; then
     green "  Bridge Server (Node.js): installed"
@@ -673,6 +677,8 @@ else
     echo ""
     dark "  Bridge auto-detects your printer via mDNS (no manual IP needed)."
     dark "  If auto-detection fails, open http://127.0.0.1:${BRIDGE_PORT} in browser to configure."
+    dark "  Using BambuStudio AWAY from home? Open http://127.0.0.1:${BRIDGE_PORT} ->"
+    dark "  settings -> Remote Bridge, and point it at your home Bridge (Tailscale)."
 fi
 echo ""
 dark "  Bridge config: $BRIDGE_CONFIG_DIR/"

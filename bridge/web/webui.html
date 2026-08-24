@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <title>BambuStudio Bridge</title>
-<link rel="stylesheet" href="ailab.css?v=5.44.0">
+<link rel="stylesheet" href="ailab.css?v=5.46.0">
 <style>
 :root{--bg:#f0f2f5;--panel:#fff;--panel2:#f5f5f5;--border:#e0e0e0;--primary:#2196f3;--primary-light:#64b5f6;--danger:#f44336;--success:#4caf50;--warn:#ff9800;--text:#333;--text2:#666;--text3:#999;--radius:10px}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -740,7 +740,7 @@ function switchTab(tab){
   $('ailab-content').style.display=tab==='ailab'?'block':'none';
   $('gcvt-content').style.display=tab==='gcvt'?'block':'none';
   if(tab==='debug') loadDebugLogs();
-  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.44.0';checkUpdate();}
+  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.46.0';checkUpdate();}
   if(tab==='ailab') aiLoadConfig();
   if(tab==='gcvt') gcvtInit();
 }
@@ -1299,7 +1299,9 @@ document.head.appendChild(s);
 })();
 
 bridgeGET('/api/bridge/config',function(d){
-if(d&&d.printer_host){
+if(d&&d.upstream){
+$('devIp').textContent=d.upstream.replace(/^https?:\/\//,'');
+}else if(d&&d.printer_host){
 $('devIp').textContent=d.printer_host+':'+(d.printer_port||80);
 }
 if(d&&d.version){
@@ -1348,17 +1350,31 @@ function showPrinterConfig(){
     var curHost=(d&&d.printer_host)||'';
     var curPort=(d&&d.printer_port)||80;
     var curBind=(d&&d.bind)||'127.0.0.1';
+    var curUp=(d&&d.upstream)||'';
+    var mode=curUp?'upstream':'printer';
+    var inpStyle='width:100%;padding:8px 10px;border:1px solid #444;border-radius:6px;background:#0d1117;color:#e0e0e0;font-size:13px;box-sizing:border-box';
+    var lblStyle='display:block;margin-bottom:4px;font-size:12px;color:#aaa;margin-top:8px';
     var overlay=document.createElement('div');
     overlay.className='modal-overlay';
     overlay.id='printerConfigModal';
     overlay.onclick=function(e){if(e.target===this)this.remove();};
     overlay.innerHTML='<div class="modal modal-dark" style="max-width:460px"><div class="modal-body"><div class="modal-section"><h3>Printer Connection</h3>'+
-      '<label style="display:block;margin-bottom:4px;font-size:12px;color:#aaa;margin-top:12px">IP Address</label>'+
-      '<input id="cfgHost" value="'+escHtml(curHost)+'" placeholder="192.168.1.12" style="width:100%;padding:8px 10px;border:1px solid #444;border-radius:6px;background:#0d1117;color:#e0e0e0;font-size:13px;box-sizing:border-box">'+
-      '<label style="display:block;margin-bottom:4px;font-size:12px;color:#aaa;margin-top:8px">Port</label>'+
-      '<input id="cfgPort" value="'+escHtml(String(curPort))+'" type="number" style="width:100%;padding:8px 10px;border:1px solid #444;border-radius:6px;background:#0d1117;color:#e0e0e0;font-size:13px;box-sizing:border-box">'+
-      '<label style="display:block;margin-bottom:4px;font-size:12px;color:#aaa;margin-top:8px">API Key <span style="color:#666;font-size:11px">(optional)</span></label>'+
-      '<input id="cfgApiKey" value="'+(d&&d.has_apikey?'[saved]':'')+'" placeholder="Optional" style="width:100%;padding:8px 10px;border:1px solid #444;border-radius:6px;background:#0d1117;color:#e0e0e0;font-size:13px;box-sizing:border-box">'+
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:12px"><input type="radio" name="cfgMode" value="printer"'+(mode==='printer'?' checked':'')+' onchange="cfgModeChanged()">Local printer <span style="color:#666;font-size:11px">(on this network)</span></label>'+
+      '<div id="cfgPrinterGroup" style="'+(mode==='printer'?'':'display:none')+'">'+
+      '<label style="'+lblStyle+';margin-top:12px">IP Address</label>'+
+      '<input id="cfgHost" value="'+escHtml(curHost)+'" placeholder="192.168.1.12" style="'+inpStyle+'">'+
+      '<label style="'+lblStyle+'">Port</label>'+
+      '<input id="cfgPort" value="'+escHtml(String(curPort))+'" type="number" style="'+inpStyle+'">'+
+      '<label style="'+lblStyle+'">API Key <span style="color:#666;font-size:11px">(optional)</span></label>'+
+      '<input id="cfgApiKey" value="'+(d&&d.has_apikey?'[saved]':'')+'" placeholder="Optional" style="'+inpStyle+'"></div>'+
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:12px"><input type="radio" name="cfgMode" value="upstream"'+(mode==='upstream'?' checked':'')+' onchange="cfgModeChanged()">Remote Bridge <span style="color:#666;font-size:11px">(away from home, via Tailscale)</span></label>'+
+      '<div id="cfgUpstreamGroup" style="'+(mode==='upstream'?'':'display:none')+'">'+
+      '<label style="'+lblStyle+';margin-top:12px">Home Bridge URL</label>'+
+      '<input id="cfgUpstream" value="'+escHtml(curUp)+'" placeholder="https://home-pc.tailxxxx.ts.net" style="'+inpStyle+'">'+
+      '<div style="display:flex;align-items:center;gap:8px;margin-top:8px">'+
+      '<button type="button" class="modal-btn modal-btn-cancel" style="padding:4px 12px;font-size:12px" onclick="testUpstream(this)">Test</button>'+
+      '<span id="cfgUpTest" style="font-size:12px;color:#aaa"></span></div>'+
+      '<div style="color:#666;font-size:11px;margin-top:8px;line-height:1.5">Run on your home PC once: <code style="color:#4fc3f7">tailscale serve --bg http://127.0.0.1:13628</code><br>This PC then reaches your printer through that Bridge — print confirm, webcam and AI Lab all work here.</div></div>'+
       '</div><div class="modal-section" style="margin-top:16px"><h3>Remote Access <span style="font-weight:normal;font-size:11px;color:#666">(Tailscale)</span></h3>'+
       '<div style="margin-top:10px;font-size:13px;color:#e0e0e0;line-height:2">'+
       '<label style="display:flex;align-items:center;gap:8px;cursor:pointer"><input type="radio" name="cfgBind" value="127.0.0.1"'+(curBind==='127.0.0.1'?' checked':'')+'>Local only <span style="color:#666;font-size:11px">(127.0.0.1)</span></label>'+
@@ -1381,7 +1397,7 @@ function showPrinterConfig(){
           html+='<div style="display:flex;align-items:center;gap:6px;margin-top:4px"><span style="color:#888">Remote URL:</span>'+
             '<code style="color:#4fc3f7;font-size:11px;word-break:break-all">'+escHtml(recUrl)+'</code>'+
             '<button type="button" class="modal-btn modal-btn-cancel" style="padding:2px 10px;font-size:11px" onclick="bridgeCopyText(\''+escHtml(recUrl)+'\',this)">Copy</button></div>'+
-            '<div style="color:#666;font-size:11px;margin-top:4px">Use this URL as the print_host on your remote BambuStudio (Tailscale required).</div>';
+            '<div style="color:#666;font-size:11px;margin-top:4px">On an away PC: install this pack there, open its WebUI settings, pick Remote Bridge and paste this URL (Tailscale required).</div>';
         }
         box.innerHTML=html;
       }else{
@@ -1396,18 +1412,48 @@ function closePrinterConfig(){
   var el=document.getElementById('printerConfigModal');
   if(el)el.remove();
 }
+function cfgModeChanged(){
+  var sel=document.querySelector('input[name="cfgMode"]:checked');
+  var mode=sel?sel.value:'printer';
+  document.getElementById('cfgPrinterGroup').style.display=mode==='printer'?'':'none';
+  document.getElementById('cfgUpstreamGroup').style.display=mode==='upstream'?'':'none';
+}
+function testUpstream(btn){
+  var box=document.getElementById('cfgUpTest');
+  var u=document.getElementById('cfgUpstream').value.trim().replace(/\/+$/,'');
+  if(!u){box.textContent='Enter a URL first';box.style.color='#ff9800';return;}
+  if(!/^https?:\/\//.test(u))u='https://'+u;
+  box.textContent='Testing...';box.style.color='#aaa';
+  if(btn){btn.disabled=true;}
+  bridgeGET('/api/bridge/test_upstream?url='+encodeURIComponent(u),function(d){
+    if(btn){btn.disabled=false;}
+    if(d&&d.ok){box.innerHTML='&#10003; '+escHtml(d.detail||'reachable');box.style.color='#4caf50';}
+    else{box.innerHTML='&#10007; '+escHtml((d&&d.error)||'failed');box.style.color='#f44336';}
+  });
+}
 function applyPrinterConfig(){
-  var host=document.getElementById('cfgHost').value.trim();
-  if(!host){document.getElementById('cfgHost').style.borderColor='#f44336';return;}
-  var port=document.getElementById('cfgPort').value||'80';
-  var apikeyInput=document.getElementById('cfgApiKey').value.trim();
-  // Only send API key if user typed a new value (don't overwrite saved key with empty)
-  var apikeyParam=apikeyInput&&apikeyInput!=='[saved]'?'&apikey='+encodeURIComponent(apikeyInput):'';
+  var sel=document.querySelector('input[name="cfgMode"]:checked');
+  var mode=sel?sel.value:'printer';
+  var saveUrl,upstreamUrl='',host='',port='';
+  if(mode==='upstream'){
+    upstreamUrl=document.getElementById('cfgUpstream').value.trim().replace(/\/+$/,'');
+    if(!upstreamUrl){document.getElementById('cfgUpstream').style.borderColor='#f44336';return;}
+    if(!/^https?:\/\//.test(upstreamUrl))upstreamUrl='https://'+upstreamUrl;
+    saveUrl='/api/bridge/save_config?target=upstream&url='+encodeURIComponent(upstreamUrl);
+  }else{
+    host=document.getElementById('cfgHost').value.trim();
+    if(!host){document.getElementById('cfgHost').style.borderColor='#f44336';return;}
+    port=document.getElementById('cfgPort').value||'80';
+    var apikeyInput=document.getElementById('cfgApiKey').value.trim();
+    // Only send API key if user typed a new value (don't overwrite saved key with empty)
+    var apikeyParam=apikeyInput&&apikeyInput!=='[saved]'?'&apikey='+encodeURIComponent(apikeyInput):'';
+    saveUrl='/api/bridge/save_config?target=printer&host='+encodeURIComponent(host)+'&port='+port+apikeyParam;
+  }
   var bindSel=document.querySelector('input[name="cfgBind"]:checked');
   var newBind=bindSel?bindSel.value:'127.0.0.1';
   var hostBtn=document.querySelector('#printerConfigModal .modal-btn-print');
   if(hostBtn){hostBtn.disabled=true;hostBtn.textContent='Connecting...';}
-  bridgeGET('/api/bridge/save_config?host='+encodeURIComponent(host)+'&port='+port+apikeyParam,function(d){
+  bridgeGET(saveUrl,function(d){
     if(!(d&&d.ok)){
       alert('Save failed: '+(d&&d.error||'no response'));
       if(hostBtn){hostBtn.disabled=false;hostBtn.textContent='Apply & Reconnect';}
@@ -1416,7 +1462,11 @@ function applyPrinterConfig(){
     bridgeGET('/api/bridge/set_remote_access?bind='+encodeURIComponent(newBind),function(rd){
       closePrinterConfig();
       var needsRestart=rd&&rd.needs_restart;
-      $('devIp').textContent=host+':'+port;
+      if(mode==='upstream'){
+        $('devIp').textContent=upstreamUrl.replace(/^https?:\/\//,'');
+      }else{
+        $('devIp').textContent=host+':'+port;
+      }
       if(needsRestart){
         alert('Remote access: bind='+newBind+'\n\nRestart the BambuStudio Bridge to apply the listening change.');
         location.reload();
@@ -1428,8 +1478,8 @@ function applyPrinterConfig(){
 }
 
 </script>
-<script src="ailab.js?v=5.44.0"></script>
-<script src="gcvt.js?v=5.44.0"></script>
+<script src="ailab.js?v=5.46.0"></script>
+<script src="gcvt.js?v=5.46.0"></script>
 </body>
 </html>
 

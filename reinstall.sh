@@ -1,5 +1,5 @@
 #!/bin/bash
-# Snapmaker U1 BambuStudio Compatibility Pack v5.44.0 - Linux Reinstaller
+# Snapmaker U1 BambuStudio Compatibility Pack v5.46.0 - Linux Reinstaller
 # Stops Bridge, uninstalls, then reinstalls in one step
 set -e
 
