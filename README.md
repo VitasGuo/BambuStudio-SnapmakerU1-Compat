@@ -1,6 +1,6 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.44.1
+# Snapmaker U1 BambuStudio 兼容包 v5.47.0
 
-让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框）。
+让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框），支持局域网直连与 Tailscale 级联远程打印。
 
 ---
 
@@ -13,7 +13,7 @@
 - **操作系统**：Windows 或 Linux
 - 已安装 **BambuStudio**（[官方下载](https://bambulab.com/en/download/bambu-studio)）
 - 已安装 **Node.js** 18+（[官方下载](https://nodejs.org)）
-- Snapmaker U1 打印机与电脑处于**同一局域网**
+- Snapmaker U1 打印机与电脑处于**同一局域网**（外网远程打印需 Tailscale，见[远程打印](#远程打印tailscale-级联架构-v5460)章节）
 
 ---
 
@@ -324,6 +324,9 @@ A: v5.18.1 已修复此问题，安装脚本不再删除用户自定义预设。
 
 ## 版本历史
 
+- **v5.47.0** (2026-08-24) - 级联链路网络效率优化 + 大文件传输稳定性（外网实测"卡"的针对性修复）：1) **keep-alive 连接池**（http/https Agent）——原每请求新建 TCP+TLS，跨 Tailscale 每次握手 +100~400ms、设备面板一次刷新几十个请求是"卡"主因；2) **gzip 响应压缩**（express compression，≥1KB，JSONP `cb=` 请求豁免防老 WebView）——文件列表/G-code 文本跨网流量降 ~70-80%；3) **流式转发**（proxyToMoonraker/webcam 从 arrayBuffer 全缓冲改 pipeline）——146MB G-code 级联下载实测完整（17.5s），双端零全量内存；4) **WS 30s ping 保活**——防 Tailscale/NAT 空闲断连导致面板状态卡死；5) **上传瞬时网络错误自动重试**（ECONNRESET/ETIMEDOUT 等，2s 后重试 1 次，Moonraker 上传幂等安全）；6) deploy-home.ps1 新增依赖自动同步（compression 新运行时依赖，旧 node_modules 缺失会启动崩溃）
+- **v5.46.0** (2026-08-24) - 级联架构（两次 Bridge）+ WebUI 图形化连接配置：外网机 Bridge A 把家里 Bridge B 视为"打印机"——弹窗/切片/AI Lab 全在 A 本地处理，B 纯透传，打印机凭据只存 B 侧；WebUI 齿轮新增 Connection 区块（Local printer / Remote Bridge 单选 + Test 连通性探测 `/api/bridge/test_upstream.js`）；安装器回归纯本地（移除 v5.45.0 命令行模式选择，远程配置全部交给 WebUI）；修复级联必现的 gzip 转发头 bug（node-fetch 自动解压后转发原 content-encoding 头，下游 gunzip 明文报 incorrect header check，traps.md #161）；新增 `BRIDGE_CONFIG_DIR` 环境变量支持多实例调试（traps.md #162）；test script 补回 net_utils.test.js 恢复 52/52（traps.md #163）
+- **v5.45.0** (2026-08-24) - 安装器远程模式开箱即用（v5.46.0 已被 WebUI 配置取代）：安装时选择本地/远程模式，远程模式自动探测 tailnet 在线设备的 Bridge 并改写 print_host；支持 BambuStudio 正式版/Beta 双通道配置目录（traps.md #159）；修复 machine JSON 正则匹配（traps.md #158）；Linux 脚本 CRLF 换行修复 + `.gitattributes` 防回归（traps.md #160）；新增 deploy-home.ps1（家用机一键部署）+ make-zip.ps1（发布打包）
 - **v5.44.1** (2026-08-24) - Tailscale Serve 远程打印适配：部署时发现 Windows 防火墙存在 node.exe 入站 Block 规则（防火墙弹窗点"取消"自动生成，优先级高于 Allow，traps.md #154），直连模式外网不可达且无管理员权限无法删除。改用 `tailscale serve`（tailscaled 在 loopback 代理 + 自动 HTTPS 证书，零防火墙配置）：1) `netUtils.js` 新增 `isLocalRequest(req)`——loopback 且无 `X-Forwarded-For` 才判本地，loopback + XFF = 经 serve 代理的远程请求（traps.md #155），修复 serve 场景下远程上传误弹家里桌面对话框；2) README 远程打印章节重写：serve 为推荐路径，bind 直连降级为高级模式；3) 单元测试新增 8 个 isLocalRequest 用例（总 52 个）
 - **v5.44.0** (2026-08-24) - Tailscale 远程打印正式版：1) **确认交互跟随请求发起方**——本地请求弹本地桌面对话框（不变），远程请求跳过家里桌面弹窗、立即返回上传成功，确认框弹在远程侧 WebUI（Device 标签页），家里电脑纯数据桥接；2) **双通道竞争修复**——`dialog.js` 新增 `cancelActiveDialog()`，WebUI 确认/取消后自动关闭残留桌面对话框，消除重复打印风险；3) **bind 三态**（`127.0.0.1`/`tailnet`/`0.0.0.0`）——推荐 tailnet 模式双监听 tailnet IP + loopback，局域网不可达且本地 BambuStudio 零改动；4) **Tailscale 状态检测**——`tailscale status --json` 拿 MagicDNS 主机名 + 在线状态（网卡扫描兜底，10s 缓存），WebUI 设置弹窗显示推荐 Remote URL 一键复制；5) 新增 `netUtils.js`（isLocalAddress 纯函数）+ 16 个单元测试（总 44 个）
 - **v5.38.0** (2026-07-02) - AI Lab/G-code 转换双语化 + 打印弹窗格式标识（traps.md #149、#150）：1) `ailab.js` / `gcvt.js` 新增 `aiT(zh,en)` / `gcvtT(zh,en)` 翻译函数，IIFE 改为可重调用函数 + ApplyLang 函数，`setLang()` 末尾调用重新渲染面板，~90 个文本点全部双语化跟随 WebUI 语言切换；2) `server.js` 新增 `check_gcode_format.js` JSONP 端点（HTTP Range 下载前 32KB 检测格式），`showPrintDialog` 异步显示格式标识，BambuStudio 格式显示橙色警告 + "前往转换"跳转链接
