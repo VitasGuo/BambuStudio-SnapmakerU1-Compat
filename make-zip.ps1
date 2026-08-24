@@ -1,7 +1,7 @@
-# Build BambuStudio-SnapmakerU1-v5.46.0.zip from the repo root (clean, LF .sh, no legacy python)
+# Build BambuStudio-SnapmakerU1-v5.47.0.zip from the repo root (clean, LF .sh, no legacy python)
 $ErrorActionPreference = "Stop"
 $repo = "c:\Users\nishu\Documents\SOLO\3D-printer\BambuStudio-SnapmakerU1-Compat"
-$zipPath = "$repo\BambuStudio-SnapmakerU1-v5.46.0.zip"
+$zipPath = "$repo\BambuStudio-SnapmakerU1-v5.47.0.zip"
 if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
 
 Add-Type -AssemblyName System.IO.Compression

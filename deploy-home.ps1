@@ -27,6 +27,19 @@ Write-Host "Release: $($zip.Name)"
 Copy-Item (Join-Path $srcBn "server.js"),(Join-Path $srcBn "netUtils.js"),(Join-Path $srcBn "dialog.js"),(Join-Path $srcBn "aiClient.js"),(Join-Path $srcBn "slice_agent.js"),(Join-Path $srcBn "package.json"),(Join-Path $srcBn "watchdog.ps1") $dst -Force
 Write-Host "[OK] bridge-node files copied" -ForegroundColor Green
 
+# 1b. Sync node dependencies (v5.47.0: compression is a new runtime dep —
+# the deploy dir's node_modules lags behind package.json otherwise and the
+# Bridge crashes on require)
+$depChanged = & npm --prefix $dst ls compression --depth=0 2>$null
+if ($LASTEXITCODE -ne 0 -or -not $depChanged) {
+    Write-Host "Installing node dependencies in deploy dir..."
+    & npm --prefix $dst install --omit=dev --no-audit --no-fund 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "npm install failed in $dst" }
+    Write-Host "[OK] node dependencies synced" -ForegroundColor Green
+} else {
+    Write-Host "[OK] node dependencies up to date" -ForegroundColor Green
+}
+
 # 2. Copy webui.html
 Copy-Item (Join-Path $srcWeb "webui.html") (Join-Path $dst "web\webui.html") -Force
 Write-Host "[OK] webui.html copied" -ForegroundColor Green

@@ -95,7 +95,7 @@
 
 **外网机使用流程**：安装兼容包（纯本地）→ WebUI 齿轮 → Connection → Remote Bridge → 填家里 `https://<machine>.ts.net` → Test 通过 → BambuStudio 正常使用（弹窗/切片/AI Lab 均在本机处理）
 
-**家用机部署状态**（2026-08-24）：v5.46.0 已部署 `%LOCALAPPDATA%\BambuStudio-Bridge\app`（deploy-home.ps1，Bridge 经 VBS 重启正常监听 13628，直连打印机模式）；分支 `tailscale-remote-print` 已推送 GitHub（VitasGuo/BambuStudio-SnapmakerU1-Compat）；安装包下载 `https://vitasguo-pc.tailc66d5e.ts.net/fluidd/BambuStudio-SnapmakerU1-v5.46.0.zip`（serve 链路 HTTP 200 已验证），旧 v5.45.0 包已移除
+**家用机部署状态**（2026-08-24）：v5.47.0 已部署 `%LOCALAPPDATA%\BambuStudio-Bridge\app`（deploy-home.ps1 新增依赖自动同步——compression 为新运行时依赖，旧 node_modules 缺失会导致 Bridge 启动失败；Bridge 经 VBS 重启正常监听 13628，直连打印机模式，compression 已生效）；分支 `tailscale-remote-print` 已推送 GitHub；安装包下载 `https://vitasguo-pc.tailc66d5e.ts.net/fluidd/BambuStudio-SnapmakerU1-v5.47.0.zip`（serve 链路 206 range 验证通过），旧 v5.46.0 包已移除。外网机升级方式：重新下载安装包覆盖安装（npm install --production 自动补齐 compression），或手动在外网机 bridge 目录 `npm install compression`
 
 ### v5.45.0 (2026-08-24) — 安装器远程模式：开箱即用
 
