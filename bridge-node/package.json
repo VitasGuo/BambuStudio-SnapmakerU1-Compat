@@ -13,6 +13,7 @@
     "bonjour-service": "^1.4.0",
     "compression": "^1.8.1",
     "express": "^5.1.0",
+    "express-rate-limit": "^7.4.1",
     "form-data": "^4.0.5",
     "formidable": "^3.5.4",
     "http-proxy-middleware": "^3.0.5",

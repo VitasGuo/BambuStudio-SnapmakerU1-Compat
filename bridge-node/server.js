@@ -9,6 +9,7 @@ const { pipeline } = require("stream");
 const { WebSocketServer, WebSocket } = require("ws");
 const fetch = require("node-fetch");
 const compression = require("compression");
+const rateLimit = require("express-rate-limit");
 const { showPrintDialog, cancelActiveDialog } = require("./dialog");
 const { isLocalRequest } = require("./netUtils");
 const sliceAgent = require("./slice_agent");
@@ -355,6 +356,15 @@ app.use(express.raw({ type: ["application/octet-stream", "application/x-gcode"],
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.text({ type: "text/plain" }));
+
+// Rate limiting (CWE-770) — bound request volume per client so unlimited or
+// automated requests cannot exhaust server resources (memory/CPU/connections).
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+}));
 
 app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
