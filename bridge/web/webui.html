@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <title>BambuStudio Bridge</title>
-<link rel="stylesheet" href="ailab.css?v=5.46.0">
+<link rel="stylesheet" href="ailab.css?v=5.48.0">
 <style>
 :root{--bg:#f0f2f5;--panel:#fff;--panel2:#f5f5f5;--border:#e0e0e0;--primary:#2196f3;--primary-light:#64b5f6;--danger:#f44336;--success:#4caf50;--warn:#ff9800;--text:#333;--text2:#666;--text3:#999;--radius:10px}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -656,7 +656,7 @@ file_name:'File',progress:'Progress',elapsed:'Elapsed',remaining:'Remaining',
 calibrating:'Calibrating...',printer_busy:'Printer is busy',
 no_pending:'No pending print',print_started:'Print started',print_failed:'Print failed',
 ws_not_connected:'WebSocket not connected. Please wait and try again.',
-gcode_filament:'G-code',machine_filament:'Machine',filament_used:'used',filament_unused:'unused',filament_match:'Matched',filament_mismatch:'Type mismatch!',filament_none:'No filament',physical_slot:'Slot',
+gcode_filament:'G-code',machine_filament:'Machine',filament_used:'used',filament_match:'Matched',filament_mismatch:'Type mismatch!',filament_none:'No filament',physical_slot:'Slot',
 gcode_info:'G-code Info',estimated_time:'Est. Time',estimated_weight:'Est. Weight',filament_mapping:'Filament Mapping',click_to_change:'Click to change',
 about:'About',about_desc:'Description',about_desc_text:'This compatibility pack enables BambuStudio to control Snapmaker U1 printers with a native-level experience, including print confirmation, filament mapping, camera monitoring, device control, AI Lab (G-code optimization + print assistant), and G-code Convert (BambuStudio→OrcaSlicer).',
 about_usage:'Usage Guide',about_step1:'Install the compat pack (run install.bat as admin), then restart BambuStudio and add Snapmaker U1 printer',about_step2:'Slice your model, click Print → select Print in the dialog → Bridge shows a confirmation dialog',about_step3:'In the confirmation dialog: review G-code info, adjust filament mapping (auto-matched by type, click dropdown to change), set print options',about_step4:'Start print → monitor progress and camera on the Device tab',about_step5:'Use Control panel for real-time adjustments: extruder/bed temp, fan speed, LED, print speed (5 presets)',about_step6:'AI Lab: G-code optimization (LLM diagnoses print issues and generates patches) + Print Assistant (streaming Q&A with thinking mode)',about_step7:'G-code Convert: convert BambuStudio G-code to OrcaSlicer-compatible format for direct printing on U1 device panel',
@@ -695,7 +695,7 @@ file_name:'文件',progress:'进度',elapsed:'已用时间',remaining:'剩余时
 calibrating:'校准中...',printer_busy:'打印机工作中',
 no_pending:'无待打印任务',print_started:'打印已开始',print_failed:'打印失败',
 ws_not_connected:'WebSocket 未连接，请稍后重试。',
-gcode_filament:'G-code',machine_filament:'设备',filament_used:'已使用',filament_unused:'未使用',filament_match:'已匹配',filament_mismatch:'类型不匹配！',filament_none:'无耗材',physical_slot:'槽位',
+gcode_filament:'G-code',machine_filament:'设备',filament_used:'已使用',filament_match:'已匹配',filament_mismatch:'类型不匹配！',filament_none:'无耗材',physical_slot:'槽位',
 gcode_info:'G-code 信息',estimated_time:'预估用时',estimated_weight:'预估用料',filament_mapping:'耗材映射',click_to_change:'点击切换',
 about:'关于',about_desc:'简介',about_desc_text:'本兼容包让 BambuStudio 能够原生级控制 Snapmaker U1 打印机，包括打印确认、耗材映射、摄像头监控、设备控制、AI 实验室（G-code 优化 + 打印助手）和 G-code 转换（BambuStudio→OrcaSlicer）。',
 about_usage:'使用说明',about_step1:'安装兼容包（管理员运行 install.bat），重启 BambuStudio 后添加 Snapmaker U1 打印机',about_step2:'切片模型，点击打印 → 在对话框选择 Print → Bridge 弹出确认框',about_step3:'确认框中：查看 G-code 信息，调整耗材映射（按类型自动匹配，点击下拉框可手动更改），设置打印选项',about_step4:'开始打印 → 在 Device 标签页监控进度和摄像头',about_step5:'使用 Control 面板实时调整：挤出头/热床温度、风扇、灯光、打印速度（5档预设）',about_step6:'AI 实验室：G-code 优化（LLM 诊断打印问题并生成补丁）+ 打印助手（流式问答，支持 Thinking 模式）',about_step7:'G-code 转换：将 BambuStudio G-code 转换为 OrcaSlicer 兼容格式，以便在 U1 设备面板直接打印',
@@ -740,7 +740,7 @@ function switchTab(tab){
   $('ailab-content').style.display=tab==='ailab'?'block':'none';
   $('gcvt-content').style.display=tab==='gcvt'?'block':'none';
   if(tab==='debug') loadDebugLogs();
-  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.46.0';checkUpdate();}
+  if(tab==='about'){$('aboutVer').textContent=$('devVer').textContent||'v5.48.0';checkUpdate();}
   if(tab==='ailab') aiLoadConfig();
   if(tab==='gcvt') gcvtInit();
 }
@@ -877,6 +877,7 @@ $('fileList').innerHTML=html||'<div style="color:var(--text3);font-size:15px;pad
 var pendingFilePath='';
 var printTaskData=null;
 var filamentMap=[0,1,2,3];
+var mapRowIdx=[];
 var gcodeMeta=null;
 var FILAMENT_TYPES=['PLA','PETG','TPU','ABS','ASA','PA','PC','PVA','HIPS','PP','PEI','PEEK','PET','NYLON','CPE','FLEX'];
 function extractFilType(s){if(!s)return '';var u=s.toUpperCase();for(var k=0;k<FILAMENT_TYPES.length;k++){if(u.indexOf(FILAMENT_TYPES[k])>=0)return FILAMENT_TYPES[k];}return u;}
@@ -925,9 +926,21 @@ if(meta.filament_weight){if(typeof meta.filament_weight==='string'){gFilWeight=m
 if(meta.estimated_time){estTime=Math.round(meta.estimated_time);}
 if(meta.filament_weight_total){estWeight=meta.filament_weight_total;}
 }
-filamentMap=[0,1,2,3];
+// G-code slot count is dynamic (BambuStudio projects may define 8+ colors);
+// physical slots stay 4 (U1 has 4 toolheads). Only slots actually used by
+// the gcode get a mapping row; fall back to all typed slots if usage data
+// is unavailable.
+var gCount=Math.max(gFilTypes.length,gFilColors.length,gFilUsed.length);
+var hasUsage=gFilUsed.some(function(v){return v&&v>0;});
+mapRowIdx=[];
+for(var i=0;i<gCount;i++){
+if(hasUsage?(gFilUsed[i]&&gFilUsed[i]>0):!!gFilTypes[i])mapRowIdx.push(i);
+}
+filamentMap=[];
+for(var k=0;k<gCount;k++)filamentMap.push(k%4);
 var assigned={};
-for(var i=0;i<4;i++){
+for(var r=0;r<mapRowIdx.length;r++){
+var i=mapRowIdx[r];
 if(gFilTypes[i]){
 var gCore=extractFilType(gFilTypes[i]);
 var gHex=gFilColors[i]||'#FFFFFF';
@@ -962,20 +975,14 @@ html+='</div>';
 html+='<div id="gcodeFormatInfo" style="margin-top:6px;font-size:12px;color:var(--text3);">'+(curLang==='zh'?'检测格式中...':'Detecting format...')+'</div>';
 html+='</div>';
 html+='<div class="modal-section"><h3>'+t('filament_mapping')+'</h3>';
-for(var i=0;i<4;i++){
+for(var rr=0;rr<mapRowIdx.length;rr++){
+var i=mapRowIdx[rr];
 var gType=gFilTypes[i]||'';
 var gColor=gFilColors[i]||'#FFFFFF';
 var used=gFilUsed[i]&&gFilUsed[i]>0;
 var gWeight=gFilWeight&&gFilWeight[i]?gFilWeight[i]:0;
 var gHex=gColor;
 if(gHex){if(gHex.charAt(0)==='#')gHex=gHex.substring(0,7);else gHex='#'+gHex.substring(0,6);}
-if(!used&&!gType){
-html+='<div class="modal-map-row unused">';
-html+='<span class="modal-map-label">#'+(i+1)+'</span>';
-html+='<span style="color:#555;font-size:13px">—</span>';
-html+='<span class="modal-map-status" style="color:#555">'+t('filament_unused')+'</span>';
-html+='</div>';
-}else{
 var pIdx=filamentMap[i];
 var pType=mFilTypes[pIdx]||'';
 var match=gType&&pType&&extractFilType(gType)===extractFilType(pType);
@@ -985,7 +992,6 @@ html+='<span class="modal-map-label">#'+(i+1)+'</span>';
 html+='<div class="modal-map-dot" style="background:'+gHex+'"></div>';
 html+='<div style="min-width:0"><div class="modal-map-type">'+escHtml(gType||'—')+'</div>';
 if(used&&gWeight>0)html+='<div class="modal-map-sub">'+gWeight.toFixed(1)+'g</div>';
-else if(!used)html+='<div class="modal-map-sub">'+t('filament_unused')+'</div>';
 html+='</div>';
 html+='<span class="modal-map-arrow">&#8594;</span>';
 html+='<div class="map-dropdown" id="dd'+i+'">';
@@ -1014,7 +1020,6 @@ if(match)html+='<span class="modal-map-status ok" id="mapSt'+i+'">&#10003;</span
 else html+='<span class="modal-map-status warn" id="mapSt'+i+'">&#9888;</span>';
 }
 html+='</div>';
-}
 }
 html+='</div>';
 html+='<div class="modal-section"><h3>'+t('print_options')+'</h3>';
@@ -1049,7 +1054,8 @@ function refreshMapStatus(){
 var gFilTypes=[];
 if(gcodeMeta&&gcodeMeta.filament_type){gFilTypes=typeof gcodeMeta.filament_type==='string'?gcodeMeta.filament_type.split(';'):gcodeMeta.filament_type;}
 var mFilTypes=printTaskData.filament_type||[];
-for(var i=0;i<4;i++){
+for(var rr=0;rr<mapRowIdx.length;rr++){
+var i=mapRowIdx[rr];
 var st=document.getElementById('mapSt'+i);
 var row=st?st.closest('.modal-map-row'):null;
 if(!st||!row)continue;
@@ -1131,11 +1137,9 @@ flow_calibrate:document.getElementById('optFlow').checked,
 time_lapse_camera:document.getElementById('optTimelapse').checked
 };
 var mapTable=[];
-var gFilTypesForMap=gcodeMeta?(typeof gcodeMeta.filament_type==='string'?gcodeMeta.filament_type.split(';'):gcodeMeta.filament_type):[];
-for(var i=0;i<4;i++){
-if(gFilTypesForMap&&gFilTypesForMap[i]){
+for(var rr=0;rr<mapRowIdx.length;rr++){
+var i=mapRowIdx[rr];
 mapTable.push([i,filamentMap[i]]);
-}
 }
 console.log('[Print] opts:',JSON.stringify(opts),'filamentMap:',JSON.stringify(filamentMap),'mapTable:',JSON.stringify(mapTable),'pendingFilePath:',pendingFilePath);
 bridgeGET('/api/bridge/pending_print',function(d){
@@ -1478,8 +1482,8 @@ function applyPrinterConfig(){
 }
 
 </script>
-<script src="ailab.js?v=5.46.0"></script>
-<script src="gcvt.js?v=5.46.0"></script>
+<script src="ailab.js?v=5.48.0"></script>
+<script src="gcvt.js?v=5.48.0"></script>
 </body>
 </html>
 

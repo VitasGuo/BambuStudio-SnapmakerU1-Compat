@@ -7,7 +7,7 @@
 
 ## 索引（按类别）
 
-> 统计：共 150 条 — ✅ 已解决 146 | ⚠️ 部分解决 2（#16/#25）| ❌ 未解决 1（#103 固有限制）
+> 统计：共 151 条 — ✅ 已解决 147 | ⚠️ 部分解决 2（#16/#25）| ❌ 未解决 1（#103 固有限制）
 
 ### BambuStudio 配置系统
 #1 跨厂商继承不支持 | #2 filament_list 加载顺序 | #3 PowerShell JSON 格式错误 | #4 AppConfig filaments 缓存 | #5 compatible_printers_condition | #6 厂商匹配检查 | #7 删除 models 段 | #8 Copy-Item 嵌套 | #9 user/default 残留 | #10 conf 写入时机 | #11 filament_vendor 缺失 | #20 只看 @U1 不够 | #21 Orca GitHub 过时
@@ -25,7 +25,7 @@
 #28 WebView 不注入 API Key | #29 网络插件签名验证 | #30 /moonraker/ 前缀不工作 | #31 /ws 路径错误 | #62 Express 5 {*path} 数组 | #63 /access/token 拦截 | #64 热床温度不显示 | #70 中间件顺序 | #71 只转发 content-type | #72 Fluidd SPA 404 | #73 WS 缺错误处理 | #94 温度不自动更新 | #122 JSONP cb 注入 | #123 open_external 命令注入 | #124 上传临时文件泄漏 | #130 ws.onmessage 无异常保护 | #139 node-fetch timeout 非标准 | #142 setup 页面 mDNS XSS | #143 dialog.js fetch timeout 遗漏 | #144 三处 AI Lab 端点裸 fetch 无超时
 
 ### 打印确认流程
-#47 print_stats 初始查询缺失 | #48 切片不触发确认 | #49 confirm_print 参数解析 | #51 start_local_print 不支持 HTTP | #52 WebUI 未加载通知丢失 | #53 gcode/script HTTP 不可用 | #54 无安全检测 | #56 print_host 被覆盖 | #57 gcode() 用不存在的 HTTP | #58 用户预设覆盖 print_host | #59 python-multipart 缺失 | #61 弹窗体验 | #89 布尔值回归 | #91 JSON-RPC 方法名错误 | #92 热床调平参数名（BED_LEVEL） | #96 耗材匹配缺失 | #97 bridgePOST 数组参数 | #101 MAP_TABLE 不更新 reprint_info | #102 SET_PRINT_USED_EXTRUDERS 参数格式 | #106 耗材信息被 gcode 覆盖 | #150 弹窗缺格式标识
+#47 print_stats 初始查询缺失 | #48 切片不触发确认 | #49 confirm_print 参数解析 | #51 start_local_print 不支持 HTTP | #52 WebUI 未加载通知丢失 | #53 gcode/script HTTP 不可用 | #54 无安全检测 | #56 print_host 被覆盖 | #57 gcode() 用不存在的 HTTP | #58 用户预设覆盖 print_host | #59 python-multipart 缺失 | #61 弹窗体验 | #89 布尔值回归 | #91 JSON-RPC 方法名错误 | #92 热床调平参数名（BED_LEVEL） | #96 耗材匹配缺失 | #97 bridgePOST 数组参数 | #101 MAP_TABLE 不更新 reprint_info | #102 SET_PRINT_USED_EXTRUDERS 参数格式 | #106 耗材信息被 gcode 覆盖 | #150 弹窗缺格式标识 | #164 耗材映射槽位硬编码为 4
 
 ### 摄像头（重点）
 #37 webcams/list 返回空 | #39 MJPEG 流代理不工作 | #46 U1 用 snapshot 轮询 | #65 代理破坏二进制 JPEG | #67 Express ETag 缓存 | #85 camera.start_monitor 必须走 WS | #90 摄像头监控需服务端触发 | #93 摄像头参数缺失（domain）
@@ -1263,3 +1263,10 @@
 **现象**：v5.45.0 验证记录"52 个单元测试全过"，但 v5.46.0 开发中 `npm test` 只跑出 29 个——test/ 下 3 个测试文件只执行了 2 个
 **根因**：package.json 的 test script（`node --test test/patch_gcode.test.js test/convert_gcode.test.js`）在历次编辑中丢失了 test/net_utils.test.js（v5.44.0 新增该文件时未同步进 script，或后续编辑覆盖），测试覆盖静默缩水 23 个用例且不报错
 **解决方案**（v5.46.0）：test script 补全为 `node --test test/patch_gcode.test.js test/convert_gcode.test.js test/net_utils.test.js`，恢复 52/52；更稳妥做法可改 `node --test test/` 目录形式，新增测试文件自动纳入
+
+---
+
+#164 ✅
+**现象**：BambuStudio 工程配置 8 色耗材、打印实际使用 2/4/6/8 号色时，Device 标签页打印确认框的耗材映射只显示前 4 行（gcode 前 4 槽），第 6/8 号色（索引 5/7）无法映射也无法手动更改——槽位 4-7 的颜色被静默丢弃
+**根因**：webui.html `showPrintDialog`/`refreshMapStatus`/`doPrint` 三处把 gcode 逻辑槽位硬编码为 4（`for i<4` / `filamentMap=[0,1,2,3]`），而 BambuStudio 元数据（`filament_type`/`filament_colour`/`filament_used_mm`，分号分隔）按工程槽位数返回（8 槽工程返回 8 项）。索引 ≥4 的槽不渲染映射行、不参与自动匹配、也不进 `extruder_map_table`。数据链路本身没问题：`patchGcodeLayout()` 完整搬移 CONFIG_BLOCK 到文件末尾，Moonraker 能解析全部 8 项元数据；server.js 命令构造（`SET_PRINT_EXTRUDER_MAP` 逐项下发）对任意长度 mapTable 天然支持。另有两个连带 bug：①自动匹配对 unused 槽也分配物理槽位，抢占 used 槽的最佳颜色匹配；②mapTable 把前 4 槽（含 unused）全部下发，`SET_PRINT_USED_EXTRUDERS` 据此推导，未使用的物理头也被标记为 used
+**解决方案**（v5.48.0）：webui.html 引入动态槽位计算——`gCount = max(元数据三数组长度)`，`mapRowIdx` 按实际使用筛选（有 `filament_used_mm` 数据时只收 used>0 的槽；无用量数据回退收全部有 type 的槽）；`filamentMap` 按 `k%4` 初始化（物理 4 槽写死不变，U1 为 4 头机）；渲染/自动匹配/`refreshMapStatus`/`doPrint` 全部遍历 `mapRowIdx`。修复后 8 槽用 4 色场景渲染恰好 4 行映射（只含实际用到的槽），`SET_PRINT_USED_EXTRUDERS` 只标记真实使用的物理头。注意：桌面原生对话框路径（dialog.js）不做颜色映射（走 Klipper 默认映射），>4 槽 gcode 请在 Device 标签 WebUI 确认框操作

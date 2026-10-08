@@ -1,4 +1,4 @@
-# Snapmaker U1 BambuStudio 兼容包 v5.47.0
+# Snapmaker U1 BambuStudio 兼容包 v5.48.0
 
 让 BambuStudio 支持 Snapmaker U1 打印机的切片配置与**原生级设备控制体验**（通过 Bridge 服务器 + 原生打印确认对话框），支持局域网直连与 Tailscale 级联远程打印。
 
@@ -297,7 +297,7 @@ WebUI 齿轮设置 → Remote Access 可选监听模式，直连 `http://100.x.x
 
 - **BambuStudio 更新后需重新安装**：更新可能覆盖配置文件，重新运行 `install.bat` 即可
 - **打印机自动检测**：Bridge 首次启动时通过 mDNS 自动检测。失败时可在浏览器打开 `http://127.0.0.1:13628` 手动配置
-- **多色打印**：BambuStudio 支持多色切片，U1 的 4 工具头换色机制可正常工作
+- **多色打印**：BambuStudio 支持多色切片，U1 的 4 工具头换色机制可正常工作。打印确认框的映射行按 gcode 实际使用的颜色动态生成（v5.48.0，支持 8+ 色工程，如 8 色工程用 2/4/6/8 号色时 4 行全部可见可改），每个 G-code 槽位的下拉可选 4 个物理槽位；多个 G-code 槽位可映射到同一物理挤出头（如 4 色 PLA 用 1 卷耗材打印）
 - **耗材选择**：在 BambuStudio 中手动选择与 U1 工具头实际装载一致的耗材预设
 - **⚠️ 设备面板直接打印限制**：BambuStudio 生成的 gcode 在 U1 设备触摸面板上直接打印时提示"未识别的gcode类型"（闭源触摸屏固件检查 `;TYPE:` 层标记），可通过 WebUI 侧栏"转换"标签页的 **G-code 转换** 功能将 BambuStudio gcode 转换为 OrcaSlicer 兼容格式后再上传，或通过 WebUI 打印
 
@@ -324,6 +324,7 @@ A: v5.18.1 已修复此问题，安装脚本不再删除用户自定义预设。
 
 ## 版本历史
 
+- **v5.48.0** (2026-10-08) - 修复 8+ 色工程耗材映射只显示前 4 槽（traps.md #164）：webui.html 打印确认框的 G-code 槽位动态化——按元数据实际槽位数渲染（支持 8+ 色 BambuStudio 工程），映射行只显示 gcode **实际使用**的颜色（`filament_used_mm>0` 筛选，无用量数据回退显示全部有类型槽），物理槽位保持 4（U1 四头机）；连带修复自动匹配对 unused 槽抢占物理槽位、`SET_PRINT_USED_EXTRUDERS` 误标未使用物理头两个问题；版本号全量统一（修复 v5.47.0 遗漏的 webui.html/install 系列脚本版本号）
 - **v5.47.0** (2026-08-24) - 级联链路网络效率优化 + 大文件传输稳定性（外网实测"卡"的针对性修复）：1) **keep-alive 连接池**（http/https Agent）——原每请求新建 TCP+TLS，跨 Tailscale 每次握手 +100~400ms、设备面板一次刷新几十个请求是"卡"主因；2) **gzip 响应压缩**（express compression，≥1KB，JSONP `cb=` 请求豁免防老 WebView）——文件列表/G-code 文本跨网流量降 ~70-80%；3) **流式转发**（proxyToMoonraker/webcam 从 arrayBuffer 全缓冲改 pipeline）——146MB G-code 级联下载实测完整（17.5s），双端零全量内存；4) **WS 30s ping 保活**——防 Tailscale/NAT 空闲断连导致面板状态卡死；5) **上传瞬时网络错误自动重试**（ECONNRESET/ETIMEDOUT 等，2s 后重试 1 次，Moonraker 上传幂等安全）；6) deploy-home.ps1 新增依赖自动同步（compression 新运行时依赖，旧 node_modules 缺失会启动崩溃）
 - **v5.46.0** (2026-08-24) - 级联架构（两次 Bridge）+ WebUI 图形化连接配置：外网机 Bridge A 把家里 Bridge B 视为"打印机"——弹窗/切片/AI Lab 全在 A 本地处理，B 纯透传，打印机凭据只存 B 侧；WebUI 齿轮新增 Connection 区块（Local printer / Remote Bridge 单选 + Test 连通性探测 `/api/bridge/test_upstream.js`）；安装器回归纯本地（移除 v5.45.0 命令行模式选择，远程配置全部交给 WebUI）；修复级联必现的 gzip 转发头 bug（node-fetch 自动解压后转发原 content-encoding 头，下游 gunzip 明文报 incorrect header check，traps.md #161）；新增 `BRIDGE_CONFIG_DIR` 环境变量支持多实例调试（traps.md #162）；test script 补回 net_utils.test.js 恢复 52/52（traps.md #163）
 - **v5.45.0** (2026-08-24) - 安装器远程模式开箱即用（v5.46.0 已被 WebUI 配置取代）：安装时选择本地/远程模式，远程模式自动探测 tailnet 在线设备的 Bridge 并改写 print_host；支持 BambuStudio 正式版/Beta 双通道配置目录（traps.md #159）；修复 machine JSON 正则匹配（traps.md #158）；Linux 脚本 CRLF 换行修复 + `.gitattributes` 防回归（traps.md #160）；新增 deploy-home.ps1（家用机一键部署）+ make-zip.ps1（发布打包）

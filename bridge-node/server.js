@@ -13,7 +13,7 @@ const { showPrintDialog, cancelActiveDialog } = require("./dialog");
 const { isLocalRequest } = require("./netUtils");
 const sliceAgent = require("./slice_agent");
 
-const BRIDGE_VERSION = "5.47.0";
+const BRIDGE_VERSION = "5.48.0";
 // BRIDGE_PORT env override (e.g. running a second local Bridge for testing)
 const DEFAULT_PORT = parseInt(process.env.BRIDGE_PORT, 10) || 13628;
 const MOONRAKER_TIMEOUT = 10000;

@@ -3,7 +3,7 @@
 ## 项目目标
 将 Snapmaker U1 3D 打印机配置集成到 BambuStudio 中，实现切片功能 + 原生级设备控制体验
 
-## 当前版本: v5.47.0 (2026-08-24)
+## 当前版本: v5.48.0 (2026-10-08)
 
 ---
 
@@ -36,6 +36,7 @@
 - 类型优先匹配（extractFilType 提取核心关键词）
 - 同类型中 CIEDE2000 颜色相近优先（Lab 色彩空间，对齐 OrcaSlicer）
 - 用户可手动选择映射
+- G-code 槽位动态化（v5.48.0）：按元数据实际槽位数渲染映射行（支持 8+ 色工程），只显示实际使用的槽位（`filament_used_mm>0` 筛选，无用量数据时回退显示全部有类型槽）；物理槽位保持 4（U1 四头机）
 
 ### ❌ 已知限制
 1. **设备面板直接打印 BambuStudio gcode**：闭源触摸屏固件检查 `;TYPE:` 层标记（BambuStudio 用 `; FEATURE:`），提示"未识别的gcode类型"。可通过 AI Lab G-code 转换功能解决，或通过 WebUI 打印。见 traps.md #103
@@ -60,6 +61,23 @@
 ---
 
 ## 版本历史
+
+### v5.48.0 (2026-10-08) — 修复 8+ 色工程耗材映射只显示前 4 槽（traps.md #164）
+
+**背景**：main 分支用户反馈——BambuStudio 工程配置 8 色耗材、打印实际使用 2/4/6/8 号色时，Device 标签打印确认框的耗材映射只显示 4 行（gcode 前 4 槽），#6/#8 位置颜色无法映射也无法手动更改。
+
+**根因**：webui.html 三处硬编码 gcode 逻辑槽位为 4，而 BambuStudio 元数据按工程槽位数返回（8 槽工程 8 项）。数据链路（patchGcodeLayout → Moonraker 元数据解析 → server.js 命令下发）本身支持任意槽位数，纯属前端截断。连带两个 bug：自动匹配对 unused 槽分配物理槽位抢占 used 槽最佳匹配；mapTable 含 unused 槽导致 `SET_PRINT_USED_EXTRUDERS` 误标未使用的物理头。
+
+**改动**（webui.html，物理 4 槽按 U1 硬件保持不变）：
+1. **动态槽位计算**：`gCount = max(filament_type/filament_colour/filament_used_mm 三数组长度)`，`filamentMap` 按 `k%4` 初始化
+2. **mapRowIdx 实际使用筛选**：有用量数据时只收 `filament_used_mm>0` 的槽；无用量数据回退收全部有 type 的槽——映射行只显示 gcode 实际用到的颜色（8 槽用 4 色正好 4 行），`mapTable`/`SET_PRINT_USED_EXTRUDERS` 语义精确化
+3. **渲染/自动匹配/refreshMapStatus/doPrint** 全部遍历 `mapRowIdx`（原 `for i<4`）；自动匹配不再为 unused 槽分配物理槽位
+4. 清理死代码：删除不可达的 unused 灰行渲染分支、误导性的 unused 副标签、`filament_unused` i18n 键（en/zh）
+5. 版本号统一 v5.48.0（顺手修复 v5.47.0 遗漏：webui.html 缓存参数/install.ps1/reinstall.ps1/uninstall.ps1 仍停在 5.46.0）
+
+**验证**：script 块 `new Function` 语法检查通过；核心逻辑 node 冒烟测试 5 场景全对（8 槽用 idx1/3/5/7 → mapRowIdx=[1,3,5,7]；8 槽用 idx0/3/4/5 → [0,3,4,5]；4 槽全用 → [0,1,2,3] 与旧行为一致；无用量数据回退；无元数据空表）；52/52 单元测试通过；server.js `node --check` 通过（仅 BRIDGE_VERSION 变更）
+
+**已知限制**：桌面原生对话框路径（dialog.js）不做颜色映射（走 Klipper 默认映射 [0,1,2,3]），>4 槽 gcode 需在 Device 标签 WebUI 确认框操作——对话框确认与 WebUI 确认是双通道竞争关系，cancelActiveDialog 保证一致性
 
 ### v5.47.0 (2026-08-24) — 级联链路网络效率优化 + 大文件传输稳定性
 
