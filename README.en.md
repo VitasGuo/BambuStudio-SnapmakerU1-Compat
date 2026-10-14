@@ -1,5 +1,7 @@
 # Snapmaker U1 BambuStudio Compatibility Pack v5.48.0
 
+> **📖 Other versions**: [README.md](README.md) (Bilingual quick guide) · [README.zh.md](README.zh.md)（中文完整版） · [traps.md](traps.md) / [traps.en.md](traps.en.md) (Pitfalls log)
+
 Enables BambuStudio to slice for and print on the Snapmaker U1 with a **native-level device control experience** (via the Bridge server + native print-confirm dialog), supporting LAN direct connection and Tailscale cascade remote printing.
 
 ---
